@@ -108,7 +108,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa):
 9. [FEEDBACK LOOP & SELF-HEALING (Auto-Correção Nativa)]
    O sistema possui duas camadas de feedback implacáveis:
    -> **CI/CD Testing:** O Servidor de Testes roda testes (Dusk/Pest). Se falhar, insere NOVA Task com log do erro.
-   -> **Exception Handler (Runtime Self-Healing):** Em vez de usar pacotes visuais para humanos (como `spatie/laravel-error-solutions`), o próprio `bootstrap/app.php` do Laravel intercepta *Exceptions* (Fatais, Syntax Errors, Query Exceptions) geradas por códigos mal-escritos pela IA e injeta automaticamente uma Task de Prioridade Máxima na tabela `tasks` contendo o Stack Trace completo e a linha do arquivo. O ciclo reinicia sozinho e os agentes corrigem o próprio código quebrado imediatamente.
+   -> **O Sentinela (Runtime Self-Healing):** Todo projeto gerado pelo AI-Dev terá um "Sentinela" embutido (um Exception Handler customizado no `bootstrap/app.php`). Em vez de depender de pacotes visuais para humanos (como `spatie/laravel-error-solutions`), o Sentinela intercepta silenciosamente qualquer *Exception* (Fatais, Syntax Errors, Query Exceptions) gerada pela IA na aplicação destino. Assim que a falha é detectada, o Sentinela injeta automaticamente uma Task de Prioridade Máxima na tabela `tasks` do Orquestrador, contendo o Stack Trace completo e a linha exata do arquivo. O ciclo reinicia sozinho e os agentes corrigem o próprio código quebrado imediatamente antes do próximo commit.
    -> Se SUCESSO na execução: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
