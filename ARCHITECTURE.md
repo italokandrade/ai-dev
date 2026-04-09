@@ -63,12 +63,12 @@ Além disso, adotamos a classificação oficial de **Padrões de Agentes Claros*
 **Contratos Estritos para Ferramentas (Tool Layer/MCP):**
 Todas as ações que interagem com o sistema (ler arquivo, executar comando) são feitas por meio de *Tools* com schemas JSON rigorosamente validados, eliminando falhas por chamadas de parâmetros inexistentes.
 
-### Ciclo de Vida da `Task` (Design Fail-Safe)
+### Ciclo de Vida da `Task` (Design Fail-Safe e Action-Driven)
 
-O ciclo abaixo abandona o mecanismo de "retry" cego. Erros não resolvidos rapidamente são escalados.
+O AI-Dev abandona o "Heartbeat Temporal" (loops a cada X minutos que gastam tokens lendo a mesma coisa sem agir). O sistema adota o **Action-Driven Heartbeat**: o ciclo de contexto e planejamento só avança após ações concretas (ex: a cada N tool calls) ou eventos reais via Webhooks, evitando requisições vazias.
 
 ```text
-LOOP CONTÍNUO (Daemon/Worker):
+EVENTO GATILHO (Webhook/Nova Tarefa):
 1. [BUSCA] Ler tabela `tasks` onde status = 'pending' ORDER BY priority DESC LIMIT 1.
 2. [LOCK] Mudar status da task para 'in_progress'.
 
@@ -109,11 +109,13 @@ LOOP CONTÍNUO (Daemon/Worker):
    -> Se SUCESSO: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
-## 4. Memória Persistente de Longo Prazo (Arquitetura Híbrida)
+## 4. Memória Persistente e Econômica (Fim do Markdown Infinito)
 
-A gestão da memória é dividida para evitar o esgotamento de tokens:
+Em vez de salvar o histórico em um arquivo de texto (`memory.md`) que cresce eternamente e devora tokens (como visto em outros sistemas), o AI-Dev adota **Gestão de Contexto via Banco de Dados Relacional (MariaDB/SQLite)**. Isso permite buscar dados antigos sem embutir o histórico inteiro no *prompt*.
 
-*   **Janela Deslizante com Sumarização (Short-term):** O Orquestrador mantém um buffer das últimas *N* interações no projeto atual. Quando atinge 80% do limite de tokens do modelo, um subagente de "Sumarização" comprime os eventos em parágrafos densos de contexto.
+A gestão é dividida da seguinte forma:
+
+*   **Compressão Ativa de Contexto (Short-term):** O Orquestrador e os Subagentes possuem uma **trava de compressão (threshold de 0.6)**. Quando a sessão atinge 60% do limite da janela de contexto, o sistema faz um reset forçado na sessão daquele agente e comprime os eventos anteriores em um parágrafo denso, avisando: *"Se não resetarmos o assunto, gastaremos muitos tokens à toa"*.
 *   **RAG Vetorial (Long-term):**
     *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
     *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o contexto de como problemas/PRDs semelhantes foram resolvidos *nesta base de código específica*.
@@ -147,16 +149,22 @@ As ferramentas que comporão o nosso ecossistema incluem:
 4. **`FileSystemNavigatorTool` (Inspirado no ListDirectory / EnterWorktree):**
    * *Função:* Navegação e leitura estrutural de diretórios e arquivos.
    * *Uso Prático:* Listar árvores de diretórios ou ler o conteúdo bruto de arquivos inteiros (FileReadTool) de forma paginada para entendimento inicial de arquitetura.
-5. **`WebScraperTool` (Inspirado no WebFetchTool / Browser / Tavily):**
-   * *Função:* Leitura de páginas web, issues e documentações em tempo real.
-   * *Uso Prático:* Buscar na internet a solução oficial para uma release nova do Filament v5 ou Livewire 4.
-6. **`MarkdownDocsTool` (Inspirado no NotebookEditTool / Markdown):**
+5. **`DuckDuckGoSearchTool` (Pesquisa Web Direta):**
+   * *Função:* Pesquisas na web não restritas.
+   * *Uso Prático:* Buscar por documentações ou problemas (ex: `"Filament v3 upgrade guide site:github.com"`).
+6. **`FirecrawlScraperTool` (O Fim do "Browser Use" Pesado):**
+   * *Função:* Raspagem inteligente de páginas da web transformando HTML em puro Markdown limpo.
+   * *Uso Prático:* Em vez de invocar um agente visual e pesado que clica na tela (desperdiçando tokens e dinheiro), usamos o Firecrawl para puxar a estrutura de dados de uma documentação mastigada para a LLM ler.
+7. **`GitHubIntegrationTool` (Refatoração Inteligente):**
+   * *Função:* Acesso à API do GitHub (Diffs, Commits, Pull Requests).
+   * *Uso Prático:* Em vez de ficar lendo milhares de arquivos localmente como um "cego" buscando onde refatorar, a IA consulta o histórico de Commits ou Diffs do Github do projeto para pegar apenas o trecho alterado mais recentemente, ganhando muito contexto sem gastar tokens.
+8. **`MarkdownDocsTool` (Inspirado no NotebookEditTool / Markdown):**
    * *Função:* Parsear, criar e atualizar documentações técnicas (.md).
    * *Uso Prático:* Manter arquivos como `README.md` ou `ARCHITECTURE.md` do projeto alvo constantemente atualizados conforme o código avança.
-7. **`TaskTrackerTool` (Inspirado no TaskCreate / TodoWrite):**
+9. **`TaskTrackerTool` (Inspirado no TaskCreate / TodoWrite):**
    * *Função:* Capacidade de os agentes subdividirem lógicas ou anotarem pendências (TODOs) dinamicamente na execução.
    * *Uso Prático:* Se um Agente Backend perceber que falta uma View, ele anota isso dinamicamente na lista de tarefas para não perder o foco.
-8. **`SchemaExplorerTool` (Nativo AI-Dev):**
+10. **`SchemaExplorerTool` (Nativo AI-Dev):**
    * *Função:* Inspeção segura de banco de dados (`DESCRIBE`, ler migrations ativas).
    * *Uso Prático:* Garantir que o *Database Specialist* conheça a tabela exata antes de criar `Alter/Create Queries`.
 
@@ -170,5 +178,8 @@ Para acelerar o desenvolvimento e garantir que o AI-Dev (AndradeItalo.ai) opere 
 *   **OpenClaw (`https://github.com/openclaw/openclaw`)**:
     *   *Foco da Extração:* A arquitetura subjacente de delegação multi-agente assíncrona.
     *   *Foco da Extração:* Lógicas de gerenciamento do ciclo de vida das *Tasks* em sistemas headless (daemon/workers) orientados a banco de dados.
+*   **Hermes Agent (`https://github.com/NousResearch/hermes-agent`)**:
+    *   *Foco da Extração:* O conceito de Action-Driven Heartbeat (abandono do timer vazio) e a preferência pelo uso de Bancos de Dados SQLite/Relacionais para memória com **Compressão Ativa** em vez de arquivos Markdown infinitos. 
+    *   *Foco da Extração:* Filosofia inteligente de web scraping usando APis dedicadas (como o Firecrawl) para retornar puro Markdown em vez de sobrecarregar a LLM com ações visuais pesadas no DOM.
 
 **A Missão do Terceiro Mundo (The Best of Both Worlds):** O AI-Dev não é um fork direto. Ele atua como uma evolução que pega as ideias dispersas de CLI/Local de ambos os repositórios, mescla isso com a rigidez do controle via Tabela de Banco de Dados Relacional, e padroniza tudo *exclusivamente* para o ecossistema TALL + Filament + Anime.js, elevando a abstração ao máximo.
