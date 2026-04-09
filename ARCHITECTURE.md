@@ -124,19 +124,11 @@ A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Age
     *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
     *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o contexto de como problemas/PRDs semelhantes foram resolvidos *nesta base de código específica*.
 
-## 5. Engenharia de Prompts: Skills, Subagentes e Injeção de Padrões
+## 5. Engenharia de Prompts e Injeção de Padrões
 
-O AI-Dev adota diretrizes estritas para delegação e construção do *System Prompt*, baseadas no cruzamento relacional das tabelas de conhecimento e na economia agressiva de tokens:
+O AI-Dev adota diretrizes estritas para a construção do *System Prompt*, baseadas no cruzamento relacional das tabelas de conhecimento e na economia agressiva de tokens:
 
-### 5.1. Regra de Delegação: Skills vs. Subagentes
-Para evitar o consumo explosivo de contexto, a IA é instruída a seguir a regra 90/10:
-*   **Usar Skills para a Maioria das Tarefas (90% dos Casos):** Em vez de evocar agentes diferentes, a inteligência roda *Skills* (habilidades e ferramentas) dentro do contexto principal da conversa ativa. Isso reaproveita tudo o que já foi lido e decidido, eliminando o reenvio de briefing e economizando até **93% dos tokens**.
-*   **Utilizar Subagentes Apenas Quando Estritamente Necessário (10%):** O Orquestrador só delega para Subagentes independentes quando:
-    1.  **Contexto Isolado:** Precisamos iniciar do zero de propósito ou blindar/esconder dados sensíveis do contexto principal.
-    2.  **Paralelismo:** Múltiplas tarefas distintas (ex: Migrations e Views) precisam rodar simultaneamente.
-    3.  **Modelos Específicos:** Uma tarefa exige a mudança para um modelo muito potente ou muito barato.
-
-### 5.2. Injeção Dinâmica Baseada em Áreas de Conhecimento
+### 5.1. Injeção Dinâmica Baseada em Áreas de Conhecimento
 A tabela `agents_config` possui um vínculo direto com a tabela `knowledge_areas`. 
 A Fábrica de Prompts (Prompt Factory) usa isso para fazer uma "Injeção Cirúrgica":
 *   Se ocorrer um "Erro de Layout" ou uma tarefa de CSS, a *Prompt Factory* puxa apenas os registros das tabelas `knowledge_base` e `problems_solutions` que pertencem à Área de "Design/Frontend".

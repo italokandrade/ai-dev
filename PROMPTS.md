@@ -53,7 +53,6 @@ Diferentes LLMs se comportam de maneira diferente. O *Prompt Factory* deve adapt
 O *Prompt Factory* adicionará os seguintes textos apenas conforme o banco de dados identificar necessidades:
 
 *   **Memória Relevante (Injetada automaticamente):** *"As seguintes informações e resoluções de problemas passados (Base de Conhecimento TALL) são cruciais para sua tarefa atual:"* [INSERIR AQUI OS DADOS DA TABELA problems_solutions e knowledge_base].
-*   **Sobre Skills (Reuso):** *"Você já possui as instruções completas no contexto acima. Se a tarefa é iterativa e não há isolamento necessário, não evoque subagentes extras. Use suas ferramentas diretamente."*
 
 ---
 
