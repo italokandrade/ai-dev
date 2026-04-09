@@ -121,3 +121,16 @@ A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção
 3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM.
     *   O `QA_AUDITOR` requer raciocínio crítico alto e pode ser roteado para a nuvem (ex: Claude 3.5 Sonnet / OpenAI o1).
     *   Um Subagente executor de tarefas repetitivas de código pode rodar no servidor via Ollama (ex: Qwen2.5-Coder), economizando custo e acelerando o paralelismo.
+
+## 6. Referências e Abstração de Conhecimento (Third-World Evolution)
+
+Para acelerar o desenvolvimento e garantir que o AI-Dev (AndradeItalo.ai) opere no estado da arte, abstrairemos conceitos, lógicas de paralelismo e ferramentas dos seguintes repositórios de código aberto:
+
+*   **OpenClaude (`https://github.com/Gitlawb/openclaude`)**:
+    *   *Foco da Extração:* Como gerir de forma eficiente a injeção do Model Context Protocol (MCP) para uso de ferramentas do sistema (Ler/Escrever Arquivos, Rodar Comandos) pelo LLM.
+    *   *Foco da Extração:* A lógica abstrata de "routing" no JSON de configuração para selecionar diferentes provedores (Anthropic, OpenAI) dinamicamente.
+*   **OpenClaw (`https://github.com/openclaw/openclaw`)**:
+    *   *Foco da Extração:* A arquitetura subjacente de delegação multi-agente assíncrona.
+    *   *Foco da Extração:* Lógicas de gerenciamento do ciclo de vida das *Tasks* em sistemas headless (daemon/workers) orientados a banco de dados.
+
+**A Missão do Terceiro Mundo (The Best of Both Worlds):** O AI-Dev não é um fork direto. Ele atua como uma evolução que pega as ideias dispersas de CLI/Local de ambos os repositórios, mescla isso com a rigidez do controle via Tabela de Banco de Dados Relacional, e padroniza tudo *exclusivamente* para o ecossistema TALL + Filament + Anime.js, elevando a abstração ao máximo.
