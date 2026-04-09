@@ -117,7 +117,7 @@ Em vez de salvar o histórico em um arquivo de texto (`memory.md`) que cresce et
 
 A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Agent*):
 
-*   **Compressão Ativa de Contexto (Short-term):** O Orquestrador e os Subagentes possuem uma **trava de compressão (threshold de 0.6)**. Quando a sessão atinge 60% do limite da janela de contexto, o sistema faz um reset forçado na sessão daquele agente e comprime os eventos anteriores em um parágrafo denso, avisando: *"Se não resetarmos o assunto, gastaremos muitos tokens à toa"*.
+*   **Compressão Ativa de Contexto (Short-term) via Modelo Local:** O Orquestrador e os Subagentes possuem uma **trava de compressão (threshold de 0.6)**. Quando a sessão atinge 60% do limite da janela de contexto, o sistema faz um reset forçado na sessão. A compressão (geração de um resumo denso do histórico) será feita **em segundo plano por um modelo local extremamente leve (ex: Qwen2.5:0.5b ou Llama3.2:1b rodando via Ollama)**. Isso garante a manutenção do "contexto infinito" da conversa e não prejudica as IAs na compreensão recente, além de poupar os preciosos tokens dos modelos maiores (Gemini/Claude) e usar o mínimo de recursos do servidor.
 *   **Prompt Caching Nativo:** Para provedores que suportam (como Anthropic Claude 3.5 via OpenRouter ou Gemini), o sistema estrutura o *System Prompt* (Padrões TALL + Docs) de forma estática no topo da requisição. Isso aciona o cache de prompt na API da LLM, derrubando o custo e o tempo de leitura do contexto repetido em até 90%.
 *   **RAG Vetorial (Long-term):**
     *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
@@ -155,9 +155,9 @@ As ferramentas essenciais, sem redundância de função, incluem:
 5. **`DuckDuckGoSearchTool` (O Roteador Rápido):**
    * *Função:* Pesquisa ampla na web (fallback gratuito).
    * *Uso Prático:* A IA precisa apenas do *link* ou de uma *dica superficial* no Google/StackOverflow. Como não exige carregamento de DOM, é disparado primeiro para descobrir "onde" a informação está.
-6. **`FirecrawlScraperTool` (O Extrator Limpo - Fim do "Browser Use"):**
-   * *Função:* Raspagem inteligente de páginas específicas transformadas em puro Markdown limpo.
-   * *Uso Prático:* Após o DuckDuckGo descobrir o link correto da documentação do Filament v5, o Firecrawl entra em ação. Em vez de usar um agente visual ineficiente que clica em botões, o Firecrawl devolve apenas a estrutura de dados enxuta para a LLM ler (economia drástica de tokens).
+6. **`FirecrawlScraperTool` (O Extrator Limpo Self-Hosted):**
+   * *Função:* Raspagem inteligente de páginas da web transformando HTML em puro Markdown limpo.
+   * *Uso Prático:* Em vez de gastarmos com a API paga do Firecrawl ou de usar um agente visual ineficiente que clica na tela (desperdiçando tokens e recursos), **hospedaremos o próprio motor do Firecrawl localmente via Docker**. O motor puxará a estrutura de dados enxuta da documentação na web e a devolverá mastigada em Markdown para a LLM ler, garantindo total privacidade e controle.
 7. **`GitHubIntegrationTool` (Refatoração Inteligente):**
    * *Função:* Acesso nativo à API do GitHub (Diffs, Commits, Pull Requests).
    * *Uso Prático:* Permite ler Diffs históricos para entender o contexto de uma feature sem gastar a cota de leitura de arquivos brutos. A IA enxerga o código da mesma forma que um humano revisando um Pull Request.

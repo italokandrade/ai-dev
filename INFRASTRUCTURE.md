@@ -23,9 +23,11 @@ Atualmente o sistema usa `gemini_watchdog.sh` com `nohup`. Isso é frágil.
 *   **Supervisor (SupervisorD):** O padrão da indústria no ecossistema Laravel. Precisaremos instalá-lo para monitorar o *Daemon* do Orquestrador e os *Workers* dos Subagentes. Se um processo falhar por estouro de memória ou crash da API, o Supervisor o reinicia em milissegundos.
 *   *Nota:* O Redis já está instalado, então o Laravel Horizon (ou filas nativas Redis) será usado em conjunto com o Supervisor para o paralelismo.
 
-### 2.2. Motor LLM (Proxy Gemini)
-Para que os subagentes trabalhem em paralelo de forma eficiente e sem gerar custos, continuaremos utilizando a infraestrutura atual que já se provou funcional no servidor:
-*   **Proxy Gemini (`gemini_proxy.js` / `gemini_proxy.py`):** Utilizaremos a ponte já existente nas portas 8000 (Bun) e 8001 (Python) para interagir com os modelos do Gemini (ex: Gemini 3.1 Flash). O script `gemini_watchdog.sh` será integrado ao Supervisor para garantir que esse motor nunca pare, garantindo chamadas "gratuitas" e em altíssima velocidade diretamente da infraestrutura local sem depender de modelos pesados rodando na memória RAM (eliminando a necessidade do Ollama).
+### 2.2. Motor LLM (Proxy Gemini), Ollama (Summarizer) e Ferramentas Self-Hosted
+Para que os subagentes trabalhem em paralelo de forma eficiente e sem gerar custos pesados:
+*   **Proxy Gemini (O Executor Principal):** A ponte já existente nas portas 8000/8001 (`gemini_proxy.js`/`py`) continuará sendo o motor principal de execução de código (ex: Gemini 3.1 Flash). O `gemini_watchdog.sh` será ancorado ao Supervisor para garantir estabilidade 24/7.
+*   **Ollama (O "Compressor de Memória"):** Instalaremos o Ollama nativamente apenas para hospedar um modelo ultraleve (ex: Qwen2.5:0.5b ou Llama3.2:1b). O papel exclusivo dele será rodar em segundo plano, sumarizando o histórico de contexto antigo dos agentes para garantir a "memória infinita" sem estourar limites, economizando tokens da API principal.
+*   **Docker & Firecrawl (Web Scraper Limpo):** Precisaremos instalar o Docker e o Docker Compose para subir uma instância local do Firecrawl. Hospedar a API de scraping localmente nos permitirá extrair Markdown limpo de documentações da web de forma totalmente gratuita, acelerando a pesquisa dos robôs sem "browser use" pesado.
 
 ### 2.3. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
 O MariaDB cuida do relacionamento, mas não é rápido ou otimizado nativamente para buscas semânticas vetoriais. Para a funcionalidade de RAG (resgatar resoluções de bugs passados e injetar padrões few-shot no prompt):
@@ -40,5 +42,7 @@ O MariaDB cuida do relacionamento, mas não é rápido ou otimizado nativamente 
 **Resumo de Ação Futura (NÃO EXECUTAR AINDA):**
 1. `apt install supervisor`
 2. Configurar o Supervisor para o `gemini_watchdog.sh` (Proxy Gemini)
-3. Setup ChromaDB no `/root/venv` (`pip install chromadb`)
-4. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`) e inicializar o painel Filament.
+3. Instalar o Docker/Docker Compose para hospedar o Firecrawl localmente.
+4. Instalar o Ollama nativamente (`curl -fsSL https://ollama.com/install.sh | sh`) e rodar um modelo leve.
+5. Setup ChromaDB no `/root/venv` (`pip install chromadb`)
+6. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`) e inicializar o painel Filament.
