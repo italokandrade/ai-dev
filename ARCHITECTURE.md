@@ -51,15 +51,21 @@ A interface servirá *exclusivamente* para gestão: cadastrar novos projetos, co
 - `content` (Text - Código de exemplo perfeito)
 - `description` (Text - Quando usar)
 
-## 3. Fluxo Lógico Multi-Agente e Auditoria (O Cérebro e o Juiz)
+## 3. Automação Agêntica Robusta: Fluxo Lógico e Auditoria (O Cérebro e o Juiz)
 
-No AI-Dev, temos dois agentes estáticos e imutáveis na fundação da hierarquia:
-1. **`ORCHESTRATOR`**: O planejador. Recebe o PRD principal e o quebra em Sub-PRDs.
-2. **`QA_AUDITOR`**: O juiz implacável. Audita toda saída gerada comparando-a estritamente contra o PRD ou Sub-PRD fornecido.
+Para garantir que a automação não se torne um "prompt chain" livre e alucinado, o AI-Dev adota **Orquestração Determinística (State-Driven)**. O fluxo é rigidamente guiado pela máquina de estados do MariaDB, impedindo loops infinitos. 
 
-Os demais agentes (backend, frontend, especialistas TALL) são dinâmicos e atuam como executores de tarefas.
+Além disso, adotamos a classificação oficial de **Padrões de Agentes Claros**:
+1. **`ORCHESTRATOR` (Planner)**: O planejador central estático. Recebe o PRD principal e o quebra em Sub-PRDs focados.
+2. **`QA_AUDITOR` (Validator/Judge)**: O juiz implacável. Audita toda saída gerada comparando-a estritamente contra o PRD fornecido.
+3. **`SUBAGENTES` (Executors)**: Os especialistas dinâmicos (Backend, Frontend, etc.) focados apenas em agir.
 
-### Ciclo de Vida da `Task`
+**Contratos Estritos para Ferramentas (Tool Layer/MCP):**
+Todas as ações que interagem com o sistema (ler arquivo, executar comando) são feitas por meio de *Tools* com schemas JSON rigorosamente validados, eliminando falhas por chamadas de parâmetros inexistentes.
+
+### Ciclo de Vida da `Task` (Design Fail-Safe)
+
+O ciclo abaixo abandona o mecanismo de "retry" cego. Erros não resolvidos rapidamente são escalados.
 
 ```text
 LOOP CONTÍNUO (Daemon/Worker):
@@ -71,35 +77,35 @@ LOOP CONTÍNUO (Daemon/Worker):
    b. Consultar `context_library` para carregar os "Padrões Estritos TALL".
    c. Compilar o [Contexto Global].
 
-4. [PLANEJAMENTO VIA PRD] (Agente 'ORCHESTRATOR')
+4. [PLANEJAMENTO VIA PRD] (Planner: 'ORCHESTRATOR')
    -> Enviar [Contexto Global] + [PRD Principal].
-   -> O Orquestrador divide o PRD Principal em múltiplos [Sub-PRDs], um para cada especialista dinâmico (ex: PRD de Banco, PRD de Blade).
+   -> Divide o PRD Principal em múltiplos [Sub-PRDs], um para cada especialista dinâmico.
    -> Inserir Subtasks na tabela `subtasks` contendo os Sub-PRDs.
 
-5. [EXECUÇÃO PARALELA DOS SUBAGENTES]
+5. [EXECUÇÃO PARALELA DOS SUBAGENTES] (Executors)
    Para cada Subtask na fila (respeitando dependências):
      a. Montar o Prompt: (System Prompt) + (Padrões de Código) + (Sub-PRD).
-     b. Despachar execução. O Subagente gera o código.
+     b. Despachar execução através de Contratos Estritos (Ferramentas fortemente tipadas).
 
-6. [AUDITORIA LOCAL] (Agente 'QA_AUDITOR')
+6. [AUDITORIA LOCAL] (Judge: 'QA_AUDITOR')
    -> O QA_AUDITOR recebe o [Sub-PRD] original e o [Resultado Final do Subagente].
    -> "O código atende estritamente a TODOS os critérios do Sub-PRD sem ferir padrões?"
-   -> Se FALHAR: Rejeita a entrega e devolve ao subagente com o feedback detalhado do erro (Refazer).
-   -> Se PASSAR: Muda a subtask para 'success'. Envia o output para o Agente pai.
+   -> Se FALHAR: Rejeita a entrega com feedback detalhado. (Limite de X retentativas).
+   -> Se ESTOURAR RETENTATIVAS: O design **Fail-Safe** engatilha. A tarefa para e escala para **Human-in-the-Loop** na interface Web do Filament.
+   -> Se PASSAR: Muda a subtask para 'success'.
 
 7. [INTEGRAÇÃO E AUDITORIA GLOBAL] 
-   -> Após todos os subagentes terminarem, o Agente Especialista Líder (ou o próprio Orquestrador) consolida as peças de código no projeto.
-   -> O QA_AUDITOR faz a checagem final macro: O projeto consolidado atende aos critérios do [PRD Principal]?
-   -> Se FALHAR: Retorna à etapa de planejamento/execução indicando a discrepância.
+   -> O Agente Especialista Líder consolida as peças de código no projeto.
+   -> O QA_AUDITOR faz a checagem final macro contra o [PRD Principal].
    -> Se PASSAR: Avança para CI/CD.
 
 8. [CI/CD & COMMIT]
    -> Orquestrador comanda o Git local: `git add .`, `git commit -m "feat: [Task Title]"`, `git push`.
-   -> Mudar status da task para 'testing' (Aguardando CI).
+   -> Mudar status da task para 'testing'.
 
 9. [FEEDBACK LOOP (Webhook do CI)]
-   -> O Servidor de Testes roda `php artisan test` e `php artisan dusk`.
-   -> Se ERRO: Insere NOVA Task com log do erro na tabela. O ciclo reinicia sozinho.
+   -> O Servidor de Testes roda testes.
+   -> Se ERRO: Insere NOVA Task com log do erro na tabela. O ciclo reinicia sozinho (ou escala ao humano se crítico).
    -> Se SUCESSO: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
