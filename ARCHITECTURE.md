@@ -157,7 +157,7 @@ As ferramentas essenciais, sem redundância de função, incluem:
    * *Uso Prático:* A IA precisa apenas do *link* ou de uma *dica superficial* no Google/StackOverflow. Como não exige carregamento de DOM, é disparado primeiro para descobrir "onde" a informação está.
 6. **`FirecrawlScraperTool` (O Extrator Limpo Self-Hosted):**
    * *Função:* Raspagem inteligente de páginas da web transformando HTML em puro Markdown limpo.
-   * *Uso Prático:* Em vez de gastarmos com a API paga do Firecrawl ou de usar um agente visual ineficiente que clica na tela (desperdiçando tokens e recursos), **hospedaremos o próprio motor do Firecrawl localmente via Docker**. O motor puxará a estrutura de dados enxuta da documentação na web e a devolverá mastigada em Markdown para a LLM ler, garantindo total privacidade e controle.
+   * *Uso Prático:* Em vez de gastarmos com a API paga do Firecrawl ou de usar um agente visual ineficiente que clica na tela (desperdiçando tokens e recursos), **hospedaremos o próprio motor do Firecrawl localmente, de forma nativa no servidor (sem Docker)**. O motor puxará a estrutura de dados enxuta da documentação na web e a devolverá mastigada em Markdown para a LLM ler, garantindo total privacidade e controle.
 7. **`GitHubIntegrationTool` (Refatoração Inteligente):**
    * *Função:* Acesso nativo à API do GitHub (Diffs, Commits, Pull Requests).
    * *Uso Prático:* Permite ler Diffs históricos para entender o contexto de uma feature sem gastar a cota de leitura de arquivos brutos. A IA enxerga o código da mesma forma que um humano revisando um Pull Request.
