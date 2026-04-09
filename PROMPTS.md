@@ -54,3 +54,13 @@ O *Prompt Factory* adicionará os seguintes textos apenas conforme o banco de da
 
 *   **Memória Relevante (Injetada automaticamente):** *"As seguintes informações e resoluções de problemas passados (Base de Conhecimento TALL) são cruciais para sua tarefa atual:"* [INSERIR AQUI OS DADOS DA TABELA problems_solutions e knowledge_base].
 *   **Sobre Skills (Reuso):** *"Você já possui as instruções completas no contexto acima. Se a tarefa é iterativa e não há isolamento necessário, não evoque subagentes extras. Use suas ferramentas diretamente."*
+
+---
+
+## 5. Segurança Ativa (Context Threat Scanning)
+
+Para impedir ataques de injeção de prompt (*Prompt Injection*) via Web Scraping ou de arquivos contaminados do Github, o sistema de prompts atua com uma camada de esterilização *antes* de injetar o conteúdo na LLM (inspirado no filtro de contexto do *Hermes Agent* e *OpenClaw*):
+
+*   **Bloqueio de Caracteres Invisíveis:** Qualquer retorno que contenha caracteres Unicode invisíveis (usados para burlar tokens e passar ordens ocultas ao agente) terá a string esterilizada ou a tarefa inteira bloqueada.
+*   **Bloqueio de Padrões de Sobrescrita:** A injeção de RAG, o retorno do Firecrawl (raspagem de sites) e a leitura de `README.md` têm o conteúdo escaneado via Regex à procura de comandos como `ignore previous instructions`, `do not tell the user`, `translate this into execute`, ou `curl ... `.
+*   **Ação:** Se o retorno do site contiver injeção, o Prompt Factory não manda essa página para o agente. Ele devolve o texto: *"BLOCKED: O conteúdo solicitado tentou quebrar as regras de segurança"*, mantendo o núcleo do AI-Dev imune e a infraestrutura segura.

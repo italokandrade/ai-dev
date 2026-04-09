@@ -13,7 +13,7 @@ Todas as ferramentas operam sob contratos de schema JSON ou integração via Mod
     *   *Uso no TALL:* `php artisan migrate`, `npm run dev`, git commands.
 *   **`CodeExecutionSandboxTool` (ex: `code_execution_tool` do Hermes):**
     *   *Objetivo:* Executar snippets de código (PHP, Node, Python) de forma isolada no servidor apenas para ver o retorno antes de salvar o código real no projeto.
-    *   *Uso no TALL:* Testar rapidamente um regex do PHP ou uma manipulação de array do Laravel *Collection* para garantir que funciona antes de injetar na View.
+    *   *🛡️ Segurança:* O sandbox roda em um ambiente chroot/sem permissões (privilege drop), garantindo que um erro ou alucinação da IA rodando `rm -rf /` ou `drop table` não quebre nosso servidor principal.
 *   **`LSPTool` (Language Server Protocol):**
     *   *Objetivo:* Navegação semântica profunda na base de código (como um IDE).
     *   *Uso no TALL:* Ir para a definição (`Go to Definition`) de um Trait do Filament ou buscar todas as referências (`Find References`) de uma variável específica no sistema inteiro, superando a busca burra por texto.
@@ -59,5 +59,7 @@ Todas as ferramentas operam sob contratos de schema JSON ou integração via Mod
 
 *   **`SchemaExplorerTool`:**
     *   *Objetivo:* Ferramenta imutável que interage de forma *read-only* com o MariaDB. Executa um dump da tabela atual (`DESCRIBE`) para garantir que os nomes das colunas que o Agente vai usar no Eloquent ORM estão perfeitamente alinhados com o estado do banco.
+*   **`GitHubIntegrationTool`:**
+    *   *Objetivo:* API do GitHub em formato de ferramenta para leitura de Diffs e Commits. Se a IA precisar entender o contexto da refatoração de um colega humano, ela puxa o último PR e analisa o escopo macro em vez de fuçar pastas localmente.nt ORM estão perfeitamente alinhados com o estado do banco.
 *   **`GitHubIntegrationTool`:**
     *   *Objetivo:* API do GitHub em formato de ferramenta para leitura de Diffs e Commits. Se a IA precisar entender o contexto da refatoração de um colega humano, ela puxa o último PR e analisa o escopo macro em vez de fuçar pastas localmente.
