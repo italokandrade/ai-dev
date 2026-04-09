@@ -62,7 +62,20 @@ Ferramentas para gestão do sistema de arquivos com foco em segurança e permiss
 
 ---
 
-## 6. Meta-Evolução e Fallback
+## 6. Controle de Qualidade e Testes (QA Power Tools)
+
+Ferramentas para garantir que o código gerado não apenas existe, mas é funcional e resiliente.
+
+*   **`TestAutomatorTool` (Backend Testing):**
+    *   *Ações:* Executar `php artisan test` ou `./vendor/bin/phpunit`.
+    *   *Uso:* A IA pode filtrar por uma classe de teste específica ou um método. O script devolve o status (Pass/Fail) e o log de erro detalhado para auto-correção.
+*   **`DuskSimulatorTool` (Browser Simulation):**
+    *   *Ações:* Executar `php artisan dusk`.
+    *   *Uso:* Simulação real de um usuário navegando no sistema. Em caso de falha, esta ferramenta trabalha em conjunto com a `VisionBrowserTool` para capturar o estado visual do erro.
+
+---
+
+## 7. Meta-Evolução e Fallback
 
 *   **`ToolCreatorTool`:** Criação de novas ferramentas permanentes para usos recorrentes não mapeados.
 *   **`FailSafeLogger`:** Registro obrigatório de impossibilidades técnicas nas observações do banco de dados MariaDB para tratamento manual.
