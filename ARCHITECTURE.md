@@ -136,20 +136,29 @@ Com base no estudo das plataformas de referência (OpenClaude e OpenClaw), o AI-
 As ferramentas que comporão o nosso ecossistema incluem:
 
 1. **`TerminalExecutorTool` (Inspirado no BashTool / Terminal):**
-   * *Função:* Executar comandos de terminal isolados no servidor.
-   * *Uso Prático:* Rodar `php artisan make:filament-resource`, `composer require`, `npm run build`, e `git status`. Inclui timeouts rigorosos para evitar travamentos.
-2. **`FileSurgeryTool` (Inspirado no FileEdit/Diffs):**
-   * *Função:* Manipulação cirúrgica de arquivos. Em vez de reescrever um arquivo inteiro (gastando tokens), a IA envia um *diff/patch* ou blocos de *search/replace*.
-   * *Uso Prático:* Alterar apenas um método específico num Controller Laravel sem tocar no resto.
-3. **`CodeInspectorTool` (Inspirado no Glob/Grep/LSP):**
-   * *Função:* Varredura de código e análise estática AST (Abstract Syntax Tree).
-   * *Uso Prático:* O agente pode buscar todas as classes que implementam uma certa interface ou encontrar onde uma rota está definida, sem precisar ler dezenas de arquivos cegamente.
-4. **`WebScraperTool` (Inspirado no WebFetch/Browser):**
-   * *Função:* Leitura de páginas web e documentações em tempo real.
-   * *Uso Prático:* Se a IA enfrentar um erro do Filament v5 que não está no RAG, ela usa esta ferramenta para ler a issue no GitHub ou a documentação oficial atualizada.
-5. **`SchemaExplorerTool` (Nativo AI-Dev):**
-   * *Função:* Inspeção segura de banco de dados.
-   * *Uso Prático:* Permite que o *Database Specialist* execute comandos `DESCRIBE` ou leia migrations ativas para ter absoluta certeza do estado atual do MariaDB antes de sugerir uma nova *Migration*.
+   * *Função:* Executar comandos de terminal isolados no servidor com timeouts e restrições.
+   * *Uso Prático:* Rodar `php artisan make:filament-resource`, `npm run build`, e `git status`.
+2. **`FileSurgeryTool` (Inspirado no FileEdit / Diffs):**
+   * *Função:* Manipulação cirúrgica de arquivos (Patch/Diffs ou Search & Replace).
+   * *Uso Prático:* Alterar apenas um método num Controller sem tocar e sobrecarregar o arquivo inteiro.
+3. **`CodeInspectorTool` (Inspirado no GlobTool / GrepTool / LSPTool):**
+   * *Função:* Varredura de código (Glob/Grep) e análise estática AST.
+   * *Uso Prático:* Buscar onde classes ou variáveis são usadas em todo o projeto em segundos, sem "adivinhações".
+4. **`FileSystemNavigatorTool` (Inspirado no ListDirectory / EnterWorktree):**
+   * *Função:* Navegação e leitura estrutural de diretórios e arquivos.
+   * *Uso Prático:* Listar árvores de diretórios ou ler o conteúdo bruto de arquivos inteiros (FileReadTool) de forma paginada para entendimento inicial de arquitetura.
+5. **`WebScraperTool` (Inspirado no WebFetchTool / Browser / Tavily):**
+   * *Função:* Leitura de páginas web, issues e documentações em tempo real.
+   * *Uso Prático:* Buscar na internet a solução oficial para uma release nova do Filament v5 ou Livewire 4.
+6. **`MarkdownDocsTool` (Inspirado no NotebookEditTool / Markdown):**
+   * *Função:* Parsear, criar e atualizar documentações técnicas (.md).
+   * *Uso Prático:* Manter arquivos como `README.md` ou `ARCHITECTURE.md` do projeto alvo constantemente atualizados conforme o código avança.
+7. **`TaskTrackerTool` (Inspirado no TaskCreate / TodoWrite):**
+   * *Função:* Capacidade de os agentes subdividirem lógicas ou anotarem pendências (TODOs) dinamicamente na execução.
+   * *Uso Prático:* Se um Agente Backend perceber que falta uma View, ele anota isso dinamicamente na lista de tarefas para não perder o foco.
+8. **`SchemaExplorerTool` (Nativo AI-Dev):**
+   * *Função:* Inspeção segura de banco de dados (`DESCRIBE`, ler migrations ativas).
+   * *Uso Prático:* Garantir que o *Database Specialist* conheça a tabela exata antes de criar `Alter/Create Queries`.
 
 ## 7. Referências e Abstração de Conhecimento (Third-World Evolution)
 
