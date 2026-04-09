@@ -14,20 +14,21 @@ O Orquestrador continua operando em background via *polling/events* nestas tabel
 **`projects`**
 - `id` (UUID/PK)
 - `name` (String)
-- `github_repo` (String - ex: `git@github.com:italokandrade/erp-sys.git`)
-- `local_path` (String - caminho no servidor dev)
-- `tech_stack_overrides` (JSON - configurações específicas do projeto se divergir do padrão)
+- `github_repo` (String)
+- `local_path` (String)
+- `gemini_session_id` (String/Nullable - UUID da conversa persistida no Google)
+- `claude_session_id` (String/Nullable - UUID da conversa persistida na Anthropic)
 - `status` (Enum: active, archived)
 
 **`tasks`**
 - `id` (UUID/PK)
 - `project_id` (FK -> projects)
 - `title` (String)
-- `prd_payload` (Text - O PRD principal contendo o briefing detalhado, regras e critérios de aceite)
+- `prd_payload` (Text)
 - `status` (Enum: pending, in_progress, qa_audit, testing, completed, failed)
 - `priority` (Int)
-- `assigned_agent_id` (FK -> agents - Opcional, o Orquestrador define)
-- `created_at`, `updated_at`
+- `assigned_agent_id` (FK -> agents)
+- `last_session_id` (String - O ID da conversa usado nesta tarefa específica para manter contexto infinito)
 
 **`subtasks`** (A quebra feita pelo Orquestrador)
 - `id` (UUID/PK)
@@ -134,6 +135,13 @@ A Fábrica de Prompts (Prompt Factory) usa isso para fazer uma "Injeção Cirúr
 *   Se ocorrer um "Erro de Layout" ou uma tarefa de CSS, a *Prompt Factory* puxa apenas os registros das tabelas `knowledge_base` e `problems_solutions` que pertencem à Área de "Design/Frontend".
 *   Isso significa que o Agente de Design não receberá lixo de contexto sobre "Erros de Banco de Dados" no seu prompt. O conhecimento TALL Stack e os bugs do passado são roteados apenas para o especialista que precisa daquela informação.
 *   **Auto-Alimentação:** Toda vez que o *Sentinela* reporta um erro e o agente resolve, a solução entra automaticamente na tabela `problems_solutions` vinculada à área correspondente, curando o sistema de forma evolutiva e perpétua.
+
+### 5.3. Motores de IA e Gestão de Sessão (Contexto Infinito por Projeto)
+O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
+
+*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto. Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
+*   **Motor Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar modelos como o `Claude 3.5 Sonnet 4.6` e `Claude 3 Opus 4.6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR`.
+*   **Gestão Distribuída de Contexto:** O UUID da conversa é armazenado na tabela `projects`. A cada requisição, o sistema resgata esse ID e o envia para o proxy correspondente. Se um projeto for movido para outro servidor (ex: o ambiente web em `italoandrade.com`), a conexão com o banco garante que o histórico de "como o código foi construído" viaje junto com a aplicação.
 
 ## 6. Arsenal de Ferramentas (The Tool Layer) e MCP Isolado
 

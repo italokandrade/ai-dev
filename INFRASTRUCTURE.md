@@ -23,11 +23,12 @@ Atualmente o sistema usa `gemini_watchdog.sh` com `nohup`. Isso é frágil.
 *   **Supervisor (SupervisorD):** O padrão da indústria no ecossistema Laravel. Precisaremos instalá-lo para monitorar o *Daemon* do Orquestrador e os *Workers* dos Subagentes. Se um processo falhar por estouro de memória ou crash da API, o Supervisor o reinicia em milissegundos.
 *   *Nota:* O Redis já está instalado, então o Laravel Horizon (ou filas nativas Redis) será usado em conjunto com o Supervisor para o paralelismo.
 
-### 2.2. Motor LLM (Proxy Gemini), Ollama (Summarizer) e Ferramentas Self-Hosted
-Para que os subagentes trabalhem em paralelo de forma eficiente e sem gerar custos pesados:
-*   **Proxy Gemini (O Executor Principal):** A ponte já existente nas portas 8000/8001 (`gemini_proxy.js`/`py`) continuará sendo o motor principal de execução de código (ex: Gemini 3.1 Flash). O `gemini_watchdog.sh` será ancorado ao Supervisor para garantir estabilidade 24/7.
-*   **Ollama (O "Compressor de Memória"):** Instalaremos o Ollama nativamente apenas para hospedar um modelo ultraleve (ex: Qwen2.5:0.5b ou Llama3.2:1b). O papel exclusivo dele será rodar em segundo plano, sumarizando o histórico de contexto antigo dos agentes para garantir a "memória infinita" sem estourar limites, economizando tokens da API principal.
-*   **Firecrawl Nativo (Web Scraper Limpo):** Hospedaremos a API de scraping localmente no próprio ambiente do servidor, abolindo o uso de Docker. Isso nos permitirá extrair Markdown limpo de documentações da web de forma totalmente gratuita, acelerando a pesquisa dos robôs sem "browser use" pesado.
+### 2.2. Motores LLM (Proxy Gemini, Claude Code e Ollama)
+Para que o sistema opere com redundância e inteligência de elite:
+*   **Proxy Gemini (O Executor Principal):** A ponte já existente nas portas 8000/8001 (`gemini_proxy.js`/`py`) para modelos como Gemini 3.1 Flash.
+*   **Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar Claude 3.5 Sonnet 4.6 e Opus 4.6. Utilizado para planejamento e auditoria.
+*   **Ollama (O "Compressor de Memória"):** Modelo ultraleve rodando em segundo plano para sumarização de contexto.
+*   **Firecrawl Nativo (Web Scraper Limpo):** Hospedagem local para extração de Markdown.
 
 ### 2.3. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
 O MariaDB cuida do relacionamento, mas não é rápido ou otimizado nativamente para buscas semânticas vetoriais. Para a funcionalidade de RAG (resgatar resoluções de bugs passados e injetar padrões few-shot no prompt):
@@ -44,5 +45,6 @@ O MariaDB cuida do relacionamento, mas não é rápido ou otimizado nativamente 
 2. Configurar o Supervisor para o `gemini_watchdog.sh` (Proxy Gemini)
 3. Instalar o Firecrawl nativamente no servidor (sem Docker).
 4. Instalar o Ollama nativamente (`curl -fsSL https://ollama.com/install.sh | sh`) e rodar um modelo leve.
-5. Setup ChromaDB no `/root/venv` (`pip install chromadb`)
-6. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`) e inicializar o painel Filament.
+5. Instalar o Claude Code CLI (`npm install -g @anthropic-ai/claude-code`) e realizar login.
+6. Setup ChromaDB no `/root/venv` (`pip install chromadb`)
+7. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`) e inicializar o painel Filament.
