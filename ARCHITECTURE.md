@@ -3,9 +3,11 @@
 ## 1. Visão Geral da Arquitetura
 O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional e enriquecido por uma memória de longo prazo vetorial. As instruções trafegam em formato PRD (Product Requirement Document) para garantir clareza absoluta na comunicação entre os agentes.
 
-## 2. Modelagem do Banco de Dados Relacional (Core) e Web UI
-Diferente da versão inicial puramente headless, o AI-Dev contará com uma **Interface Web (UI)** desenvolvida em Filament v5. 
-A interface servirá *exclusivamente* para gestão: cadastrar novos projetos, configurar o prompt dos agentes, e inserir tarefas/PRDs manualmente. O Orquestrador continua operando em background via *polling/events* nestas tabelas.
+## 2. Modelagem do Banco de Dados Relacional (Core), Web UI e API Headless
+Diferente da versão inicial puramente CLI, o AI-Dev contará com uma **Interface Web (UI)** desenvolvida em Filament v5 e uma **API Headless** (via gRPC ou REST). 
+- **Web UI:** Servirá *exclusivamente* para gestão: cadastrar novos projetos, configurar o prompt dos agentes, e inserir tarefas/PRDs manualmente. 
+- **API Headless:** Permitirá que sistemas externos (como webhooks do GitHub, pipelines de CI/CD ou extensões de VS Code) injetem tarefas e ouçam o progresso em tempo real.
+O Orquestrador continua operando em background via *polling/events* nestas tabelas.
 
 ### Tabelas Principais (Esquema Simplificado)
 
@@ -109,13 +111,14 @@ EVENTO GATILHO (Webhook/Nova Tarefa):
    -> Se SUCESSO: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
-## 4. Memória Persistente e Econômica (Fim do Markdown Infinito)
+## 4. Memória Persistente, Prompt Caching e Economia de Contexto
 
 Em vez de salvar o histórico em um arquivo de texto (`memory.md`) que cresce eternamente e devora tokens (como visto em outros sistemas), o AI-Dev adota **Gestão de Contexto via Banco de Dados Relacional (MariaDB/SQLite)**. Isso permite buscar dados antigos sem embutir o histórico inteiro no *prompt*.
 
-A gestão é dividida da seguinte forma:
+A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Agent*):
 
 *   **Compressão Ativa de Contexto (Short-term):** O Orquestrador e os Subagentes possuem uma **trava de compressão (threshold de 0.6)**. Quando a sessão atinge 60% do limite da janela de contexto, o sistema faz um reset forçado na sessão daquele agente e comprime os eventos anteriores em um parágrafo denso, avisando: *"Se não resetarmos o assunto, gastaremos muitos tokens à toa"*.
+*   **Prompt Caching Nativo:** Para provedores que suportam (como Anthropic Claude 3.5 via OpenRouter ou Gemini), o sistema estrutura o *System Prompt* (Padrões TALL + Docs) de forma estática no topo da requisição. Isso aciona o cache de prompt na API da LLM, derrubando o custo e o tempo de leitura do contexto repetido em até 90%.
 *   **RAG Vetorial (Long-term):**
     *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
     *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o contexto de como problemas/PRDs semelhantes foram resolvidos *nesta base de código específica*.
@@ -131,11 +134,11 @@ A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção
     *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) utilizarão **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
     *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados via **OpenRouter** para acessar modelos variados e potentes (ex: Claude 3.5 Sonnet, OpenAI o1, etc.), dependendo da complexidade da tarefa. Tudo isso sendo facilmente ajustável pelo cadastro de agentes no sistema web.
 
-## 6. Arsenal de Ferramentas (The Tool Layer)
+## 6. Arsenal de Ferramentas (The Tool Layer) e MCP Isolado
 
-Com base no estudo das plataformas de referência (OpenClaude e OpenClaw), o AI-Dev implementará um catálogo estrito de **Ferramentas (Tools)**. O Orquestrador e os Subagentes invocarão essas ferramentas via Model Context Protocol (MCP) ou funções nativas JSON, garantindo ações precisas e com baixo risco de alucinação.
+Inspirado no OpenClaw, **o AI-Dev não embutirá ferramentas pesadas no código-fonte principal (Core)**. Todas as ferramentas atuarão como plugins independentes, comunicando-se com o Orquestrador através do *Model Context Protocol (MCP)*. Isso impede que vulnerabilidades nas *tools* afetem a segurança do núcleo Laravel.
 
-As ferramentas que comporão o nosso ecossistema incluem:
+As ferramentas essenciais, sem redundância de função, incluem:
 
 1. **`TerminalExecutorTool` (Inspirado no BashTool / Terminal):**
    * *Função:* Executar comandos de terminal isolados no servidor com timeouts e restrições.
@@ -147,23 +150,23 @@ As ferramentas que comporão o nosso ecossistema incluem:
    * *Função:* Varredura de código (Glob/Grep) e análise estática AST.
    * *Uso Prático:* Buscar onde classes ou variáveis são usadas em todo o projeto em segundos, sem "adivinhações".
 4. **`FileSystemNavigatorTool` (Inspirado no ListDirectory / EnterWorktree):**
-   * *Função:* Navegação e leitura estrutural de diretórios e arquivos.
-   * *Uso Prático:* Listar árvores de diretórios ou ler o conteúdo bruto de arquivos inteiros (FileReadTool) de forma paginada para entendimento inicial de arquitetura.
-5. **`DuckDuckGoSearchTool` (Pesquisa Web Direta):**
-   * *Função:* Pesquisas na web não restritas.
-   * *Uso Prático:* Buscar por documentações ou problemas (ex: `"Filament v3 upgrade guide site:github.com"`).
-6. **`FirecrawlScraperTool` (O Fim do "Browser Use" Pesado):**
-   * *Função:* Raspagem inteligente de páginas da web transformando HTML em puro Markdown limpo.
-   * *Uso Prático:* Em vez de invocar um agente visual e pesado que clica na tela (desperdiçando tokens e dinheiro), usamos o Firecrawl para puxar a estrutura de dados de uma documentação mastigada para a LLM ler.
+   * *Função:* Navegação estrutural de diretórios.
+   * *Uso Prático:* Listar a árvore do projeto (ex: pasta `/app/Http/Controllers`) para mapear arquitetura.
+5. **`DuckDuckGoSearchTool` (O Roteador Rápido):**
+   * *Função:* Pesquisa ampla na web (fallback gratuito).
+   * *Uso Prático:* A IA precisa apenas do *link* ou de uma *dica superficial* no Google/StackOverflow. Como não exige carregamento de DOM, é disparado primeiro para descobrir "onde" a informação está.
+6. **`FirecrawlScraperTool` (O Extrator Limpo - Fim do "Browser Use"):**
+   * *Função:* Raspagem inteligente de páginas específicas transformadas em puro Markdown limpo.
+   * *Uso Prático:* Após o DuckDuckGo descobrir o link correto da documentação do Filament v5, o Firecrawl entra em ação. Em vez de usar um agente visual ineficiente que clica em botões, o Firecrawl devolve apenas a estrutura de dados enxuta para a LLM ler (economia drástica de tokens).
 7. **`GitHubIntegrationTool` (Refatoração Inteligente):**
-   * *Função:* Acesso à API do GitHub (Diffs, Commits, Pull Requests).
-   * *Uso Prático:* Em vez de ficar lendo milhares de arquivos localmente como um "cego" buscando onde refatorar, a IA consulta o histórico de Commits ou Diffs do Github do projeto para pegar apenas o trecho alterado mais recentemente, ganhando muito contexto sem gastar tokens.
+   * *Função:* Acesso nativo à API do GitHub (Diffs, Commits, Pull Requests).
+   * *Uso Prático:* Permite ler Diffs históricos para entender o contexto de uma feature sem gastar a cota de leitura de arquivos brutos. A IA enxerga o código da mesma forma que um humano revisando um Pull Request.
 8. **`MarkdownDocsTool` (Inspirado no NotebookEditTool / Markdown):**
    * *Função:* Parsear, criar e atualizar documentações técnicas (.md).
-   * *Uso Prático:* Manter arquivos como `README.md` ou `ARCHITECTURE.md` do projeto alvo constantemente atualizados conforme o código avança.
+   * *Uso Prático:* Atualizar o `README.md` após implementar a feature.
 9. **`TaskTrackerTool` (Inspirado no TaskCreate / TodoWrite):**
-   * *Função:* Capacidade de os agentes subdividirem lógicas ou anotarem pendências (TODOs) dinamicamente na execução.
-   * *Uso Prático:* Se um Agente Backend perceber que falta uma View, ele anota isso dinamicamente na lista de tarefas para não perder o foco.
+   * *Função:* Gestão de memória de curto prazo por anotações (TODOs) dinâmicos.
+   * *Uso Prático:* O Agente anota tarefas dependentes ("Falta a View X") para não quebrar a lógica enquanto foca no Controller Y.
 10. **`SchemaExplorerTool` (Nativo AI-Dev):**
    * *Função:* Inspeção segura de banco de dados (`DESCRIBE`, ler migrations ativas).
    * *Uso Prático:* Garantir que o *Database Specialist* conheça a tabela exata antes de criar `Alter/Create Queries`.
