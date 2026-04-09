@@ -119,9 +119,9 @@ A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção
 1.  **A Fábrica de Prompts (Prompt Factory):** Um serviço centralizado que constrói o payload para o LLM. Ele recebe: `Agent ID`, `PRD / Sub-PRD` e `Project Path`.
 2.  **Injeção Cirúrgica (RAG de Padrões):** Em vez de injetar toda a base de conhecimento em cada prompt, usamos busca semântica na `context_library`.
     *   *Exemplo:* Se o Sub-PRD foca em `App\Filament\Resources`, o Prompt Factory injeta apenas o few-shot referente ao "Padrão Filament V5".
-3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM.
-    *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) não rodarão via modelos locais. Utilizaremos **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
-    *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados pela mesma infraestrutura de proxy ou por APIs premium (ex: Claude 3.5 Sonnet) caso necessário.
+3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM, e **a definição de qual modelo cada agente usa é configurada diretamente na Web UI**.
+    *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) utilizarão **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
+    *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados via **OpenRouter** para acessar modelos variados e potentes (ex: Claude 3.5 Sonnet, OpenAI o1, etc.), dependendo da complexidade da tarefa. Tudo isso sendo facilmente ajustável pelo cadastro de agentes no sistema web.
 
 ## 6. Referências e Abstração de Conhecimento (Third-World Evolution)
 
