@@ -126,7 +126,7 @@ A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Age
 
 ## 5. Engenharia de Prompts: Skills, Subagentes e Injeção de Padrões
 
-Após consolidar a engenharia de prompts dos repositórios OpenClaude, OpenClaw e Hermes, o AI-Dev adotou diretrizes estritas para delegação e construção do *System Prompt*:
+O AI-Dev adota diretrizes estritas para delegação e construção do *System Prompt*, baseadas no cruzamento relacional das tabelas de conhecimento e na economia agressiva de tokens:
 
 ### 5.1. Regra de Delegação: Skills vs. Subagentes
 Para evitar o consumo explosivo de contexto, a IA é instruída a seguir a regra 90/10:
