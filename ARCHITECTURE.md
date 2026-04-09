@@ -1,7 +1,7 @@
 # Arquitetura do AI-Dev (AndradeItalo.ai)
 
 ## 1. Visão Geral da Arquitetura
-O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional e enriquecido por uma memória de longo prazo vetorial.
+O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional e enriquecido por uma memória de longo prazo vetorial. As instruções trafegam em formato PRD (Product Requirement Document) para garantir clareza absoluta na comunicação entre os agentes.
 
 ## 2. Modelagem do Banco de Dados Relacional (Core)
 O sistema não possui UI própria; ele é "orientado a dados". O Orquestrador faz *polling* ou reage a *webhooks/events* nestas tabelas.
@@ -20,8 +20,8 @@ O sistema não possui UI própria; ele é "orientado a dados". O Orquestrador fa
 - `id` (UUID/PK)
 - `project_id` (FK -> projects)
 - `title` (String)
-- `description` (Text - O briefing ou o log de erro do CI)
-- `status` (Enum: pending, in_progress, review, testing, completed, failed)
+- `prd_payload` (Text - O PRD principal contendo o briefing detalhado, regras e critérios de aceite)
+- `status` (Enum: pending, in_progress, qa_audit, testing, completed, failed)
 - `priority` (Int)
 - `assigned_agent_id` (FK -> agents - Opcional, o Orquestrador define)
 - `created_at`, `updated_at`
@@ -29,14 +29,14 @@ O sistema não possui UI própria; ele é "orientado a dados". O Orquestrador fa
 **`subtasks`** (A quebra feita pelo Orquestrador)
 - `id` (UUID/PK)
 - `task_id` (FK -> tasks)
-- `description` (Text)
-- `status` (Enum: pending, running, success, error)
+- `sub_prd_payload` (Text - Mini-PRD focado apenas na responsabilidade do subagente executor)
+- `status` (Enum: pending, running, qa_audit, success, error)
 - `assigned_agent` (String - ex: 'backend-specialist')
 - `dependencies` (JSON - IDs de subtarefas que precisam terminar antes desta)
 - `result_log` (Text - Saída da execução)
 
 **`agents_config`** (Agnosticismo Dinâmico de LLMs)
-- `id` (String/PK - ex: 'orchestrator', 'filament-v5-specialist')
+- `id` (String/PK - ex: 'orchestrator', 'qa_auditor', 'filament-v5-specialist')
 - `role_description` (Text - System Prompt base)
 - `provider` (String - ex: 'anthropic', 'openai', 'ollama')
 - `model` (String - ex: 'claude-3-opus-20240229', 'llama3')
@@ -50,9 +50,15 @@ O sistema não possui UI própria; ele é "orientado a dados". O Orquestrador fa
 - `content` (Text - Código de exemplo perfeito)
 - `description` (Text - Quando usar)
 
-## 3. Fluxo Lógico do Orquestrador (O Cérebro)
+## 3. Fluxo Lógico Multi-Agente e Auditoria (O Cérebro e o Juiz)
 
-O fluxo abaixo representa o ciclo de vida de uma `Task` desde sua captação até o commit.
+No AI-Dev, temos dois agentes estáticos e imutáveis na fundação da hierarquia:
+1. **`ORCHESTRATOR`**: O planejador. Recebe o PRD principal e o quebra em Sub-PRDs.
+2. **`QA_AUDITOR`**: O juiz implacável. Audita toda saída gerada comparando-a estritamente contra o PRD ou Sub-PRD fornecido.
+
+Os demais agentes (backend, frontend, especialistas TALL) são dinâmicos e atuam como executores de tarefas.
+
+### Ciclo de Vida da `Task`
 
 ```text
 LOOP CONTÍNUO (Daemon/Worker):
@@ -60,57 +66,58 @@ LOOP CONTÍNUO (Daemon/Worker):
 2. [LOCK] Mudar status da task para 'in_progress'.
 
 3. [MEMÓRIA & CONTEXTO]
-   a. Consultar BD Vetorial (ex: Pinecone/ChromaDB) usando a `description` da task:
-      -> "Existem resoluções de bugs parecidos no passado?"
-   b. Consultar `context_library` com base em palavras-chave (ex: "Filament", "Table"):
-      -> Carregar os "Padrões Estritos TALL".
-   c. Compilar o [Contexto Global] = (Histórico Vetorial + Padrões Estritos + Briefing da Task).
+   a. Consultar BD Vetorial usando o `prd_payload` da task.
+   b. Consultar `context_library` para carregar os "Padrões Estritos TALL".
+   c. Compilar o [Contexto Global].
 
-4. [PLANEJAMENTO] (Chamada LLM Pesada - ex: Claude 3.5 Sonnet / Opus)
-   -> Enviar [Contexto Global] para o Agente 'orchestrator'.
-   -> O Orquestrador devolve um JSON com o plano de ação (Subtasks e Dependências).
-   -> Inserir Subtasks na tabela `subtasks`.
+4. [PLANEJAMENTO VIA PRD] (Agente 'ORCHESTRATOR')
+   -> Enviar [Contexto Global] + [PRD Principal].
+   -> O Orquestrador divide o PRD Principal em múltiplos [Sub-PRDs], um para cada especialista dinâmico (ex: PRD de Banco, PRD de Blade).
+   -> Inserir Subtasks na tabela `subtasks` contendo os Sub-PRDs.
 
-5. [EXECUÇÃO PARALELA] (Multi-Agent Dispatch)
+5. [EXECUÇÃO PARALELA DOS SUBAGENTES]
    Para cada Subtask na fila (respeitando dependências):
-     a. Carregar a configuração do Agente a partir de `agents_config` (ex: Modelo, Provider).
-     b. Montar o Prompt do Agente: 
-        (System Prompt do Agente) + (Padrões de Código da Library) + (Descrição da Subtask).
-     c. Despachar a execução (Assíncrona). 
-        *Nota: Agentes podem usar Tools (Read File, Write File, Run Tests) via MCP.*
-     d. Aguardar conclusão. Se falhar, tentar auto-correção X vezes.
-   
-6. [VALIDAÇÃO E REVIEW]
-   -> Agente 'reviewer' analisa o diff gerado nas subtarefas contra os padrões TALL.
-   -> Se OK, avançar. Se não OK, gerar nova subtarefa de correção.
+     a. Montar o Prompt: (System Prompt) + (Padrões de Código) + (Sub-PRD).
+     b. Despachar execução. O Subagente gera o código.
 
-7. [CI/CD & COMMIT]
-   -> Orquestrador comanda o Git local: `git add .`, `git commit -m "feat/fix: [Task Title]"`, `git push`.
+6. [AUDITORIA LOCAL] (Agente 'QA_AUDITOR')
+   -> O QA_AUDITOR recebe o [Sub-PRD] original e o [Resultado Final do Subagente].
+   -> "O código atende estritamente a TODOS os critérios do Sub-PRD sem ferir padrões?"
+   -> Se FALHAR: Rejeita a entrega e devolve ao subagente com o feedback detalhado do erro (Refazer).
+   -> Se PASSAR: Muda a subtask para 'success'. Envia o output para o Agente pai.
+
+7. [INTEGRAÇÃO E AUDITORIA GLOBAL] 
+   -> Após todos os subagentes terminarem, o Agente Especialista Líder (ou o próprio Orquestrador) consolida as peças de código no projeto.
+   -> O QA_AUDITOR faz a checagem final macro: O projeto consolidado atende aos critérios do [PRD Principal]?
+   -> Se FALHAR: Retorna à etapa de planejamento/execução indicando a discrepância.
+   -> Se PASSAR: Avança para CI/CD.
+
+8. [CI/CD & COMMIT]
+   -> Orquestrador comanda o Git local: `git add .`, `git commit -m "feat: [Task Title]"`, `git push`.
    -> Mudar status da task para 'testing' (Aguardando CI).
 
-8. [FEEDBACK LOOP (Webhook do CI)]
+9. [FEEDBACK LOOP (Webhook do CI)]
    -> O Servidor de Testes roda `php artisan test` e `php artisan dusk`.
-   -> Se ERRO: O CI insere uma NOVA Task na tabela `tasks` com o log do erro e status 'pending', referenciando a task original.
-   -> Se SUCESSO: Mudar status da task para 'completed'. Atualizar BD Vetorial com a solução validada.
+   -> Se ERRO: Insere NOVA Task com log do erro na tabela. O ciclo reinicia sozinho.
+   -> Se SUCESSO: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
 ## 4. Memória Persistente de Longo Prazo (Arquitetura Híbrida)
 
 A gestão da memória é dividida para evitar o esgotamento de tokens:
 
-*   **Janela Deslizante com Sumarização (Short-term):** O Orquestrador mantém um buffer das últimas *N* interações no projeto atual. Quando atinge 80% do limite de tokens do modelo, um subagente de "Sumarização" comprime os eventos mais antigos em parágrafos densos de contexto, descartando o ruído (logs detalhados, tentativas falhas menores) e mantendo apenas as decisões arquiteturais da sessão.
+*   **Janela Deslizante com Sumarização (Short-term):** O Orquestrador mantém um buffer das últimas *N* interações no projeto atual. Quando atinge 80% do limite de tokens do modelo, um subagente de "Sumarização" comprime os eventos em parágrafos densos de contexto.
 *   **RAG Vetorial (Long-term):**
-    *   **O que salvar:** Sempre que uma `Task` é completada com sucesso, o diff do código, o problema original e a explicação de como foi resolvido são vetorizados (ex: via OpenAI Embeddings ou modelos open-source como `all-MiniLM-L6-v2`) e salvos no banco vetorial.
-    *   **Como usar:** No passo 3 do fluxo do Orquestrador, uma busca semântica traz o contexto de como problemas semelhantes foram resolvidos *nesta base de código específica*, evitando alucinações.
+    *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
+    *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o contexto de como problemas/PRDs semelhantes foram resolvidos *nesta base de código específica*.
 
 ## 5. Gerenciamento de Injeção de Padrões (Few-Shot) e Multi-LLMs
 
 A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção Dinâmica por Roteamento**:
 
-1.  **A Fábrica de Prompts (Prompt Factory):** Um serviço centralizado que constrói o payload para o LLM. Ele recebe: `Agent ID`, `Task Description` e `Project Path`.
-2.  **Injeção Cirúrgica (RAG de Padrões):** Em vez de injetar toda a base de conhecimento TALL em cada prompt, usamos *tags* ou busca semântica na `context_library`.
-    *   *Exemplo:* Se a subtarefa do agente foca em `App\Filament\Resources`, o Prompt Factory injeta apenas o few-shot referente a "Padrão Filament V5 da AndradeItalo.ai" no início do System Prompt.
-3.  **Agnosticismo via Interface Unificada:** O sistema não usa SDKs específicos de cada LLM espalhados pelo código. Usamos um padrão (como LiteLLM em Python ou as APIs abstraídas do Vercel AI SDK em Node) onde o `agents_config` dita a rota.
-    *   O Orquestrador pede `agentModels["frontend-specialist"]`.
-    *   O banco retorna: `provider: ollama, model: qwen2.5-coder`.
-    *   O Request viaja para o Ollama local, injetado com 2 exemplos cruciais de Alpine.js + Anime.js, mantendo a latência baixa e o foco cirúrgico.
+1.  **A Fábrica de Prompts (Prompt Factory):** Um serviço centralizado que constrói o payload para o LLM. Ele recebe: `Agent ID`, `PRD / Sub-PRD` e `Project Path`.
+2.  **Injeção Cirúrgica (RAG de Padrões):** Em vez de injetar toda a base de conhecimento em cada prompt, usamos busca semântica na `context_library`.
+    *   *Exemplo:* Se o Sub-PRD foca em `App\Filament\Resources`, o Prompt Factory injeta apenas o few-shot referente ao "Padrão Filament V5".
+3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM.
+    *   O `QA_AUDITOR` requer raciocínio crítico alto e pode ser roteado para a nuvem (ex: Claude 3.5 Sonnet / OpenAI o1).
+    *   Um Subagente executor de tarefas repetitivas de código pode rodar no servidor via Ollama (ex: Qwen2.5-Coder), economizando custo e acelerando o paralelismo.
