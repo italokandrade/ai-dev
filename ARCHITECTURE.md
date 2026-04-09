@@ -3,8 +3,9 @@
 ## 1. Visão Geral da Arquitetura
 O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional e enriquecido por uma memória de longo prazo vetorial. As instruções trafegam em formato PRD (Product Requirement Document) para garantir clareza absoluta na comunicação entre os agentes.
 
-## 2. Modelagem do Banco de Dados Relacional (Core)
-O sistema não possui UI própria; ele é "orientado a dados". O Orquestrador faz *polling* ou reage a *webhooks/events* nestas tabelas.
+## 2. Modelagem do Banco de Dados Relacional (Core) e Web UI
+Diferente da versão inicial puramente headless, o AI-Dev contará com uma **Interface Web (UI)** desenvolvida em Filament v5. 
+A interface servirá *exclusivamente* para gestão: cadastrar novos projetos, configurar o prompt dos agentes, e inserir tarefas/PRDs manualmente. O Orquestrador continua operando em background via *polling/events* nestas tabelas.
 
 ### Tabelas Principais (Esquema Simplificado)
 
@@ -119,8 +120,8 @@ A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção
 2.  **Injeção Cirúrgica (RAG de Padrões):** Em vez de injetar toda a base de conhecimento em cada prompt, usamos busca semântica na `context_library`.
     *   *Exemplo:* Se o Sub-PRD foca em `App\Filament\Resources`, o Prompt Factory injeta apenas o few-shot referente ao "Padrão Filament V5".
 3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM.
-    *   O `QA_AUDITOR` requer raciocínio crítico alto e pode ser roteado para a nuvem (ex: Claude 3.5 Sonnet / OpenAI o1).
-    *   Um Subagente executor de tarefas repetitivas de código pode rodar no servidor via Ollama (ex: Qwen2.5-Coder), economizando custo e acelerando o paralelismo.
+    *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) não rodarão via modelos locais. Utilizaremos **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
+    *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados pela mesma infraestrutura de proxy ou por APIs premium (ex: Claude 3.5 Sonnet) caso necessário.
 
 ## 6. Referências e Abstração de Conhecimento (Third-World Evolution)
 

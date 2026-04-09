@@ -23,21 +23,22 @@ Atualmente o sistema usa `gemini_watchdog.sh` com `nohup`. Isso é frágil.
 *   **Supervisor (SupervisorD):** O padrão da indústria no ecossistema Laravel. Precisaremos instalá-lo para monitorar o *Daemon* do Orquestrador e os *Workers* dos Subagentes. Se um processo falhar por estouro de memória ou crash da API, o Supervisor o reinicia em milissegundos.
 *   *Nota:* O Redis já está instalado, então o Laravel Horizon (ou filas nativas Redis) será usado em conjunto com o Supervisor para o paralelismo.
 
-### 2.2. Motor Local de LLM (Velocidade e Custo)
-Para que subagentes trabalhem em paralelo sem gerar custos absurdos de API ou latência de rede na nuvem:
-*   **Ollama:** Precisamos instalá-lo nativamente no Ubuntu. Como o servidor possui 8 GB de RAM, podemos hospedar modelos focados em código incrivelmente rápidos (ex: `Qwen2.5-Coder` de 1.5B ou 3B de parâmetros, ou `Llama 3 8B` quantizado). Eles responderão em tempo real no `localhost:11434` para tarefas granulares e auditorias simples.
+### 2.2. Motor LLM (Proxy Gemini)
+Para que os subagentes trabalhem em paralelo de forma eficiente e sem gerar custos, continuaremos utilizando a infraestrutura atual que já se provou funcional no servidor:
+*   **Proxy Gemini (`gemini_proxy.js` / `gemini_proxy.py`):** Utilizaremos a ponte já existente nas portas 8000 (Bun) e 8001 (Python) para interagir com os modelos do Gemini (ex: Gemini 3.1 Flash). O script `gemini_watchdog.sh` será integrado ao Supervisor para garantir que esse motor nunca pare, garantindo chamadas "gratuitas" e em altíssima velocidade diretamente da infraestrutura local sem depender de modelos pesados rodando na memória RAM (eliminando a necessidade do Ollama).
 
 ### 2.3. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
 O MariaDB cuida do relacionamento, mas não é rápido ou otimizado nativamente para buscas semânticas vetoriais. Para a funcionalidade de RAG (resgatar resoluções de bugs passados e injetar padrões few-shot no prompt):
 *   **ChromaDB (Via Python) ou SQLite-Vec:** Recomenda-se a instalação de uma base de dados local focada em vetores. O ChromaDB roda levíssimo no ambiente Python já existente ou podemos compilar a extensão vetorial para o SQLite, garantindo consultas de milissegundos sem adicionar overhead ao servidor.
 
-### 2.4. Core Application do AI-Dev
-*   **Projeto Laravel Dedicado (ai-dev-core):** Precisaremos gerar um projeto Laravel 12 exclusivamente para atuar como o "Backend" do nosso sistema. Ele não terá frontend (além, talvez, do painel Horizon), mas conterá as Migrations (Projects, Tasks, Agents), os Jobs (que executam as chamadas HTTP para as LLMs) e a lógica de quebra de PRDs.
+### 2.4. Core Application do AI-Dev (Backend + Web UI)
+*   **Projeto Laravel Dedicado (ai-dev-core):** Precisaremos gerar um projeto Laravel 12 completo. Além de atuar como o "Cérebro" do nosso sistema orquestrando Jobs e Queues (via Horizon), ele proverá uma **Interface Web (UI)** baseada em Filament v5.
+*   *Nota:* A interface servirá exclusivamente para cadastro/gerenciamento de Projetos, configuração de Agentes (system prompts) e inclusão manual de Tarefas/PRDs no banco de dados (monitorando seu status em tempo real).
 
 ---
 
 **Resumo de Ação Futura (NÃO EXECUTAR AINDA):**
 1. `apt install supervisor`
-2. Instalar Ollama (`curl -fsSL https://ollama.com/install.sh | sh`)
+2. Configurar o Supervisor para o `gemini_watchdog.sh` (Proxy Gemini)
 3. Setup ChromaDB no `/root/venv` (`pip install chromadb`)
-4. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`)
+4. Gerar o core do orquestrador via Laravel (`laravel new ai-dev-core`) e inicializar o painel Filament.
