@@ -1,81 +1,71 @@
-# Catálogo e Engenharia de Ferramentas (The Tool Layer)
+# Catálogo Exaustivo de Ferramentas (The Tool Layer)
 
-O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. Nesta arquitetura, a inteligência artificial não escreve comandos complexos ou scripts do zero a cada vez; ela gera apenas os **dados, parâmetros ou códigos brutos** que serão injetados em ferramentas (scripts) pré-existentes e otimizadas no servidor.
-
-Este modelo economiza tokens drasticamente e garante que a execução ocorra dentro dos padrões de segurança do servidor Locaweb.
+O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema é composto por um arsenal de ferramentas pré-construídas no servidor que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA. A IA gera apenas os **parâmetros e dados brutos** para injeção.
 
 ---
 
-## 1. Ferramentas de Operação TALL (Pre-built Operations)
+## 1. Gestão Total de Banco de Dados (DBA Power Tools)
 
-O servidor possui scripts prontos para as seguintes operações, aguardando apenas a injeção de dados pela IA:
+Ferramentas para manipulação de estrutura (DDL) e dados (DML), garantindo integridade e velocidade.
 
-*   **`ArtisanExecutorTool`:** Scripts prontos para `migrate`, `make:filament-resource`, `optimize:clear`, etc. A IA envia apenas o nome da classe ou os campos.
-*   **`DatabaseOperatorTool`:**
-    *   *Dumps:* Scripts prontos para realizar backup/dump de tabelas específicas.
-    *   *Listagem:* Script otimizado que recebe parâmetros (tabela, colunas, filtros) e devolve o JSON dos registros.
-*   **`GitFlowTool`:** Ferramentas padronizadas para `commit`, `pull`, `push` e `merge` que garantem que nenhuma alteração se perca.
-*   **`DependencyManagerTool`:** Injeção de pacotes via `composer` e `npm` com validação de versão.
-
-## 2. Meta-Ferramenta: Evolução do Sistema
-
-*   **`ToolCreatorTool` (Criação de Ferramentas):**
-    *   Sempre que o Orquestrador detectar a necessidade de uma operação que ainda não possui uma ferramenta pronta e que seja de **uso comum**, o sistema deve ser capaz de **criar a nova ferramenta**.
-    *   *Regra de Ouro:* É proibida a criação de "gambiarras". Novas ferramentas só devem ser criadas se houver utilidade futura recorrente. Uma vez criada e validada, ela passa a integrar o arsenal fixo para todos os agentes.
+*   **`SchemaManagerTool` (Estrutura):**
+    *   *Ações:* Criar/Alterar/Remover tabelas, colunas, índices, chaves estrangeiras e relacionamentos.
+    *   *Uso:* A IA envia o blueprint JSON; a ferramenta gera e executa a Migration ou SQL equivalente.
+*   **`DataManipulatorTool` (Dados):**
+    *   *Ações:* `SELECT` complexos, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`.
+    *   *Uso:* Listagem de registros com paginação e filtros avançados para conferência de regras de negócio.
+*   **`DatabaseMaintenanceTool` (Manutenção):**
+    *   *Ações:* `DUMP` completo ou parcial, `RESTORE`, `OPTIMIZE` tabelas, verificar integridade de índices e monitorar tamanho do banco.
+*   **`SeederGeneratorTool`:**
+    *   *Ações:* Popular tabelas com dados fake realistas injetados via IA, garantindo que o sistema web nunca pareça vazio no desenvolvimento.
 
 ---
 
-## 3. Tratamento de Falhas e Impossibilidades Técnicas
+## 2. Manipulação de Arquivos e Infraestrutura de Diretórios
 
-Se o Orquestrador ou um Agente não conseguir executar uma tarefa por qualquer limitação técnica ou ambiguidade crítica:
-1.  A execução é interrompida imediatamente.
-2.  O motivo detalhado da impossibilidade é registrado no campo de **observações da tarefa** no banco de dados MariaDB.
-3.  A tarefa é escalada para o painel Filament, permitindo que você (o humano) tome a decisão ou trate o caso manualmente.
+Ferramentas para gestão do sistema de arquivos com foco em segurança e permissões.
+
+*   **`FileArchitectTool` (Gestão de Estrutura):**
+    *   *Ações:* Criar diretórios, renomear arquivos/pastas, mover arquivos (Refactor move) e deletar (com backup automático).
+*   **`PermissionGuardTool` (Segurança):**
+    *   *Ações:* Ajustar `chmod` e `chown` exclusivamente para os padrões do servidor (www-data), garantindo que a aplicação Laravel tenha escrita em `storage/` e `bootstrap/cache/` sem comprometer o root do servidor.
+*   **`FileSurgeryTool` (Edição de Alta Precisão):**
+    *   *Ações:* Search & Replace por linha, inserção de métodos em classes existentes (Regex-based), remoção de blocos de código obsoletos sem reescrever o arquivo.
 
 ---
 
-## 4. Manipulação Cirúrgica de Arquivos... (restante das ferramentas mantidas)
+## 3. Ecossistema Laravel, Filament e TALL (Artisan & Assets)
 
-*   **`FileSurgeryTool` / `FileEditTool`:**
-    *   *Objetivo:* Substituir a escrita cega. Usa S&R (Search and Replace) ou aplicação de Diff/Patch. O Agente deve buscar uma âncora (anchor) no código para trocar apenas a linha com defeito.
-*   **`GlobSearchTool` e `GrepSearchTool`:**
-    *   *Objetivo:* Varredura de metadados em alta velocidade sem leitura de conteúdo cega. O `Glob` busca caminhos de arquivos. O `Grep` busca palavras-chave (`x-data`, `@livewire`) usando regex no nível do OS (muito mais rápido que o LLM lendo arquivo por arquivo).
-*   **`MarkdownDocsTool` (ex: `NotebookEditTool`):**
-    *   *Objetivo:* Manipulação especializada para documentação, capaz de mesclar tabelas, criar índices e atualizar PRDs de forma nativa sem quebrar a estrutura.
+*   **`ArtisanPowerTool`:**
+    *   *Ações:* Execução de todos os comandos `php artisan`.
+    *   *Específicos:* `make:filament-resource`, `filament:install`, `make:livewire`, `make:model`, `clear-compiled`, `route:list`.
+*   **`AssetCompilerTool`:**
+    *   *Ações:* `npm install`, `npm run build`, `vite build`. Gestão automatizada do Tailwind CSS para compilar novas classes geradas pela IA.
+*   **`AnimeJsIntegratorTool`:**
+    *   *Ações:* Injeção de scripts de animação Anime.js diretamente no Blade/Alpine, seguindo o padrão de injeção global (`window.anime`) definido nas instruções do servidor.
 
-## 3. Navegação Web e Raspagem (Web & Browser)
+---
 
-*   **`DuckDuckGoSearchTool`:**
-    *   *Objetivo:* Consulta rápida à internet (API livre) para encontrar links, releases, ou discussões no GitHub/Laracasts sobre bugs em versões novas do Laravel.
-*   **`FirecrawlScraperTool`:**
-    *   *Objetivo:* Consumo limpo de documentação. Transforma o HTML de um site pesado (como a documentação do Livewire 3) em puro texto Markdown econômico, descartando lixo de DOM (CSS/JS) e otimizando tokens.
-*   **`VisionBrowserTool` (ex: `browser_tool` / `vision_tools` do Hermes):**
-    *   *Objetivo:* Quando os testes de UI do Laravel Dusk falham misteriosamente, o agente pode solicitar um "screenshot" da página em erro. A LLM usa suas capacidades multimodais de visão para "olhar" a página e ver se um modal do Alpine.js quebrou o layout do Tailwind, por exemplo.
+## 4. Controle de Versão e Deployment (GitFlow)
 
-## 4. Produtividade, Memória e Planejamento (Task & RAG)
+*   **`GitMasterTool`:**
+    *   *Ações:* `init`, `add`, `commit`, `pull`, `push`, `branch` (create/switch), `merge`, `stash`, `revert` e `diff`.
+    *   *Inteligência:* A ferramenta gera o sumário do commit baseado no PRD executado.
 
-*   **`TaskTrackerTool` (ex: `todo_tool` / `task_create_tool`):**
-    *   *Objetivo:* Ferramenta de anotações dinâmicas. Durante a execução, se o subagente descobrir uma falha paralela, ele usa o `TaskTracker` para salvar um *TODO*. Isso mantém o agente no fluxo sem perder a linha de raciocínio principal.
-*   **`SessionSearchTool` (ex: `memory_tool`):**
-    *   *Objetivo:* Ferramenta de busca semântica para RAG vetorial. Permite ao agente pesquisar dentro do próprio histórico de projeto: *"Como foi mesmo que eu resolvi o erro do Vite.js ontem?"*. Evita perguntas redundantes ao usuário.
-*   **`ClarifyTool` (ex: `AskUserQuestionTool`):**
-    *   *Objetivo:* A parada de emergência. Usada exclusivamente quando a ambiguidade é crítica (ex: deletar uma tabela de banco de dados). Interrompe a autonomia, coloca a execução em pausa segura, e emite o aviso no Filament aguardando a resposta humana no painel.
-*   **`SleepTool` / `CronjobTool`:**
-    *   *Objetivo:* Quando um deploy demora ou uma API externa possui rate limit, a IA pode se colocar para dormir por *X* segundos e acordar depois, evitando chamadas vazias.
+---
 
-## 5. Mídia e Geração de Assets (Media Generation)
+## 5. Pesquisa, Scraping e Visão (Intelligence Tools)
 
-*   **`ImageGenerationTool`:**
-    *   *Objetivo:* Conecta-se a um provedor externo (ex: DALLE-3 ou Stable Diffusion via OpenRouter).
-    *   *Uso no TALL:* Em vez de criar um CRUD vazio, o agente pode gerar placeholders realistas de produtos (ex: "Foto de uma camisa de algodão") e salvá-los no Storage do Laravel, alimentando o banco de dados com conteúdo que faça sentido para o cliente visualizar no frontend.
-*   **`IconographyTool` (Geração via Código):**
-    *   *Objetivo:* Usando o modelo cognitivo, a IA pode ser instruída a gerar vetores (SVGs limpos e acessíveis) para injetar diretamente nas views Blade/Filament, evitando que o desenvolvedor tenha que procurar pacotes de ícones externos.
+*   **`FirecrawlScraperTool` (Nativo/Self-Hosted):** Raspagem de docs para Markdown.
+*   **`VisionBrowserTool`:** Screenshots de falhas de UI para análise multimodal.
+*   **`DuckDuckGoSearchTool`:** Pesquisa externa por soluções técnicas.
 
-## 6. Ferramentas Locais AI-Dev (Custom TALL Tools)
+---
 
-*   **`SchemaExplorerTool`:**
-    *   *Objetivo:* Ferramenta imutável que interage de forma *read-only* com o MariaDB. Executa um dump da tabela atual (`DESCRIBE`) para garantir que os nomes das colunas que o Agente vai usar no Eloquent ORM estão perfeitamente alinhados com o estado do banco.
-*   **`GitHubIntegrationTool`:**
-    *   *Objetivo:* API do GitHub em formato de ferramenta para leitura de Diffs e Commits. Se a IA precisar entender o contexto da refatoração de um colega humano, ela puxa o último PR e analisa o escopo macro em vez de fuçar pastas localmente.nt ORM estão perfeitamente alinhados com o estado do banco.
-*   **`GitHubIntegrationTool`:**
-    *   *Objetivo:* API do GitHub em formato de ferramenta para leitura de Diffs e Commits. Se a IA precisar entender o contexto da refatoração de um colega humano, ela puxa o último PR e analisa o escopo macro em vez de fuçar pastas localmente.
+## 6. Meta-Evolução e Fallback
+
+*   **`ToolCreatorTool`:** Criação de novas ferramentas permanentes para usos recorrentes não mapeados.
+*   **`FailSafeLogger`:** Registro obrigatório de impossibilidades técnicas nas observações do banco de dados MariaDB para tratamento manual.
+
+---
+**Nota de Segurança:** Todas as ferramentas de manipulação de arquivo e banco de dados operam sob logs de auditoria e caminhos absolutos para prevenir qualquer escape do diretório do projeto.
