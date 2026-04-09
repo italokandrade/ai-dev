@@ -129,7 +129,29 @@ A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção
     *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) utilizarão **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
     *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados via **OpenRouter** para acessar modelos variados e potentes (ex: Claude 3.5 Sonnet, OpenAI o1, etc.), dependendo da complexidade da tarefa. Tudo isso sendo facilmente ajustável pelo cadastro de agentes no sistema web.
 
-## 6. Referências e Abstração de Conhecimento (Third-World Evolution)
+## 6. Arsenal de Ferramentas (The Tool Layer)
+
+Com base no estudo das plataformas de referência (OpenClaude e OpenClaw), o AI-Dev implementará um catálogo estrito de **Ferramentas (Tools)**. O Orquestrador e os Subagentes invocarão essas ferramentas via Model Context Protocol (MCP) ou funções nativas JSON, garantindo ações precisas e com baixo risco de alucinação.
+
+As ferramentas que comporão o nosso ecossistema incluem:
+
+1. **`TerminalExecutorTool` (Inspirado no BashTool / Terminal):**
+   * *Função:* Executar comandos de terminal isolados no servidor.
+   * *Uso Prático:* Rodar `php artisan make:filament-resource`, `composer require`, `npm run build`, e `git status`. Inclui timeouts rigorosos para evitar travamentos.
+2. **`FileSurgeryTool` (Inspirado no FileEdit/Diffs):**
+   * *Função:* Manipulação cirúrgica de arquivos. Em vez de reescrever um arquivo inteiro (gastando tokens), a IA envia um *diff/patch* ou blocos de *search/replace*.
+   * *Uso Prático:* Alterar apenas um método específico num Controller Laravel sem tocar no resto.
+3. **`CodeInspectorTool` (Inspirado no Glob/Grep/LSP):**
+   * *Função:* Varredura de código e análise estática AST (Abstract Syntax Tree).
+   * *Uso Prático:* O agente pode buscar todas as classes que implementam uma certa interface ou encontrar onde uma rota está definida, sem precisar ler dezenas de arquivos cegamente.
+4. **`WebScraperTool` (Inspirado no WebFetch/Browser):**
+   * *Função:* Leitura de páginas web e documentações em tempo real.
+   * *Uso Prático:* Se a IA enfrentar um erro do Filament v5 que não está no RAG, ela usa esta ferramenta para ler a issue no GitHub ou a documentação oficial atualizada.
+5. **`SchemaExplorerTool` (Nativo AI-Dev):**
+   * *Função:* Inspeção segura de banco de dados.
+   * *Uso Prático:* Permite que o *Database Specialist* execute comandos `DESCRIBE` ou leia migrations ativas para ter absoluta certeza do estado atual do MariaDB antes de sugerir uma nova *Migration*.
+
+## 7. Referências e Abstração de Conhecimento (Third-World Evolution)
 
 Para acelerar o desenvolvimento e garantir que o AI-Dev (AndradeItalo.ai) opere no estado da arte, abstrairemos conceitos, lógicas de paralelismo e ferramentas dos seguintes repositórios de código aberto:
 
