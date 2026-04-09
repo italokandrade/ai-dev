@@ -1,24 +1,40 @@
 # Catálogo e Engenharia de Ferramentas (The Tool Layer)
 
-O AI-Dev adota um catálogo expansivo e altamente categorizado de ferramentas (Tools) extraídas das melhores práticas do OpenClaude, OpenClaw e Hermes Agent. O uso estrito de ferramentas em vez de "raciocínio solto" reduz em até 90% as alucinações e falhas do sistema.
+O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. Nesta arquitetura, a inteligência artificial não escreve comandos complexos ou scripts do zero a cada vez; ela gera apenas os **dados, parâmetros ou códigos brutos** que serão injetados em ferramentas (scripts) pré-existentes e otimizadas no servidor.
 
-Todas as ferramentas operam sob contratos de schema JSON ou integração via Model Context Protocol (MCP).
+Este modelo economiza tokens drasticamente e garante que a execução ocorra dentro dos padrões de segurança do servidor Locaweb.
 
 ---
 
-## 1. Operações de Sistema e Execução (System & Code)
+## 1. Ferramentas de Operação TALL (Pre-built Operations)
 
-*   **`TerminalExecutorTool` (ex: `BashTool`):**
-    *   *Objetivo:* Executar comandos de terminal no servidor com controle de estado, diretório (CWD) e timeouts rigorosos.
-    *   *Uso no TALL:* `php artisan migrate`, `npm run dev`, git commands.
-*   **`CodeExecutionSandboxTool` (ex: `code_execution_tool` do Hermes):**
-    *   *Objetivo:* Executar snippets de código (PHP, Node, Python) de forma isolada no servidor apenas para ver o retorno antes de salvar o código real no projeto.
-    *   *🛡️ Segurança:* O sandbox roda em um ambiente chroot/sem permissões (privilege drop), garantindo que um erro ou alucinação da IA rodando `rm -rf /` ou `drop table` não quebre nosso servidor principal.
-*   **`LSPTool` (Language Server Protocol):**
-    *   *Objetivo:* Navegação semântica profunda na base de código (como um IDE).
-    *   *Uso no TALL:* Ir para a definição (`Go to Definition`) de um Trait do Filament ou buscar todas as referências (`Find References`) de uma variável específica no sistema inteiro, superando a busca burra por texto.
+O servidor possui scripts prontos para as seguintes operações, aguardando apenas a injeção de dados pela IA:
 
-## 2. Manipulação Cirúrgica de Arquivos (File System)
+*   **`ArtisanExecutorTool`:** Scripts prontos para `migrate`, `make:filament-resource`, `optimize:clear`, etc. A IA envia apenas o nome da classe ou os campos.
+*   **`DatabaseOperatorTool`:**
+    *   *Dumps:* Scripts prontos para realizar backup/dump de tabelas específicas.
+    *   *Listagem:* Script otimizado que recebe parâmetros (tabela, colunas, filtros) e devolve o JSON dos registros.
+*   **`GitFlowTool`:** Ferramentas padronizadas para `commit`, `pull`, `push` e `merge` que garantem que nenhuma alteração se perca.
+*   **`DependencyManagerTool`:** Injeção de pacotes via `composer` e `npm` com validação de versão.
+
+## 2. Meta-Ferramenta: Evolução do Sistema
+
+*   **`ToolCreatorTool` (Criação de Ferramentas):**
+    *   Sempre que o Orquestrador detectar a necessidade de uma operação que ainda não possui uma ferramenta pronta e que seja de **uso comum**, o sistema deve ser capaz de **criar a nova ferramenta**.
+    *   *Regra de Ouro:* É proibida a criação de "gambiarras". Novas ferramentas só devem ser criadas se houver utilidade futura recorrente. Uma vez criada e validada, ela passa a integrar o arsenal fixo para todos os agentes.
+
+---
+
+## 3. Tratamento de Falhas e Impossibilidades Técnicas
+
+Se o Orquestrador ou um Agente não conseguir executar uma tarefa por qualquer limitação técnica ou ambiguidade crítica:
+1.  A execução é interrompida imediatamente.
+2.  O motivo detalhado da impossibilidade é registrado no campo de **observações da tarefa** no banco de dados MariaDB.
+3.  A tarefa é escalada para o painel Filament, permitindo que você (o humano) tome a decisão ou trate o caso manualmente.
+
+---
+
+## 4. Manipulação Cirúrgica de Arquivos... (restante das ferramentas mantidas)
 
 *   **`FileSurgeryTool` / `FileEditTool`:**
     *   *Objetivo:* Substituir a escrita cega. Usa S&R (Search and Replace) ou aplicação de Diff/Patch. O Agente deve buscar uma âncora (anchor) no código para trocar apenas a linha com defeito.
