@@ -105,10 +105,11 @@ EVENTO GATILHO (Webhook/Nova Tarefa):
    -> Orquestrador comanda o Git local: `git add .`, `git commit -m "feat: [Task Title]"`, `git push`.
    -> Mudar status da task para 'testing'.
 
-9. [FEEDBACK LOOP (Webhook do CI)]
-   -> O Servidor de Testes roda testes.
-   -> Se ERRO: Insere NOVA Task com log do erro na tabela. O ciclo reinicia sozinho (ou escala ao humano se crítico).
-   -> Se SUCESSO: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
+9. [FEEDBACK LOOP & SELF-HEALING (Auto-Correção Nativa)]
+   O sistema possui duas camadas de feedback implacáveis:
+   -> **CI/CD Testing:** O Servidor de Testes roda testes (Dusk/Pest). Se falhar, insere NOVA Task com log do erro.
+   -> **Exception Handler (Runtime Self-Healing):** Em vez de usar pacotes visuais para humanos (como `spatie/laravel-error-solutions`), o próprio `bootstrap/app.php` do Laravel intercepta *Exceptions* (Fatais, Syntax Errors, Query Exceptions) geradas por códigos mal-escritos pela IA e injeta automaticamente uma Task de Prioridade Máxima na tabela `tasks` contendo o Stack Trace completo e a linha do arquivo. O ciclo reinicia sozinho e os agentes corrigem o próprio código quebrado imediatamente.
+   -> Se SUCESSO na execução: Salva o (PRD + Solução Validada) no Banco Vetorial. Status 'completed'.
 ```
 
 ## 4. Memória Persistente, Prompt Caching e Economia de Contexto
