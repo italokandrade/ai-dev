@@ -124,16 +124,24 @@ A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Age
     *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos no banco.
     *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o contexto de como problemas/PRDs semelhantes foram resolvidos *nesta base de código específica*.
 
-## 5. Gerenciamento de Injeção de Padrões (Few-Shot) e Multi-LLMs
+## 5. Engenharia de Prompts: Skills, Subagentes e Injeção de Padrões
 
-A chave para manter o padrão sem sobrecarregar modelos menores é a **Injeção Dinâmica por Roteamento**:
+Após consolidar a engenharia de prompts dos repositórios OpenClaude, OpenClaw e Hermes, o AI-Dev adotou diretrizes estritas para delegação e construção do *System Prompt*:
 
-1.  **A Fábrica de Prompts (Prompt Factory):** Um serviço centralizado que constrói o payload para o LLM. Ele recebe: `Agent ID`, `PRD / Sub-PRD` e `Project Path`.
-2.  **Injeção Cirúrgica (RAG de Padrões):** Em vez de injetar toda a base de conhecimento em cada prompt, usamos busca semântica na `context_library`.
-    *   *Exemplo:* Se o Sub-PRD foca em `App\Filament\Resources`, o Prompt Factory injeta apenas o few-shot referente ao "Padrão Filament V5".
-3.  **Agnosticismo via Interface Unificada:** O `agents_config` dita a rota para cada LLM, e **a definição de qual modelo cada agente usa é configurada diretamente na Web UI**.
-    *   Para garantir escalabilidade, altíssima velocidade e custo zero em inferência bruta, os Agentes Dinâmicos (Executores de Código) utilizarão **exclusivamente a ponte do Proxy Gemini** já funcional no servidor (`gemini_watchdog.sh`), usufruindo da camada gratuita de modelos como o `Gemini 3.1 Flash`.
-    *   O `QA_AUDITOR` ou o `ORCHESTRATOR`, que exigem raciocínio crítico de planejamento, poderão ser roteados via **OpenRouter** para acessar modelos variados e potentes (ex: Claude 3.5 Sonnet, OpenAI o1, etc.), dependendo da complexidade da tarefa. Tudo isso sendo facilmente ajustável pelo cadastro de agentes no sistema web.
+### 5.1. Regra de Delegação: Skills vs. Subagentes
+Para evitar o consumo explosivo de contexto, a IA é instruída a seguir a regra 90/10:
+*   **Usar Skills para a Maioria das Tarefas (90% dos Casos):** Em vez de evocar agentes diferentes, a inteligência roda *Skills* (habilidades e ferramentas) dentro do contexto principal da conversa ativa. Isso reaproveita tudo o que já foi lido e decidido, eliminando o reenvio de briefing e economizando até **93% dos tokens**.
+*   **Utilizar Subagentes Apenas Quando Estritamente Necessário (10%):** O Orquestrador só delega para Subagentes independentes quando:
+    1.  **Contexto Isolado:** Precisamos iniciar do zero de propósito ou blindar/esconder dados sensíveis do contexto principal.
+    2.  **Paralelismo:** Múltiplas tarefas distintas (ex: Migrations e Views) precisam rodar simultaneamente.
+    3.  **Modelos Específicos:** Uma tarefa exige a mudança para um modelo muito potente ou muito barato.
+
+### 5.2. Injeção Dinâmica Baseada em Áreas de Conhecimento
+A tabela `agents_config` possui um vínculo direto com a tabela `knowledge_areas`. 
+A Fábrica de Prompts (Prompt Factory) usa isso para fazer uma "Injeção Cirúrgica":
+*   Se ocorrer um "Erro de Layout" ou uma tarefa de CSS, a *Prompt Factory* puxa apenas os registros das tabelas `knowledge_base` e `problems_solutions` que pertencem à Área de "Design/Frontend".
+*   Isso significa que o Agente de Design não receberá lixo de contexto sobre "Erros de Banco de Dados" no seu prompt. O conhecimento TALL Stack e os bugs do passado são roteados apenas para o especialista que precisa daquela informação.
+*   **Auto-Alimentação:** Toda vez que o *Sentinela* reporta um erro e o agente resolve, a solução entra automaticamente na tabela `problems_solutions` vinculada à área correspondente, curando o sistema de forma evolutiva e perpétua.
 
 ## 6. Arsenal de Ferramentas (The Tool Layer) e MCP Isolado
 
