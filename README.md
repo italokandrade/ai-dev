@@ -17,7 +17,7 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **Banco Relacional** | MariaDB |
 | **Filas/Cache** | Redis 7.0 |
 | **Banco Vetorial** | ChromaDB ou SQLite-Vec |
-| **IA Principal** | Gemini 3.1 Flash (Executor) + Claude Sonnet 4.6 (Planner/QA/Security) |
+| **IA Principal** | Gemini 3.1 Flash Lite Preview (Executor) + Claude Sonnet 4-6 (Planner/QA/Security) |
 | **IA Local** | Ollama (qwen2.5:0.5b para compressão) |
 | **Orquestração** | Supervisor + Laravel Horizon |
 

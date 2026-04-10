@@ -110,10 +110,10 @@ Para o AI-Dev operar com redundância e inteligência de elite, precisamos de 3 
 **O que precisa ser feito:**
 - Garantir que o proxy aceita o parâmetro `session_id` para contexto persistente por projeto
 - Mover o gerenciamento do processo do `nohup` para o Supervisor (config acima)
-- Validar que o modelo `gemini-3.1-flash` está funcionando
+- Validar que o modelo `gemini-3.1-flash-lite-preview` está funcionando
 - Criar endpoint de health check (`/health`) para o dashboard do AI-Dev monitorar
 
-**Custo estimado:** Gemini 3.1 Flash é gratuito até um limite generoso. Para uso pesado, o custo é ~$0.075/1M tokens de entrada e ~$0.30/1M tokens de saída.
+**Custo estimado:** Gemini 3.1 Flash Lite Preview é gratuito até um limite generoso. Para uso pesado, o custo é ~$0.075/1M tokens de entrada e ~$0.30/1M tokens de saída.
 
 #### Motor 2: Claude Code (O Cérebro de Elite)
 
@@ -121,7 +121,7 @@ Para o AI-Dev operar com redundância e inteligência de elite, precisamos de 3 
 
 **O que é:** O CLI oficial da Anthropic (@anthropic-ai/claude-code) que permite invocar Claude via terminal.
 
-**Por que usar Claude e não apenas Gemini?** Claude Sonnet 4.6 e Opus 4.6 demonstram raciocínio mais rigoroso em tarefas de planejamento (quebra de PRDs) e auditoria (validação de código). O AI-Dev usa Claude para o Orchestrator e o QA Auditor — as funções que exigem "pensamento" mais que "ação".
+**Por que usar Claude e não apenas Gemini?** Claude Sonnet 4-6 e Opus 4-6 demonstram raciocínio mais rigoroso em tarefas de planejamento (quebra de PRDs) e auditoria (validação de código). O AI-Dev usa Claude para o Orchestrator e o QA Auditor — as funções que exigem "pensamento" mais que "ação".
 
 **Instalação:**
 ```bash
@@ -142,7 +142,7 @@ claude --version
 - **API HTTP direta** (https://api.anthropic.com/v1/messages) — preferível para integração programática
 - **CLI** como fallback — `claude -p "prompt" --output-format json`
 
-**Custo estimado:** Claude Sonnet 4.6: ~$3/1M input + $15/1M output. Claude Opus 4.6: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
+**Custo estimado:** Claude Sonnet 4-6: ~$3/1M input + $15/1M output. Claude Opus 4-6: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
 
 #### Motor 3: Ollama (O Compressor de Memória)
 

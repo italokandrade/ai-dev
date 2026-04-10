@@ -47,13 +47,13 @@ Todo agente (seja Orchestrator, QA Auditor ou Subagente) recebe as seguintes ins
 
 Diferentes LLMs se comportam de maneira diferente. O `PromptFactory.php` adapta as instruções extras (Camada 2) baseando-se no campo `agents_config.provider` do agente.
 
-### 2.1. Modelos Google (Gemini 3.1 Flash / Gemini 3.1 Pro)
+### 2.1. Modelos Google (Gemini 3.1 Flash Lite Preview / Gemini 3.1 Pro Preview)
 *   **Caminhos Absolutos:** Sempre construa e use caminhos de arquivos absolutos (iniciando em `/var/www/html/projetos/{nome_do_projeto}/`) para evitar se perder no terminal. Gemini tem tendência a usar caminhos relativos que quebram se o working directory mudar.
 *   **Verifique primeiro:** Nunca "adivinhe" o conteúdo de um arquivo. Use `FileTool.action = "read"` ou `SearchTool.action = "grep_code"` antes de sobrescrever algo. Gemini tem alta propensão a alucinar conteúdo de arquivo.
 *   **Comandos não-interativos:** Ao usar o `ShellTool`, use flags como `-y`, `--no-interaction` ou `--force` para evitar que a execução congele esperando input "Y/N" do terminal.
 *   **Paralelismo massivo:** Gemini Flash é excelente em tool use paralelo. Se você precisa ler 5 arquivos, chame a ferramenta 5 vezes em paralelo na mesma resposta.
 
-### 2.2. Modelos Anthropic (Claude Sonnet 4.6 / Claude Opus 4.6)
+### 2.2. Modelos Anthropic (Claude Sonnet 4-6 / Claude Opus 4-6)
 *   **Evitar Abandono:** Não pare precocemente quando uma nova chamada de ferramenta melhoraria drasticamente o resultado final. Claude tem tendência a "concluir cedo" quando o resultado parece aceitável mas ainda não é perfeito.
 *   **Recuperação de Falha:** Se uma ferramenta retornar vazia (ex: grep não achou a variável), tente com outra palavra-chave, regex mais ampla, ou estratégia alternativa antes de desistir.
 *   **Chain of Thought explícito:** Ao planejar a quebra de um PRD em Sub-PRDs (como Orchestrator), organize seus pensamentos passo a passo antes de gerar os Sub-PRDs. Claude se beneficia de planejamento explícito.

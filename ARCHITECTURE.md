@@ -69,7 +69,7 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `gemini_session_id` | String / Nullable | UUID da conversa persistida no Proxy Gemini — permite contexto infinito por projeto |
 | `claude_session_id` | String / Nullable | UUID da conversa persistida na Anthropic — idem |
 | `default_provider` | Enum: `gemini`, `claude`, `ollama` | Qual motor de IA usar por padrão para este projeto |
-| `default_model` | String(100) | Modelo padrão (ex: `gemini-3.1-flash`, `claude-sonnet-4.6`) |
+| `default_model` | String(100) | Modelo padrão (ex: `gemini-3.1-flash-lite-preview`, `claude-sonnet-4-6`) |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
@@ -175,7 +175,7 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 | `display_name` | String(100) | Nome legível para a UI (ex: "Especialista Backend TALL") |
 | `role_description` | Text | System Prompt base que define o comportamento do agente |
 | `provider` | String(50) | Provedor de IA (ex: `gemini`, `anthropic`, `ollama`) |
-| `model` | String(100) | Modelo específico (ex: `gemini-3.1-flash`, `claude-sonnet-4.6`) |
+| `model` | String(100) | Modelo específico (ex: `gemini-3.1-flash-lite-preview`, `claude-sonnet-4-6`) |
 | `api_key_env_var` | String(100) | Nome da variável de ambiente com a chave API (ex: `GEMINI_API_KEY`) |
 | `temperature` | Float (0.0 - 2.0) | Criatividade (0.0 = determinístico, 1.0+ = criativo). Orchestrator usa 0.2, Executores usam 0.4 |
 | `max_tokens` | Int | Máximo de tokens de saída por resposta. Padrão: 8192 |
@@ -188,15 +188,15 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 
 | ID | Papel | Provider Recomendado | Temperatura |
 |---|---|---|---|
-| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `anthropic` (Claude Sonnet 4.6) | 0.2 |
-| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `anthropic` (Claude Sonnet 4.6) | 0.1 |
-| `security-specialist` | Auditor — Pentest, OWASP Top 10, análise de vulnerabilidades | `anthropic` (Claude Sonnet 4.6) | 0.1 |
-| `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `gemini` (Gemini 3.1 Flash) | 0.2 |
-| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `gemini` (Gemini 3.1 Flash) | 0.4 |
-| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `gemini` (Gemini 3.1 Flash) | 0.5 |
-| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `gemini` (Gemini 3.1 Flash) | 0.3 |
-| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `gemini` (Gemini 3.1 Flash) | 0.2 |
-| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `gemini` (Gemini 3.1 Flash) | 0.2 |
+| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `anthropic` (Claude Sonnet 4-6) | 0.2 |
+| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `anthropic` (Claude Sonnet 4-6) | 0.1 |
+| `security-specialist` | Auditor — Pentest, OWASP Top 10, análise de vulnerabilidades | `anthropic` (Claude Sonnet 4-6) | 0.1 |
+| `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.2 |
+| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.4 |
+| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.5 |
+| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.3 |
+| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.2 |
+| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `gemini` (Gemini 3.1 Flash Lite Preview) | 0.2 |
 | `context-compressor` | Utilitário — Comprime sessões longas em resumos | `ollama` (qwen2.5:0.5b) | 0.1 |
 
 ---
@@ -259,7 +259,7 @@ Essencial para controle de custo, debugging e otimização.
 | `subtask_id` | FK → `subtasks.id` / Nullable | Subtask associada (se aplicável) |
 | `task_id` | FK → `tasks.id` / Nullable | Task associada |
 | `provider` | String(50) | Provedor usado nesta chamada (ex: `gemini`, `anthropic`) |
-| `model` | String(100) | Modelo usado (ex: `gemini-3.1-flash`) |
+| `model` | String(100) | Modelo usado (ex: `gemini-3.1-flash-lite-preview`) |
 | `prompt_tokens` | Int | Tokens de entrada consumidos |
 | `completion_tokens` | Int | Tokens de saída gerados |
 | `total_tokens` | Int | Total de tokens (entrada + saída) |
@@ -587,7 +587,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 4. [PLANEJAMENTO VIA PRD] (Planner: 'ORCHESTRATOR')
    → O OrchestratorJob monta o prompt:
      [System Prompt do Orchestrator] + [Contexto Global] + [PRD Principal da Task]
-   → Envia para o LLM (preferencialmente Claude Sonnet 4.6 por precisão no planejamento).
+   → Envia para o LLM (preferencialmente Claude Sonnet 4-6 por precisão no planejamento).
    → O LLM responde com a lista de Sub-PRDs estruturados em JSON.
    → O OrchestratorJob valida cada Sub-PRD contra o JSON Schema (via PRDValidator).
    → Insere múltiplas Subtasks na tabela `subtasks`, cada uma com:
@@ -696,7 +696,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
        → Dispara SecurityVulnerabilityEvent.
 
      Camada 3: Verificação OWASP Top 10 via LLM
-     → O Security Specialist (Claude Sonnet 4.6) recebe o git diff completo e analisa:
+     → O Security Specialist (Claude Sonnet 4-6) recebe o git diff completo e analisa:
        1. Injection (SQL, XSS, Command Injection) — Busca por DB::raw(), {!! !!}, exec()
        2. Broken Authentication — Verifica middleware 'auth' em rotas protegidas
        3. Sensitive Data Exposure — Busca por credenciais hardcoded, .env em público
@@ -870,7 +870,7 @@ O Orchestrator e os Subagentes possuem uma **trava de compressão (threshold de 
 ```text
 1. O ContextManager monitora o total de tokens consumidos na sessão atual.
    → Ele calcula: (tokens_usados / janela_maxima_do_modelo)
-   → Ex: Se o Gemini 3.1 Flash tem janela de 1M tokens e a sessão está com 600K → ratio = 0.6
+   → Ex: Se o Gemini 3.1 Flash Lite Preview tem janela de 1M tokens e a sessão está com 600K → ratio = 0.6
 
 2. Quando ratio >= 0.6:
    → O ContextManager despacha um ContextCompressionJob na fila "compressor".
@@ -1015,9 +1015,9 @@ Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
 
 O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
 
-*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto (campo `projects.gemini_session_id`). Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
+*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash Lite Preview`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto (campo `projects.gemini_session_id`). Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
 
-*   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4.6` e `Claude Opus 4.6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
+*   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4-6` e `Claude Opus 4-6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
 
 *   **Motor Ollama (O Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (ex: `qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto e gerar embeddings — nunca é usado para gerar código ou planejar. Isso poupa os tokens caros dos modelos maiores.
 
@@ -1028,12 +1028,12 @@ O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entr
 ```text
 O LLMGateway.php decide qual motor usar baseado em regras:
 
-1. Se a chamada é do OrchestratorJob (planejamento)  → Claude Sonnet 4.6
-2. Se a chamada é do QAAuditJob (auditoria)            → Claude Sonnet 4.6
-3. Se a chamada é do SecurityAuditJob (segurança)      → Claude Sonnet 4.6
-4. Se a chamada é do SubagentJob (execução)            → Gemini 3.1 Flash (default) 
+1. Se a chamada é do OrchestratorJob (planejamento)  → Claude Sonnet 4-6
+2. Se a chamada é do QAAuditJob (auditoria)            → Claude Sonnet 4-6
+3. Se a chamada é do SecurityAuditJob (segurança)      → Claude Sonnet 4-6
+4. Se a chamada é do SubagentJob (execução)            → Gemini 3.1 Flash Lite Preview (default) 
                                                           ou o model da agents_config
-5. Se a chamada é do PerformanceAnalysisJob            → Gemini 3.1 Flash
+5. Se a chamada é do PerformanceAnalysisJob            → Gemini 3.1 Flash Lite Preview
 6. Se a chamada é do ContextCompressionJob              → Ollama (qwen2.5:0.5b)
 7. Se a chamada é para gerar embeddings                 → Ollama (nomic-embed-text)
 
