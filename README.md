@@ -2,7 +2,7 @@
 
 **Sistema de Desenvolvimento de Software Autônomo, Multi-Agente e Auto-Corretivo.**
 
-O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional PostgreSQL, com memória vetorial nativa (pgvector) e auto-correção nativa via Sentinela.
+O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional PostgreSQL 16 (com pgvector), com memória vetorial de longo prazo e auto-correção nativa via Sentinela.
 
 ---
 
@@ -93,7 +93,7 @@ O AI-Dev utiliza **12 tabelas** no PostgreSQL para controle total do estado:
 
 ### Fase 1: Core Loop (MVP)
 - Ciclo completo: Task → Orchestrator → Subagente → QA → Git Commit
-- 3 Tools (Shell, File, Git) + Gemini Flash + MariaDB + Redis + Supervisor
+- 3 Tools (Shell, File, Git) + Gemini Flash + PostgreSQL + Redis + Supervisor
 
 ### Fase 2: Qualidade, Segurança e UI
 - QA Auditor com Claude + Security Specialist + Performance Analyst

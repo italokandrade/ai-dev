@@ -75,7 +75,7 @@ def _try_gemini(prompt, model, session_id=None):
     """
     try:
         resume_arg = session_id if session_id else "latest"
-        cmd_parts = ["gemini", "--sandbox", "--approval-mode", "plan"]
+        cmd_parts = ["gemini", "--approval-mode", "plan"]
         if model:
             cmd_parts.extend(["-m", model])
         cmd_parts.extend(["-r", resume_arg, "-p", prompt])

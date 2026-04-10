@@ -13,7 +13,7 @@ A infraestrutura base já é de alto nível e atende perfeitamente ao ecossistem
 | **Ubuntu 24.04 LTS** | 24.04 | Sistema operacional do servidor (2 vCPUs, 8 GB RAM) |
 | **PostgreSQL** | 16+ + pgvector | Banco de dados relacional CORE — tabelas de projetos, tasks, subtasks, logs e busca vetorial |
 | **Redis Server** | 7.0 | Barramento de eventos, filas de execução (Laravel Queue), cache, Pub/Sub |
-| **PHP** | 8.3.30 | Runtime do Laravel 12 — onde roda o AI-Dev Core |
+| **PHP** | 8.3.30 | Runtime do Laravel 13 — onde roda o AI-Dev Core |
 | **Node.js** | 22.x | Runtime para npm scripts, compilação de assets (Vite/Tailwind) |
 | **Bun** | Latest | Runtime alternativo (pode ser usado para scripts de build mais rápidos) |
 | **Python** | 3.12 (venv) | Runtime para ChromaDB (banco vetorial) e scripts auxiliares |
@@ -396,11 +396,11 @@ npm audit --json
 
 ### 2.6. Core Application do AI-Dev (Backend + Web UI)
 
-**O que é:** O projeto Laravel 12 dedicado que atua como o "cérebro" do sistema. Contém os Jobs (Orchestrator, Subagentes, QA), os Models, as Migrations, a Prompt Factory, o Tool Router, e o Painel Filament.
+**O que é:** O projeto Laravel 13 dedicado que atua como o "cérebro" do sistema. Contém os Jobs (Orchestrator, Subagentes, QA), os Models, as Migrations, a Prompt Factory, o Tool Router, e o Painel Filament.
 
 **Criação:**
 ```bash
-# 1. Gerar o projeto Laravel 12
+# 1. Gerar o projeto Laravel 13
 cd /var/www/html/projetos
 laravel new ai-dev-core
 

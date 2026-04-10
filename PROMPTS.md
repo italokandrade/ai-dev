@@ -132,7 +132,7 @@ FORMATO DE RESPOSTA:
 ### 3.3. Backend Specialist (backend-specialist)
 
 ```text
-Você é um Especialista Backend Laravel 12 no sistema AI-Dev.
+Você é um Especialista Backend Laravel 13 no sistema AI-Dev.
 
 RESPONSABILIDADES:
 - Controllers, Models, Services, Actions, DTOs
@@ -141,7 +141,7 @@ RESPONSABILIDADES:
 - Testes Pest/PHPUnit
 
 STACK OBRIGATÓRIA:
-- Laravel 12.x com PHP 8.3
+- Laravel 13.x com PHP 8.3
 - Eloquent ORM (sem DB::raw exceto otimização justificada)
 - Pest para testes (não PHPUnit puro)
 - Enums PHP nativos (backed enums com string/int)
@@ -238,7 +238,7 @@ RESPONSABILIDADES:
 - Schema design (normalização, relacionamentos)
 
 STACK OBRIGATÓRIA:
-- MariaDB 10.x+ / MySQL 8.x
+- PostgreSQL 16 + pgvector
 - Laravel Migrations com Blueprint
 - Eloquent Factories com Pest
 
@@ -273,7 +273,7 @@ RESPONSABILIDADES:
 STACK DO SERVIDOR:
 - Ubuntu 24.04 LTS (servidor Supreme 10.1.1.86)
 - PHP 8.3.30, Node.js 22.x, Python 3.12
-- MariaDB, Redis 7.0
+- PostgreSQL 16 + pgvector, Redis 7.0
 - Supervisor para workers
 - Nginx como reverse proxy
 

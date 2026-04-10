@@ -509,7 +509,7 @@ Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteú
       "description": "Termo de busca para 'search'. Ou padrão regex/texto para 'grep_code'.",
       "examples": [
         "Filament v5 create resource with tabs",
-        "Laravel 12 QueryException column not found",
+        "Laravel 13 QueryException column not found",
         "class UserResource"
       ]
     },

@@ -9,3 +9,114 @@ Proxy Gemini Ativo (Stateless - Esperando Session ID na Request) na Porta 8001
 127.0.0.1 - - [09/Apr/2026 21:33:20] "POST /v1/messages HTTP/1.1" 200 -
 127.0.0.1 - - [09/Apr/2026 21:36:57] "POST /v1/messages HTTP/1.1" 200 -
 127.0.0.1 - - [09/Apr/2026 22:20:37] "POST /v1/messages HTTP/1.1" 200 -
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+Address already in use
+Port 8001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8001
+ * Running on http://10.1.1.86:8001
+Press CTRL+C to quit
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8001
+ * Running on http://10.1.1.86:8001
+Press CTRL+C to quit
+127.0.0.1 - - [10/Apr/2026 08:50:51] "POST /v1/chat/completions HTTP/1.1" 200 -
+Proxy Gemini Ativo (Auto-Model + Fallback: 3.1-pro->3.1-flash-lite->2.5-flash) na Porta 8001
+ * Serving Flask app 'gemini_proxy'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8001
+ * Running on http://10.1.1.86:8001
+Press CTRL+C to quit
+127.0.0.1 - - [10/Apr/2026 08:51:19] "POST /v1/chat/completions HTTP/1.1" 200 -

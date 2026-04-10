@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('agents_config', function (Blueprint $table) {
-            $table->string('id', 50)->primary(); // slug: orchestrator, qa-auditor, etc.
+            $table->string('id', 50)->primary();
             $table->string('display_name', 100);
             $table->text('role_description');
             $table->string('provider', 50)->default('gemini');
@@ -22,7 +22,10 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->string('fallback_agent_id', 50)->nullable();
             $table->timestamps();
+        });
 
+        // FK self-referencing separada (PostgreSQL exige que a PK já exista)
+        Schema::table('agents_config', function (Blueprint $table) {
             $table->foreign('fallback_agent_id')
                 ->references('id')
                 ->on('agents_config')

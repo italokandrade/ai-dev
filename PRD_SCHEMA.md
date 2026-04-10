@@ -272,7 +272,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
   "dependencies_context": "",
   "constraints": [
     "Migration deve ser idempotente — usar Schema::hasColumn()",
-    "Enum deve usar backed enum (string) para compatibilidade com MariaDB"
+    "Enum deve usar backed enum (string) para compatibilidade com PostgreSQL"
   ],
   "tools_suggested": ["FileTool", "ShellTool", "DatabaseTool"]
 }

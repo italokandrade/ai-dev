@@ -8,7 +8,7 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        AI-DEV CORE (Laravel 12)                      │
+│                        AI-DEV CORE (Laravel 13)                      │
 │                                                                      │
 │  ┌────────────┐   ┌──────────────┐   ┌───────────────────────────┐  │
 │  │ Filament v5 │   │  Prompt       │   │   Tool Layer (MCP)        │  │
@@ -1006,7 +1006,7 @@ Camada 2: REGRAS DO PROVEDOR (específicas do motor LLM)
 
 Camada 3: ROLE (específica do tipo de agente)
   → O texto em agents_config.role_description
-  → Ex: "Você é um especialista em backend Laravel 12. Sua responsabilidade
+  → Ex: "Você é um especialista em backend Laravel 13. Sua responsabilidade
          é criar Controllers, Models, Services e Migrations..."
 
 Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
@@ -1190,7 +1190,7 @@ Para evitar a "síndrome do design perfeito sem código", o projeto será implem
 ### Fase 1: Core Loop (MVP Mínimo Funcional)
 **Objetivo:** Ter o ciclo completo rodando: Task → Orchestrator → Subagente → QA → Commit.
 
-- [ ] Gerar projeto Laravel 12 (`ai-dev-core`)
+- [ ] Gerar projeto Laravel 13 (`ai-dev-core`)
 - [ ] Criar Migrations para: `projects`, `tasks`, `subtasks`, `agents_config`, `task_transitions`
 - [ ] Criar Models + Enums com validação de transições
 - [ ] Implementar `OrchestratorJob`, `SubagentJob`, `QAAuditJob`

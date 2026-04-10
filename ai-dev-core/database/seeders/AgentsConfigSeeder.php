@@ -281,7 +281,7 @@ RESPONSABILIDADES:
 STACK DO SERVIDOR:
 - Ubuntu 24.04 LTS (servidor Supreme 10.1.1.86)
 - PHP 8.3, Node.js 22.x, Python 3.12
-- MariaDB, Redis 7.0
+- PostgreSQL 16 + pgvector, Redis 7.0
 - Supervisor para workers
 - Nginx como reverse proxy
 

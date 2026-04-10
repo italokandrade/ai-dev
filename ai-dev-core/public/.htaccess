@@ -23,3 +23,12 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Blindagem ANDRADEITALO.ai - Injeção Direta de Ambiente
+SetEnv DB_CONNECTION pgsql
+SetEnv DB_HOST 127.0.0.1
+SetEnv DB_PORT 5432
+SetEnv DB_DATABASE ai_dev_core
+SetEnv DB_USERNAME ai_dev_core
+SetEnv DB_PASSWORD "B1r02012;"
+SetEnv ASSET_URL http://10.1.1.86/projetos/ai-dev/ai-dev-core/public
