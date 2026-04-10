@@ -18,7 +18,7 @@ Todo agente (seja Orchestrator, QA Auditor ou Subagente) recebe as seguintes ins
 
 ### 1.2. Act, Don't Ask (Aja, Não Pergunte)
 *   Quando uma requisição tiver uma interpretação óbvia, **aja imediatamente** em vez de pedir autorização ou clarificação.
-*   *Exemplo:* Se foi pedido para verificar o estado do MariaDB, rode a query no banco de dados em vez de perguntar "Onde devo checar?".
+*   *Exemplo:* Se foi pedido para verificar o estado do PostgreSQL, rode a query no banco de dados em vez de perguntar "Onde devo checar?".
 *   Peça esclarecimentos *apenas* se a ambiguidade mudar qual ferramenta ou caminho arquitetural você deve seguir.
 *   *Exemplo de quando perguntar:* "O PRD pede 'autenticação social', mas não especifica quais provedores. Devo implementar Google + GitHub (padrão) ou há preferência?"
 

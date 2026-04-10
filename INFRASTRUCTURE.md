@@ -11,7 +11,7 @@ A infraestrutura base já é de alto nível e atende perfeitamente ao ecossistem
 | Componente | Versão | Papel no AI-Dev |
 |---|---|---|
 | **Ubuntu 24.04 LTS** | 24.04 | Sistema operacional do servidor (2 vCPUs, 8 GB RAM) |
-| **MariaDB** | 10.x+ | Banco de dados relacional CORE — tabelas de projetos, tasks, subtasks, logs |
+| **PostgreSQL** | 16+ + pgvector | Banco de dados relacional CORE — tabelas de projetos, tasks, subtasks, logs e busca vetorial |
 | **Redis Server** | 7.0 | Barramento de eventos, filas de execução (Laravel Queue), cache, Pub/Sub |
 | **PHP** | 8.3.30 | Runtime do Laravel 12 — onde roda o AI-Dev Core |
 | **Node.js** | 22.x | Runtime para npm scripts, compilação de assets (Vite/Tailwind) |
@@ -183,7 +183,7 @@ ollama list
 curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:0.5b","prompt":"Olá","stream":false}'
 ```
 
-**Consumo de RAM estimado:** ~850 MB com ambos os modelos carregados. O servidor com 8 GB suporta tranquilamente (PHP + MariaDB + Redis usam ~2-3 GB, sobrando ~4-5 GB).
+**Consumo de RAM estimado:** ~850 MB com ambos os modelos carregados. O servidor com 8 GB suporta tranquilamente (PHP + PostgreSQL + Redis usam ~2-3 GB, sobrando ~4-5 GB).
 
 ---
 
@@ -450,7 +450,7 @@ Com tudo instalado e rodando simultaneamente:
 | Componente | RAM Estimada | CPU | Disco |
 |---|---|---|---|
 | Ubuntu 24.04 + PHP-FPM | ~500 MB | Baixo | N/A |
-| MariaDB | ~400 MB | Moderado | ~500 MB (dados) |
+| PostgreSQL | ~450 MB | Moderado | ~500 MB (dados) |
 | Redis 7 | ~200 MB | Baixo | ~100 MB |
 | Laravel (AI-Dev Core) | ~150 MB | Moderado | ~200 MB |
 | Laravel Queue Workers (9x) | ~900 MB | Variável | N/A |

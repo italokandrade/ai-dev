@@ -2,7 +2,7 @@
 
 ## 1. Visão Geral da Arquitetura
 
-O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional MariaDB e enriquecido por uma memória de longo prazo vetorial. As instruções trafegam em formato PRD (Product Requirement Document) para garantir clareza absoluta na comunicação entre os agentes.
+O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono e multi-agente, estritamente focado na stack TALL (Tailwind, Alpine.js, Laravel, Livewire) + Filament v5 + Anime.js. Ele opera em background (headless), guiado por um banco de dados relacional PostgreSQL e enriquecido por uma memória de longo prazo vetorial nativa (pgvector). As instruções trafegam em formato PRD (Product Requirement Document) para garantir clareza absoluta na comunicação entre os agentes.
 
 **Componentes Fundamentais do Ecossistema:**
 
@@ -16,7 +16,7 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │  └──────┬──────┘   └──────┬───────┘   └────────────┬──────────────┘  │
 │         │                 │                        │                  │
 │  ┌──────▼─────────────────▼────────────────────────▼──────────────┐  │
-│  │                     MariaDB (Estado Central)                    │  │
+│  │                     PostgreSQL (Estado Central)                  │  │
 │  │  projects │ tasks │ subtasks │ agents_config │ context_library  │  │
 │  └──────────────────────┬────────────────────────────────────────┘  │
 │                         │                                            │
@@ -43,7 +43,7 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 ```
 
 **Por que essa arquitetura e não outra?**
-Sistemas multi-agente baseados em "prompt chains" livres (onde uma IA simplesmente chama outra sem controle) são frágeis e imprevisíveis. O AI-Dev elimina esse problema ao usar o MariaDB como **fonte da verdade única**: todo estado, toda transição e todo resultado ficam registrados em tabelas com constraints SQL. Não existe "estado na memória" — se o servidor reiniciar, o sistema retoma exatamente de onde parou lendo o banco.
+Sistemas multi-agente baseados em "prompt chains" livres (onde uma IA simplesmente chama outra sem controle) são frágeis e imprevisíveis. O AI-Dev elimina esse problema ao usar o PostgreSQL como **fonte da verdade única**: todo estado, toda transição e todo resultado ficam registrados em tabelas com constraints SQL. Não existe "estado na memória" — se o servidor reiniciar, o sistema retoma exatamente de onde parou lendo o banco.
 
 ---
 
@@ -554,7 +554,7 @@ app/
 
 ## 4. Automação Agêntica Robusta: Fluxo Lógico e Auditoria (O Cérebro e o Juiz)
 
-Para garantir que a automação não se torne um "prompt chain" livre e alucinado, o AI-Dev adota **Orquestração Determinística (State-Driven)**. O fluxo é rigidamente guiado pela máquina de estados do MariaDB, impedindo loops infinitos. 
+Para garantir que a automação não se torne um "prompt chain" livre e alucinado, o AI-Dev adota **Orquestração Determinística (State-Driven)**. O fluxo é rigidamente guiado pela máquina de estados do PostgreSQL, impedindo loops infinitos. 
 
 Além disso, adotamos a classificação oficial de **Padrões de Agentes Claros**:
 1. **`ORCHESTRATOR` (Planner)**: O planejador central estático. Recebe o PRD principal e o quebra em Sub-PRDs focados.
@@ -861,7 +861,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 
 ## 5. Memória Persistente, Prompt Caching e Economia de Contexto
 
-Em vez de salvar o histórico em um arquivo de texto (`memory.md`) que cresce eternamente e devora tokens, o AI-Dev adota **Gestão de Contexto via Banco de Dados Relacional (MariaDB)**. Isso permite buscar dados antigos sem embutir o histórico inteiro no *prompt*.
+Em vez de salvar o histórico em um arquivo de texto (`memory.md`) que cresce eternamente e devora tokens, o AI-Dev adota **Gestão de Contexto via Banco de Dados Relacional (PostgreSQL)**. Isso permite buscar dados antigos sem embutir o histórico inteiro no *prompt*. No Laravel 13, utilizamos o SDK nativo `laravel/ai` para persistência automática em `agent_conversations`.
 
 A gestão de contexto é focada em altíssima economia (inspirada no *Hermes Agent*):
 
@@ -1019,7 +1019,7 @@ Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
 
 O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
 
-*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash Lite Preview`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto (campo `projects.gemini_session_id`). Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
+*   **Motor Gemini (O Executor Veloz):** Utilizaremos o SDK nativo Laravel AI SDK (`laravel/ai`) para modelos como o `gemini-3.1-flash-lite-preview`. O ID da sessão é gerenciado automaticamente nas tabelas de conversas do SDK no PostgreSQL. Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
 
 *   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4-6` e `Claude Opus 4-6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
 

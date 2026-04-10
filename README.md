@@ -2,7 +2,7 @@
 
 **Sistema de Desenvolvimento de Software Autônomo, Multi-Agente e Auto-Corretivo.**
 
-O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional MariaDB, com memória vetorial de longo prazo e auto-correção nativa via Sentinela.
+O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional PostgreSQL, com memória vetorial nativa (pgvector) e auto-correção nativa via Sentinela.
 
 ---
 
@@ -14,7 +14,7 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **Frontend** | Livewire 4 + Alpine.js v3 + Tailwind CSS v4 |
 | **Admin Panel** | Filament v5 |
 | **Animações** | Anime.js |
-| **Banco Relacional** | MariaDB |
+| **Banco Relacional** | PostgreSQL 16 + pgvector |
 | **Filas/Cache** | Redis 7.0 |
 | **Banco Vetorial** | ChromaDB ou SQLite-Vec |
 | **IA Principal** | Gemini 3.1 Flash Lite Preview (Executor) + Claude Sonnet 4-6 (Planner/QA/Security) |
@@ -37,7 +37,7 @@ O sistema utiliza 3 classes de agentes:
 2. **Subagentes (Executors)** — Especialistas (Backend, Frontend, Filament, DBA, DevOps) que executam cada Sub-PRD
 3. **QA Auditor (Judge)** — Audita toda entrega contra o PRD original e rejeita se não atender aos critérios
 
-A comunicação é feita via **Laravel Jobs + Redis Queues**, com máquina de estados no MariaDB e rollback via Git branch por task.
+A comunicação é feita via **Laravel Jobs + Redis Queues**, com máquina de estados no PostgreSQL e rollback via Git branch por task.
 
 ---
 
@@ -55,7 +55,7 @@ A comunicação é feita via **Laravel Jobs + Redis Queues**, com máquina de es
 
 ## 🗄️ Modelagem do Banco de Dados
 
-O AI-Dev utiliza **12 tabelas** no MariaDB para controle total do estado:
+O AI-Dev utiliza **12 tabelas** no PostgreSQL para controle total do estado:
 
 | Tabela | Propósito |
 |---|---|
