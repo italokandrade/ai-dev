@@ -1,84 +1,883 @@
-# Catálogo Exaustivo de Ferramentas (The Tool Layer)
+# Catálogo de Ferramentas Consolidadas (The Tool Layer)
 
-O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema é composto por um arsenal de ferramentas pré-construídas no servidor que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA. A IA gera apenas os **parâmetros e dados brutos** para injeção.
+O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema possui **8 ferramentas atômicas** que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA. A IA gera apenas os **parâmetros e dados brutos** — as ferramentas executam os comandos no servidor de forma controlada, com logs, timeouts e restrições de segurança.
 
----
+**Por que 8 ferramentas e não 18+?** Modelos de linguagem consomem tokens processando a lista de ferramentas disponíveis. Com 18+ ferramentas de nomes parecidos (FileArchitectTool vs FileSystemNavigatorTool vs FileSurgeryTool), a IA gasta mais tempo "decidindo" qual usar e comete mais erros na seleção. Com 8 ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a decisão é rápida e precisa.
 
-## 1. Gestão Total de Banco de Dados (DBA Power Tools)
+**Arquitetura das Ferramentas:**
+Cada ferramenta é uma classe PHP em `app/Tools/` que implementa a interface `ToolInterface`:
 
-Ferramentas para manipulação de estrutura (DDL) e dados (DML), garantindo integridade e velocidade.
+```php
+interface ToolInterface
+{
+    public function name(): string;           // Nome da ferramenta (ex: "ShellTool")
+    public function description(): string;    // Descrição para o LLM
+    public function inputSchema(): array;     // JSON Schema de entrada (validação rigorosa)
+    public function outputSchema(): array;    // JSON Schema de saída
+    public function execute(array $params): ToolResult;  // Execução real
+}
+```
 
-*   **`SchemaManagerTool` (Estrutura):**
-    *   *Ações:* Criar/Alterar/Remover tabelas, colunas, índices, chaves estrangeiras e relacionamentos.
-    *   *Uso:* A IA envia o blueprint JSON; a ferramenta gera e executa a Migration ou SQL equivalente.
-*   **`DataManipulatorTool` (Dados):**
-    *   *Ações:* `SELECT` complexos, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`.
-    *   *Uso:* Listagem de registros com paginação e filtros avançados para conferência de regras de negócio.
-*   **`DatabaseMaintenanceTool` (Manutenção):**
-    *   *Ações:* `DUMP` completo ou parcial, `RESTORE`, `OPTIMIZE` tabelas, verificar integridade de índices e monitorar tamanho do banco.
-*   **`SeederGeneratorTool`:**
-    *   *Ações:* Popular tabelas com dados fake realistas injetados via IA, garantindo que o sistema web nunca pareça vazio no desenvolvimento.
-
----
-
-## 2. Manipulação de Arquivos e Infraestrutura de Diretórios
-
-Ferramentas para gestão do sistema de arquivos com foco em segurança e permissões.
-
-*   **`FileArchitectTool` (Gestão de Estrutura):**
-    *   *Ações:* Criar diretórios, renomear arquivos/pastas, mover arquivos (Refactor move) e deletar (com backup automático).
-*   **`PermissionGuardTool` (Segurança):**
-    *   *Ações:* Ajustar `chmod` e `chown` exclusivamente para os padrões do servidor (www-data), garantindo que a aplicação Laravel tenha escrita em `storage/` e `bootstrap/cache/` sem comprometer o root do servidor.
-*   **`FileSurgeryTool` (Edição de Alta Precisão):**
-    *   *Ações:* Search & Replace por linha, inserção de métodos em classes existentes (Regex-based), remoção de blocos de código obsoletos sem reescrever o arquivo.
+O `ToolRouter.php` recebe as tool calls do LLM, valida os parâmetros contra o `inputSchema()`, e se válido, chama `execute()`. Se a validação falhar, retorna o erro detalhado para o LLM corrigir — o LLM NUNCA interage com o sistema operacional diretamente.
 
 ---
 
-## 3. Ecossistema Laravel, Filament e TALL (Artisan & Assets)
+## 1. ShellTool — Execução de Comandos no Terminal
 
-*   **`ArtisanPowerTool`:**
-    *   *Ações:* Execução de todos os comandos `php artisan`.
-    *   *Específicos:* `make:filament-resource`, `filament:install`, `make:livewire`, `make:model`, `clear-compiled`, `route:list`.
-*   **`AssetCompilerTool`:**
-    *   *Ações:* `npm install`, `npm run build`, `vite build`. Gestão automatizada do Tailwind CSS para compilar novas classes geradas pela IA.
-*   **`AnimeJsIntegratorTool`:**
-    *   *Ações:* Injeção de scripts de animação Anime.js diretamente no Blade/Alpine, seguindo o padrão de injeção global (`window.anime`) definido nas instruções do servidor.
+**Classe:** `App\Tools\ShellTool`
+**Responsabilidade:** Executar qualquer comando no terminal do servidor de forma controlada. Substitui as antigas `TerminalExecutorTool`, `ArtisanPowerTool` e `AssetCompilerTool` em uma única ferramenta versátil.
+
+**Por que consolidar?** O `ArtisanPowerTool` era literalmente um subset do terminal — `php artisan X` é um comando de terminal. O `AssetCompilerTool` (`npm run build`) também. Ter 3 ferramentas para "rodar comandos" confundia a IA.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Exemplo |
+|---|---|---|
+| `execute` | Rodar um comando qualquer | `php artisan make:model Post -mfs` |
+| `execute_background` | Rodar comando em background (não bloqueia) | `npm run build` |
+| `kill` | Matar um processo em background pelo PID | Encerrar um `npm run dev` travado |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action", "command"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["execute", "execute_background", "kill"],
+      "description": "Qual ação executar."
+    },
+    "command": {
+      "type": "string",
+      "description": "O comando completo a ser executado. DEVE usar caminhos absolutos. DEVE incluir flags --no-interaction ou -y quando possível para evitar travamento.",
+      "examples": [
+        "php artisan make:filament-resource User --generate",
+        "cd /var/www/html/projetos/portal && npm run build",
+        "php artisan migrate --force",
+        "composer require spatie/laravel-permission --no-interaction"
+      ]
+    },
+    "working_directory": {
+      "type": "string",
+      "description": "Diretório de trabalho. Se omitido, usa o local_path do projeto ativo.",
+      "examples": ["/var/www/html/projetos/portal"]
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "description": "Timeout máximo em segundos. Se o comando não terminar nesse tempo, é morto. Padrão: 120 para execute, 600 para execute_background.",
+      "default": 120,
+      "minimum": 5,
+      "maximum": 600
+    },
+    "pid": {
+      "type": "integer",
+      "description": "PID do processo a matar. Obrigatório apenas para action 'kill'."
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean", "description": "Se o comando terminou com exit code 0"},
+    "exit_code": {"type": "integer", "description": "Código de saída do processo"},
+    "stdout": {"type": "string", "description": "Saída padrão (stdout) do comando"},
+    "stderr": {"type": "string", "description": "Saída de erro (stderr) do comando"},
+    "pid": {"type": "integer", "description": "PID do processo (apenas para execute_background)"},
+    "execution_time_ms": {"type": "integer", "description": "Tempo de execução em milissegundos"}
+  }
+}
+```
+
+### Restrições de Segurança
+
+- **Comandos bloqueados:** `rm -rf /`, `shutdown`, `reboot`, `chmod 777`, `chown root`, qualquer comando com `|` pipe para `/dev/sda`, `mkfs`, `dd if=`.
+- **Caminhos permitidos:** Apenas dentro de `/var/www/html/projetos/` — qualquer tentativa de operar fora é bloqueada.
+- **Logs:** Todo comando executado é gravado em `tool_calls_log` com input, output, tempo e status.
 
 ---
 
-## 4. Controle de Versão e Deployment (GitFlow)
+## 2. FileTool — Manipulação de Arquivos e Diretórios
 
-*   **`GitMasterTool`:**
-    *   *Ações:* `init`, `add`, `commit`, `pull`, `push`, `branch` (create/switch), `merge`, `stash`, `revert` e `diff`.
-    *   *Inteligência:* A ferramenta gera o sumário do commit baseado no PRD executado.
+**Classe:** `App\Tools\FileTool`
+**Responsabilidade:** Ler, criar, editar, renomear, mover e deletar arquivos. Navegar diretórios. Substitui as antigas `FileSurgeryTool`, `FileArchitectTool` e `FileSystemNavigatorTool`.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso Prático |
+|---|---|---|
+| `read` | Ler conteúdo de um arquivo | Ler Model para entender a estrutura antes de editar |
+| `write` | Criar ou sobrescrever arquivo inteiro | Criar um novo Controller, View, Migration |
+| `patch` | Edição cirúrgica (Search & Replace) | Adicionar método num Model sem reescrever o arquivo inteiro |
+| `insert` | Inserir conteúdo em posição específica | Adicionar `use SoftDeletes;` após `use HasFactory;` |
+| `delete` | Deletar arquivo (com backup automático) | Remover arquivo de teste obsoleto |
+| `rename` | Renomear/mover arquivo ou diretório | Refatorar nomes de classes |
+| `list_dir` | Listar conteúdo de um diretório | Mapear a estrutura `app/Models/` |
+| `tree` | Árvore completa do diretório (recursivo) | Entender a arquitetura do projeto inteiro |
+| `exists` | Verificar se arquivo/diretório existe | Checar antes de criar para não sobrescrever |
+| `permissions` | Ajustar chmod/chown | Garantir que `storage/` tenha escrita para www-data |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action", "path"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["read", "write", "patch", "insert", "delete", "rename", "list_dir", "tree", "exists", "permissions"],
+      "description": "Qual ação executar no arquivo/diretório."
+    },
+    "path": {
+      "type": "string",
+      "description": "Caminho ABSOLUTO do arquivo ou diretório. DEVE começar com /var/www/html/projetos/.",
+      "pattern": "^/var/www/html/projetos/",
+      "examples": ["/var/www/html/projetos/portal/app/Models/User.php"]
+    },
+    "content": {
+      "type": "string",
+      "description": "Conteúdo do arquivo. Obrigatório para 'write'. Para 'write', este é o conteúdo COMPLETO do novo arquivo."
+    },
+    "search": {
+      "type": "string",
+      "description": "Texto a ser buscado (para 'patch'). Deve ser uma string EXATA que existe no arquivo."
+    },
+    "replace": {
+      "type": "string",
+      "description": "Texto que substituirá o 'search' (para 'patch'). Pode ser vazio para deletar o trecho."
+    },
+    "position": {
+      "type": "string",
+      "enum": ["before", "after", "line"],
+      "description": "Onde inserir (para 'insert'): 'before' ou 'after' do anchor_text, ou numa 'line' específica."
+    },
+    "anchor_text": {
+      "type": "string",
+      "description": "Texto âncora para 'insert' com position 'before' ou 'after'. Ex: 'use HasFactory;'"
+    },
+    "line_number": {
+      "type": "integer",
+      "description": "Número da linha para 'insert' com position='line'. Linhas começam em 1."
+    },
+    "new_path": {
+      "type": "string",
+      "description": "Novo caminho para 'rename'. DEVE começar com /var/www/html/projetos/."
+    },
+    "chmod": {
+      "type": "string",
+      "description": "Permissões para 'permissions'. Ex: '755', '644'.",
+      "pattern": "^[0-7]{3}$"
+    },
+    "chown": {
+      "type": "string",
+      "description": "Proprietário para 'permissions'. Permitido apenas 'www-data:www-data'.",
+      "enum": ["www-data:www-data"]
+    },
+    "start_line": {
+      "type": "integer",
+      "description": "Para 'read': linha inicial (1-indexed). Se omitido, lê o arquivo inteiro.",
+      "minimum": 1
+    },
+    "end_line": {
+      "type": "integer",
+      "description": "Para 'read': linha final (inclusive). Se omitido, lê até o final.",
+      "minimum": 1
+    },
+    "max_depth": {
+      "type": "integer",
+      "description": "Para 'tree': profundidade máxima da recursão. Padrão: 3.",
+      "default": 3,
+      "minimum": 1,
+      "maximum": 10
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "content": {"type": "string", "description": "Conteúdo do arquivo (para 'read') ou tree (para 'tree', 'list_dir')"},
+    "lines_total": {"type": "integer", "description": "Total de linhas do arquivo (para 'read')"},
+    "bytes": {"type": "integer", "description": "Tamanho em bytes do arquivo"},
+    "matches_replaced": {"type": "integer", "description": "Quantas substituições foram feitas (para 'patch')"},
+    "exists": {"type": "boolean", "description": "Se o arquivo/diretório existe (para 'exists')"},
+    "backup_path": {"type": "string", "description": "Caminho do backup criado (para 'delete')"},
+    "error": {"type": "string", "description": "Mensagem de erro se success=false"}
+  }
+}
+```
+
+### Exemplo Prático: Edição Cirúrgica (Patch)
+
+Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteúdo), a IA usa `patch`:
+
+```json
+{
+  "action": "patch",
+  "path": "/var/www/html/projetos/portal/app/Models/User.php",
+  "search": "protected $fillable = [\n        'name',\n        'email',\n        'password',\n    ];",
+  "replace": "protected $fillable = [\n        'name',\n        'email',\n        'password',\n        'avatar',\n        'phone',\n        'role',\n    ];"
+}
+```
+
+**Por que isso é superior?** O Model User pode ter 200 linhas. Enviar as 200 linhas pelo LLM (write) consome ~600 tokens. Enviar apenas o trecho de 8 linhas (patch) consome ~24 tokens. Economia de 96%.
 
 ---
 
-## 5. Pesquisa, Scraping e Visão (Intelligence Tools)
+## 3. DatabaseTool — Gestão Completa de Banco de Dados
 
-*   **`FirecrawlScraperTool` (Nativo/Self-Hosted):** Raspagem de docs para Markdown.
-*   **`VisionBrowserTool`:** Screenshots de falhas de UI para análise multimodal.
-*   **`DuckDuckGoSearchTool`:** Pesquisa externa por soluções técnicas.
+**Classe:** `App\Tools\DatabaseTool`
+**Responsabilidade:** Manipulação DDL (estrutura) e DML (dados), manutenção do banco e geração de seeders. Substitui `SchemaManagerTool`, `DataManipulatorTool`, `DatabaseMaintenanceTool`, `SeederGeneratorTool` e `SchemaExplorerTool`.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso Prático |
+|---|---|---|
+| `describe` | DESCRIBE de uma tabela (colunas, tipos, índices) | Conhecer a estrutura antes de criar queries |
+| `query` | Executar SELECT (somente leitura) | Contar registros, verificar dados |
+| `execute` | Executar INSERT/UPDATE/DELETE (escrita) | Popular dados, corrigir registros |
+| `show_tables` | Listar todas as tabelas do banco | Mapear o schema do projeto |
+| `show_create` | Mostrar o CREATE TABLE de uma tabela | Entender estrutura completa com índices e FKs |
+| `dump` | Gerar dump SQL do banco ou de tabelas específicas | Backup antes de operações arriscadas |
+| `optimize` | OPTIMIZE TABLE em tabelas específicas | Manutenção periódica |
+| `migration_status` | Listar migrations rodadas e pendentes | Verificar estado do schema |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["describe", "query", "execute", "show_tables", "show_create", "dump", "optimize", "migration_status"]
+    },
+    "database": {
+      "type": "string",
+      "description": "Nome do banco de dados. Se omitido, usa o DB do projeto ativo (via .env do projeto).",
+      "examples": ["portal_db"]
+    },
+    "table": {
+      "type": "string",
+      "description": "Nome da tabela. Obrigatório para describe, show_create, optimize.",
+      "examples": ["users", "posts"]
+    },
+    "sql": {
+      "type": "string",
+      "description": "Query SQL para 'query' (apenas SELECT) ou 'execute' (INSERT/UPDATE/DELETE). Proibido DROP DATABASE, DROP TABLE sem WHERE, TRUNCATE sem confirmação.",
+      "examples": [
+        "SELECT id, name, email FROM users WHERE role = 'admin' LIMIT 10",
+        "INSERT INTO tags (name, slug) VALUES ('Laravel', 'laravel')"
+      ]
+    },
+    "tables": {
+      "type": "array",
+      "description": "Lista de tabelas para 'dump'. Se omitido no dump, faz dump do banco inteiro.",
+      "items": {"type": "string"}
+    },
+    "output_path": {
+      "type": "string",
+      "description": "Caminho de saída para 'dump'. DEVE estar dentro de /var/www/html/projetos/",
+      "examples": ["/var/www/html/projetos/portal/storage/backups/dump_2026-04-09.sql"]
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "data": {
+      "type": "array",
+      "description": "Resultados da query (para 'query'). Array de objetos JSON.",
+      "items": {"type": "object"}
+    },
+    "columns": {
+      "type": "array",
+      "description": "Lista de colunas com tipos, nullable, default (para 'describe').",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "type": {"type": "string"},
+          "nullable": {"type": "boolean"},
+          "default": {"type": "string"},
+          "key": {"type": "string"}
+        }
+      }
+    },
+    "tables": {
+      "type": "array",
+      "description": "Lista de tabelas (para 'show_tables').",
+      "items": {"type": "string"}
+    },
+    "create_statement": {"type": "string", "description": "CREATE TABLE completo (para 'show_create')"},
+    "affected_rows": {"type": "integer", "description": "Linhas afetadas (para 'execute')"},
+    "dump_path": {"type": "string", "description": "Caminho do dump gerado (para 'dump')"},
+    "migrations": {
+      "type": "array",
+      "description": "Lista de migrations (para 'migration_status').",
+      "items": {
+        "type": "object",
+        "properties": {
+          "migration": {"type": "string"},
+          "batch": {"type": "integer"},
+          "ran": {"type": "boolean"}
+        }
+      }
+    },
+    "error": {"type": "string"}
+  }
+}
+```
+
+### Restrições de Segurança
+
+- **Proibido:** `DROP DATABASE`, `DROP TABLE` sem confirmação explícita, `TRUNCATE` sem backup prévio.
+- **Apenas bancos do projeto:** A ferramenta só acessa o banco configurado no `.env` do projeto ativo.
+- **Query timeout:** SELECT com LIMIT obrigatório. Queries sem LIMIT recebem `LIMIT 1000` automaticamente.
+- **Backup automático:** Antes de qualquer `execute` (INSERT/UPDATE/DELETE), a ferramenta faz um `SELECT` dos registros afetados e salva como backup no log.
 
 ---
 
-## 6. Controle de Qualidade e Testes (QA Power Tools)
+## 4. GitTool — Controle de Versão e Integração GitHub
 
-Ferramentas para garantir que o código gerado não apenas existe, mas é funcional e resiliente.
+**Classe:** `App\Tools\GitTool`
+**Responsabilidade:** Todas as operações Git locais e integração com API do GitHub. Substitui `GitMasterTool` e `GitHubIntegrationTool`.
 
-*   **`TestAutomatorTool` (Backend Testing):**
-    *   *Ações:* Executar `php artisan test` ou `./vendor/bin/phpunit`.
-    *   *Uso:* A IA pode filtrar por uma classe de teste específica ou um método. O script devolve o status (Pass/Fail) e o log de erro detalhado para auto-correção.
-*   **`DuskSimulatorTool` (Browser Simulation):**
-    *   *Ações:* Executar `php artisan dusk`.
-    *   *Uso:* Simulação real de um usuário navegando no sistema. Em caso de falha, esta ferramenta trabalha em conjunto com a `VisionBrowserTool` para capturar o estado visual do erro.
+### Ações Disponíveis
+
+| Ação | Descrição | Uso |
+|---|---|---|
+| `status` | `git status` do repositório | Verificar arquivos modificados antes de commit |
+| `diff` | `git diff` (staged, unstaged ou entre commits) | Revisar mudanças antes de commit |
+| `add` | `git add` de arquivos específicos ou todos | Preparar para commit |
+| `commit` | `git commit` com mensagem | Gravar alterações |
+| `push` | `git push` para remote | Enviar para GitHub |
+| `pull` | `git pull` do remote | Atualizar código local |
+| `branch` | Criar, listar, trocar ou deletar branches | Isolamento por task |
+| `merge` | Merge de branch | Integrar task ao main |
+| `stash` | Salvar alterações temporárias | Pausar trabalho no meio |
+| `revert` | Reverter um commit específico | Rollback de alteração problemática |
+| `log` | Histórico de commits | Consultar alterações passadas |
+| `github_api` | Acessar a API REST do GitHub | Ler issues, PRs, diffs de PRs |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["status", "diff", "add", "commit", "push", "pull", "branch", "merge", "stash", "revert", "log", "github_api"]
+    },
+    "repository_path": {
+      "type": "string",
+      "description": "Caminho do repositório. Se omitido, usa o local_path do projeto ativo."
+    },
+    "files": {
+      "type": "array",
+      "description": "Arquivos para 'add'. Se vazio ou omitido no add, faz 'git add .'.",
+      "items": {"type": "string"}
+    },
+    "message": {
+      "type": "string",
+      "description": "Mensagem do commit. Obrigatório para 'commit'. Formato: 'tipo(escopo): descrição'.",
+      "examples": ["feat(users): criar Resource de Gestão de Usuários"]
+    },
+    "branch_name": {
+      "type": "string",
+      "description": "Nome do branch para 'branch' (criar/trocar) ou 'merge' (branch origem).",
+      "examples": ["task/a1b2c3d4", "feature/user-crud"]
+    },
+    "branch_action": {
+      "type": "string",
+      "enum": ["create", "switch", "delete", "list"],
+      "description": "Sub-ação para 'branch'."
+    },
+    "commit_hash": {
+      "type": "string",
+      "description": "Hash do commit para 'revert' ou 'diff' entre commits."
+    },
+    "merge_no_ff": {
+      "type": "boolean",
+      "description": "Se true, usa --no-ff no merge (preserva histórico do branch). Padrão: true.",
+      "default": true
+    },
+    "log_count": {
+      "type": "integer",
+      "description": "Número de commits para 'log'. Padrão: 10.",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "github_endpoint": {
+      "type": "string",
+      "description": "Endpoint da API GitHub para 'github_api'. Ex: '/repos/{owner}/{repo}/issues'."
+    },
+    "github_method": {
+      "type": "string",
+      "enum": ["GET", "POST", "PATCH"],
+      "description": "Método HTTP para 'github_api'. Padrão: GET.",
+      "default": "GET"
+    },
+    "github_body": {
+      "type": "object",
+      "description": "Corpo da requisição para 'github_api' com método POST/PATCH."
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "output": {"type": "string", "description": "Saída do comando git"},
+    "branch": {"type": "string", "description": "Branch atual após a operação"},
+    "branches": {"type": "array", "description": "Lista de branches (para branch_action='list')"},
+    "commits": {
+      "type": "array",
+      "description": "Lista de commits (para 'log').",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hash": {"type": "string"},
+          "author": {"type": "string"},
+          "date": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "github_response": {"type": "object", "description": "Resposta da API GitHub (para 'github_api')"},
+    "error": {"type": "string"}
+  }
+}
+```
 
 ---
 
-## 7. Meta-Evolução e Fallback
+## 5. SearchTool — Pesquisa Web e Scraping Inteligente
 
-*   **`ToolCreatorTool`:** Criação de novas ferramentas permanentes para usos recorrentes não mapeados.
-*   **`FailSafeLogger`:** Registro obrigatório de impossibilidades técnicas nas observações do banco de dados MariaDB para tratamento manual.
+**Classe:** `App\Tools\SearchTool`
+**Responsabilidade:** Pesquisa na web para encontrar soluções técnicas e raspagem inteligente de documentação. Substitui `DuckDuckGoSearchTool` e `FirecrawlScraperTool`.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso |
+|---|---|---|
+| `search` | Pesquisa na web via DuckDuckGo | Encontrar solução para erro desconhecido |
+| `scrape` | Raspar página web e converter para Markdown limpo | Ler documentação do Filament/Laravel |
+| `grep_code` | Busca de padrões no código do projeto (grep/ripgrep) | Encontrar onde uma classe é usada |
+| `find_files` | Busca de arquivos por padrão (glob) | Encontrar todos os Models, Controllers, etc. |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["search", "scrape", "grep_code", "find_files"]
+    },
+    "query": {
+      "type": "string",
+      "description": "Termo de busca para 'search'. Ou padrão regex/texto para 'grep_code'.",
+      "examples": [
+        "Filament v5 create resource with tabs",
+        "Laravel 12 QueryException column not found",
+        "class UserResource"
+      ]
+    },
+    "url": {
+      "type": "string",
+      "description": "URL para 'scrape'. A página será convertida para Markdown puro.",
+      "examples": ["https://filamentphp.com/docs/3.x/panels/resources/creating-records"]
+    },
+    "search_path": {
+      "type": "string",
+      "description": "Diretório para 'grep_code' e 'find_files'. DEVE ser caminhos do projeto.",
+      "examples": ["/var/www/html/projetos/portal/app"]
+    },
+    "pattern": {
+      "type": "string",
+      "description": "Padrão glob para 'find_files'. Ex: '*.php', '*Resource*.php'.",
+      "examples": ["*.php", "*Controller.php", "*.blade.php"]
+    },
+    "case_insensitive": {
+      "type": "boolean",
+      "description": "Para 'grep_code': busca case-insensitive. Padrão: false.",
+      "default": false
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "Máximo de resultados para 'search' e 'grep_code'. Padrão: 10.",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "include_extensions": {
+      "type": "array",
+      "description": "Para 'grep_code': filtrar por extensão. Ex: ['php', 'blade.php'].",
+      "items": {"type": "string"},
+      "examples": [["php"], ["blade.php", "js"]]
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "results": {
+      "type": "array",
+      "description": "Resultados de 'search': título + URL + snippet.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "url": {"type": "string"},
+          "snippet": {"type": "string"}
+        }
+      }
+    },
+    "markdown_content": {
+      "type": "string",
+      "description": "Conteúdo da página em Markdown puro (para 'scrape'). O HTML é convertido automaticamente."
+    },
+    "matches": {
+      "type": "array",
+      "description": "Resultados de 'grep_code': arquivo + linha + conteúdo.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {"type": "string"},
+          "line": {"type": "integer"},
+          "content": {"type": "string"}
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Resultados de 'find_files': caminhos dos arquivos encontrados.",
+      "items": {"type": "string"}
+    },
+    "error": {"type": "string"}
+  }
+}
+```
+
+### Segurança do Scraping
+
+- **Context Threat Scanning:** Antes de injetar o Markdown raspado no prompt, o PromptFactory escaneia o conteúdo buscando padrões de prompt injection (ver `PROMPTS.md` seção 5).
+- **Tamanho máximo:** O Markdown raspado é truncado em 8000 tokens para não explodir o contexto.
+- **Retry com fallback:** Se o Firecrawl self-hosted falhar, tenta via DuckDuckGo Instant Answer como fallback.
 
 ---
-**Nota de Segurança:** Todas as ferramentas de manipulação de arquivo e banco de dados operam sob logs de auditoria e caminhos absolutos para prevenir qualquer escape do diretório do projeto.
+
+## 6. TestTool — Controle de Qualidade e Testes Automatizados
+
+**Classe:** `App\Tools\TestTool`
+**Responsabilidade:** Executar testes automatizados (Pest/PHPUnit e Dusk), capturar screenshots de falhas visuais e analisar cobertura de código. Substitui `TestAutomatorTool`, `DuskSimulatorTool` e `VisionBrowserTool`.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso |
+|---|---|---|
+| `run` | Executar suite de testes (Pest/PHPUnit) | Testar código após implementação |
+| `run_filter` | Executar teste específico por classe ou método | Testar apenas o que foi alterado |
+| `dusk` | Executar testes de browser (Laravel Dusk) | Testar fluxos visuais end-to-end |
+| `screenshot` | Capturar screenshot de uma URL via headless browser | Verificar visualmente uma página |
+| `coverage` | Gerar relatório de cobertura de código | Identificar código não testado |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["run", "run_filter", "dusk", "screenshot", "coverage"]
+    },
+    "project_path": {
+      "type": "string",
+      "description": "Caminho do projeto. Se omitido, usa o local_path do projeto ativo."
+    },
+    "filter": {
+      "type": "string",
+      "description": "Para 'run_filter': nome da classe ou método de teste.",
+      "examples": ["UserResourceTest", "it_can_create_a_user"]
+    },
+    "parallel": {
+      "type": "boolean",
+      "description": "Para 'run': executar testes em paralelo. Padrão: true.",
+      "default": true
+    },
+    "url": {
+      "type": "string",
+      "description": "Para 'screenshot': URL da página a capturar.",
+      "examples": ["http://portal.test/admin/users"]
+    },
+    "screenshot_path": {
+      "type": "string",
+      "description": "Para 'screenshot': caminho onde salvar a imagem.",
+      "examples": ["/var/www/html/projetos/portal/storage/screenshots/users_list.png"]
+    },
+    "viewport": {
+      "type": "object",
+      "description": "Para 'screenshot': tamanho do viewport.",
+      "properties": {
+        "width": {"type": "integer", "default": 1920},
+        "height": {"type": "integer", "default": 1080}
+      }
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "tests_total": {"type": "integer"},
+    "tests_passed": {"type": "integer"},
+    "tests_failed": {"type": "integer"},
+    "tests_skipped": {"type": "integer"},
+    "failures": {
+      "type": "array",
+      "description": "Detalhes de cada teste que falhou.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test_name": {"type": "string"},
+          "message": {"type": "string"},
+          "file": {"type": "string"},
+          "line": {"type": "integer"},
+          "diff": {"type": "string", "description": "Diff entre esperado e obtido (se assertion)"}
+        }
+      }
+    },
+    "output": {"type": "string", "description": "Saída completa do comando de teste"},
+    "screenshot_path": {"type": "string", "description": "Caminho da screenshot gerada (para 'screenshot')"},
+    "coverage_percent": {"type": "number", "description": "Porcentagem de cobertura (para 'coverage')"},
+    "execution_time_seconds": {"type": "number"},
+    "error": {"type": "string"}
+  }
+}
+```
+
+---
+
+## 7. DocsTool — Documentação Técnica e Anotações
+
+**Classe:** `App\Tools\DocsTool`
+**Responsabilidade:** Criar e atualizar documentação Markdown e gerenciar TODOs/anotações dos agentes. Substitui `MarkdownDocsTool` e `TaskTrackerTool`.
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso |
+|---|---|---|
+| `create_doc` | Criar novo documento Markdown | README, CHANGELOG, docs técnicos |
+| `update_doc` | Atualizar seção específica de um Markdown existente | Adicionar endpoint na documentação da API |
+| `add_todo` | Criar anotação TODO para o agente | Lembrar de dependência pendente enquanto foca em outra coisa |
+| `list_todos` | Listar TODOs pendentes | Verificar se há pendências antes de concluir |
+| `complete_todo` | Marcar TODO como concluído | Limpeza de anotações |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["create_doc", "update_doc", "add_todo", "list_todos", "complete_todo"]
+    },
+    "path": {
+      "type": "string",
+      "description": "Para 'create_doc' e 'update_doc': caminho absoluto do arquivo .md.",
+      "examples": ["/var/www/html/projetos/portal/README.md"]
+    },
+    "content": {
+      "type": "string",
+      "description": "Para 'create_doc': conteúdo completo em Markdown. Para 'update_doc': conteúdo da seção atualizada."
+    },
+    "section_heading": {
+      "type": "string",
+      "description": "Para 'update_doc': título da seção a ser atualizada (ex: '## Endpoints da API')."
+    },
+    "todo_text": {
+      "type": "string",
+      "description": "Para 'add_todo': texto da anotação. Ex: 'Falta criar o Factory para User'."
+    },
+    "todo_id": {
+      "type": "string",
+      "description": "Para 'complete_todo': ID do TODO a marcar como concluído."
+    },
+    "subtask_id": {
+      "type": "string",
+      "description": "UUID da subtask associada. TODOs são isolados por subtask para não misturar anotações de agentes diferentes."
+    }
+  }
+}
+```
+
+---
+
+## 8. MetaTool — Auto-Evolução e Logging de Impossibilidades
+
+**Classe:** `App\Tools\MetaTool`
+**Responsabilidade:** Permitir que o sistema evolua criando novas ferramentas permanentes para usos recorrentes não mapeados, e registrar situações onde o agente não conseguiu resolver o problema (para análise humana posterior).
+
+### Ações Disponíveis
+
+| Ação | Descrição | Uso |
+|---|---|---|
+| `create_tool` | Propor criação de nova ferramenta | Quando o agente precisa de uma capacidade que não existe |
+| `log_impossibility` | Registrar que a tarefa é impossível com as ferramentas atuais | Escalar honestamente para humano |
+| `request_human` | Solicitar intervenção humana explicitamente | Quando precisa de decisão de design que não pode assumir |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["create_tool", "log_impossibility", "request_human"]
+    },
+    "tool_name": {
+      "type": "string",
+      "description": "Para 'create_tool': nome proposto para a nova ferramenta."
+    },
+    "tool_description": {
+      "type": "string",
+      "description": "Para 'create_tool': o que a ferramenta faria e por que é necessária."
+    },
+    "tool_actions": {
+      "type": "array",
+      "description": "Para 'create_tool': lista de ações que a nova ferramenta teria.",
+      "items": {"type": "string"}
+    },
+    "reason": {
+      "type": "string",
+      "description": "Para 'log_impossibility' e 'request_human': explicação detalhada de por que não pode continuar.",
+      "examples": [
+        "A tarefa requer acesso SSH a um servidor externo (192.168.1.50) que não está nas ferramentas disponíveis",
+        "O PRD pede integração com API do Stripe mas não temos as credenciais nem a documentação do webhook format"
+      ]
+    },
+    "subtask_id": {
+      "type": "string",
+      "description": "UUID da subtask relacionada."
+    },
+    "suggested_action": {
+      "type": "string",
+      "description": "Para 'request_human': o que o humano deveria fazer para desbloquear o agente.",
+      "examples": [
+        "Fornecer as credenciais do Stripe no .env (STRIPE_KEY e STRIPE_SECRET)",
+        "Decidir se o avatar do usuário deve ser armazenado no S3 ou no disco local"
+      ]
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "logged": {"type": "boolean", "description": "Se a impossibilidade foi registrada com sucesso"},
+    "tool_proposal_id": {"type": "string", "description": "ID da proposta de nova ferramenta (para revisão humana)"},
+    "notification_sent": {"type": "boolean", "description": "Se a notificação foi enviada ao humano via Filament"},
+    "error": {"type": "string"}
+  }
+}
+```
+
+---
+
+## Resumo Visual: Mapa de Ferramentas → Casos de Uso
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    TOOL ROUTER (ToolRouter.php)                  │
+│                                                                  │
+│  LLM response → Parse tool_calls → Validate JSON Schema → Exec │
+│                                                                  │
+│  ┌───────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────┐ │
+│  │ ShellTool │  │ FileTool  │  │ DatabaseTool │  │ GitTool   │ │
+│  │           │  │           │  │              │  │           │ │
+│  │ artisan   │  │ read      │  │ describe     │  │ status    │ │
+│  │ npm       │  │ write     │  │ query        │  │ commit    │ │
+│  │ composer  │  │ patch     │  │ execute      │  │ push      │ │
+│  │ terminal  │  │ insert    │  │ dump         │  │ branch    │ │
+│  │           │  │ delete    │  │ optimize     │  │ merge     │ │
+│  │           │  │ rename    │  │              │  │ github    │ │
+│  │           │  │ list_dir  │  │              │  │           │ │
+│  │           │  │ tree      │  │              │  │           │ │
+│  │           │  │ perms     │  │              │  │           │ │
+│  └───────────┘  └───────────┘  └──────────────┘  └───────────┘ │
+│                                                                  │
+│  ┌────────────┐  ┌───────────┐  ┌──────────┐  ┌──────────────┐ │
+│  │ SearchTool │  │ TestTool  │  │ DocsTool │  │ MetaTool     │ │
+│  │            │  │           │  │          │  │              │ │
+│  │ ddg search │  │ run tests │  │ create   │  │ create_tool  │ │
+│  │ firecrawl  │  │ dusk      │  │ update   │  │ log_impossi  │ │
+│  │ grep_code  │  │ screenshot│  │ todos    │  │ request_human│ │
+│  │ find_files │  │ coverage  │  │          │  │              │ │
+│  └────────────┘  └───────────┘  └──────────┘  └──────────────┘ │
+│                                                                  │
+│  Segurança: Todo input validado contra JSON Schema              │
+│  Auditoria: Todo call logado em tool_calls_log                  │
+│  Sandbox: Apenas /var/www/html/projetos/ acessível              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**Nota de Segurança:** Todas as ferramentas operam sob:
+1. **Validação de JSON Schema** — Parâmetros inválidos são rejeitados antes da execução.
+2. **Sandbox de diretórios** — Apenas caminhos dentro de `/var/www/html/projetos/` são permitidos.
+3. **Logs de auditoria** — Toda execução é gravada em `tool_calls_log` com timestamp, agente e resultado.
+4. **Timeouts** — Todo comando tem timeout máximo para evitar processos órfãos.
+5. **Backup automático** — Operações destrutivas (delete file, truncate table) criam backup antes de executar.
