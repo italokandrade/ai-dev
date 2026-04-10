@@ -52,7 +52,7 @@ class OrchestratorJob implements ShouldQueue
             agent: $agent,
             userMessage: $userMessage,
             systemPrompt: $systemPrompt,
-            sessionId: $project->gemini_session_id ?? $project->claude_session_id,
+            project: $project,
             taskId: $this->task->id,
         );
 

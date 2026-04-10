@@ -14,6 +14,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
 
 class QAAuditJob implements ShouldQueue
 {
@@ -49,7 +50,7 @@ class QAAuditJob implements ShouldQueue
             agent: $agent,
             userMessage: $userMessage,
             systemPrompt: $systemPrompt,
-            sessionId: $project->claude_session_id,
+            project: $project,
             taskId: $this->subtask->task_id,
             subtaskId: $this->subtask->id,
         );
@@ -106,11 +107,55 @@ class QAAuditJob implements ShouldQueue
     {
         Log::info("QAAuditJob: Subtask {$this->subtask->id} APPROVED");
 
+        // Fazer git commit e salvar o hash para rastreabilidade e rollback
+        $commitHash = $this->commitAndCaptureHash();
+
         $this->subtask->transitionTo(SubtaskStatus::Success, 'qa-auditor', $auditResult);
-        $this->subtask->update(['completed_at' => now()]);
+        $this->subtask->update([
+            'completed_at' => now(),
+            'commit_hash' => $commitHash,
+        ]);
 
         $this->checkTaskCompletion();
         $this->dispatchNextSubtasks();
+    }
+
+    /**
+     * Faz git add + commit no projeto alvo e retorna o hash do commit.
+     * O hash é salvo na subtask para permitir rollback preciso via `git revert <hash>`.
+     */
+    private function commitAndCaptureHash(): ?string
+    {
+        $workDir = $this->subtask->task->project->local_path ?? null;
+        if (! $workDir || ! is_dir("{$workDir}/.git")) {
+            return null;
+        }
+
+        try {
+            // Stage all changes
+            Process::path($workDir)->timeout(30)->run('git add -A');
+
+            // Commit with descriptive message
+            $subtaskTitle = addslashes($this->subtask->title);
+            $message = "ai-dev: {$subtaskTitle} [subtask:{$this->subtask->id}]";
+            $commitResult = Process::path($workDir)->timeout(30)
+                ->run("git commit -m " . escapeshellarg($message) . " --allow-empty");
+
+            if (! $commitResult->successful()) {
+                Log::warning("QAAuditJob: git commit failed for subtask {$this->subtask->id}: {$commitResult->errorOutput()}");
+                return null;
+            }
+
+            // Capture the commit hash
+            $hashResult = Process::path($workDir)->timeout(10)->run('git rev-parse HEAD');
+            $hash = trim($hashResult->output());
+
+            Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
+            return $hash ?: null;
+        } catch (\Throwable $e) {
+            Log::error("QAAuditJob: git error for subtask {$this->subtask->id}: {$e->getMessage()}");
+            return null;
+        }
     }
 
     private function rejectSubtask(array $auditResult): void
@@ -161,9 +206,15 @@ class QAAuditJob implements ShouldQueue
             $task->transitionTo(TaskStatus::QaAudit, 'qa-auditor');
             $task->transitionTo(TaskStatus::Testing, 'qa-auditor');
             $task->transitionTo(TaskStatus::Completed, 'system');
-            $task->update(['completed_at' => now()]);
 
-            Log::info("Task {$task->id} COMPLETED successfully");
+            // Salvar o commit_hash final da task (último commit de subtask)
+            $lastCommitHash = $allSubtasks->whereNotNull('commit_hash')->last()?->commit_hash;
+            $task->update([
+                'completed_at' => now(),
+                'commit_hash' => $lastCommitHash,
+            ]);
+
+            Log::info("Task {$task->id} COMPLETED successfully (commit: {$lastCommitHash})");
         } else {
             // Some subtasks failed
             $errorCount = $allSubtasks->where('status', SubtaskStatus::Error)->count();

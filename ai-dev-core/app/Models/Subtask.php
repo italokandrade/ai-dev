@@ -27,6 +27,7 @@ class Subtask extends Model
         'retry_count',
         'max_retries',
         'qa_feedback',
+        'commit_hash',
         'started_at',
         'completed_at',
     ];

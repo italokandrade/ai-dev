@@ -61,7 +61,7 @@ class SubagentJob implements ShouldQueue
                 agent: $agent,
                 userMessage: $currentMessage,
                 systemPrompt: $round === 0 ? $systemPrompt : null,
-                sessionId: $project->gemini_session_id ?? $project->claude_session_id,
+                project: $project,
                 taskId: $this->subtask->task_id,
                 subtaskId: $this->subtask->id,
             );

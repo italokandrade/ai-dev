@@ -91,11 +91,14 @@ Uma task é sempre acompanhada de um PRD completo (ver `PRD_SCHEMA.md`).
 | `priority` | Int (1-100) | Prioridade de execução. 100 = máxima (reservado para Sentinela) |
 | `assigned_agent_id` | FK → `agents_config.id` / Nullable | Qual agente está responsável (preenchido pelo Orchestrator) |
 | `git_branch` | String(100) / Nullable | Nome do branch Git criado para isolar esta task (ex: `task/a1b2c3d4`) |
+| `commit_hash` | String(40) / Nullable | Hash do commit final da task (último commit após todas subtasks aprovadas). Permite rollback completo |
 | `last_session_id` | String / Nullable | ID da conversa LLM usada nesta tarefa para manter contexto |
 | `retry_count` | Int (default: 0) | Quantas vezes esta task já foi re-executada após falha |
 | `max_retries` | Int (default: 3) | Limite de retentativas antes de escalar para Human-in-the-Loop |
 | `error_log` | Text / Nullable | Último erro registrado (stack trace, mensagem de falha) |
 | `source` | Enum: `manual`, `webhook`, `sentinel`, `ci_cd` | De onde esta task veio (UI? Sentinela? GitHub webhook?) |
+| `is_redo` | Boolean (default: false) | Se esta task é uma re-execução (redo) de uma task anterior em vez de uma task nova |
+| `original_task_id` | FK → `tasks.id` / Nullable | ID da task original quando é um redo — permite rastrear a cadeia de tentativas |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
 | `started_at` | Timestamp / Nullable | Quando o processamento começou |
@@ -153,6 +156,7 @@ Uma task é sempre acompanhada de um PRD completo (ver `PRD_SCHEMA.md`).
 | `execution_order` | Int | Ordem de execução dentro do grupo (1, 2, 3...) |
 | `result_log` | Text / Nullable | Saída completa da execução (código gerado, comandos rodados) |
 | `result_diff` | Text / Nullable | O `git diff` exato produzido por esta subtask |
+| `commit_hash` | String(40) / Nullable | Hash do commit Git gerado ao aprovar a subtask. Permite rollback preciso via `git revert <hash>` |
 | `files_modified` | JSON / Nullable | Array de caminhos dos arquivos tocados (ex: `["/app/Models/User.php"]`) |
 | `file_locks` | JSON / Nullable | Arquivos que esta subtask travou para escrita exclusiva (mutex) |
 | `retry_count` | Int (default: 0) | Retentativas consumidas |
@@ -1239,3 +1243,172 @@ Para acelerar o desenvolvimento e garantir que o AI-Dev (AndradeItalo.ai) opere 
     *   *Foco da Extração:* Filosofia inteligente de web scraping usando APIs dedicadas (como o Firecrawl) para retornar puro Markdown em vez de sobrecarregar a LLM com ações visuais pesadas no DOM.
 
 **A Missão do Terceiro Mundo (The Best of Both Worlds):** O AI-Dev não é um fork direto. Ele atua como uma evolução que pega as ideias dispersas de CLI/Local de ambos os repositórios, mescla isso com a rigidez do controle via Tabela de Banco de Dados Relacional, e padroniza tudo *exclusivamente* para o ecossistema TALL + Filament + Anime.js, elevando a abstração ao máximo.
+
+---
+
+## 12. Diretrizes Obrigatórias para Módulos Desenvolvidos
+
+### 12.1. PRD Obrigatório por Módulo
+
+Todo módulo, feature ou componente desenvolvido pelo AI-Dev (ou manualmente) **DEVE** possuir um PRD (Product Requirement Document) em três locais simultâneos:
+
+1. **Arquivo `.md` no próprio diretório do módulo:**
+   - Nome: `PRD.md` na raiz do diretório do módulo (ex: `app/Modules/Auth/PRD.md`)
+   - Conteúdo: Descrição completa do que o módulo faz, por que existe, critérios de aceite, dependências e histórico de decisões
+   - Mantido atualizado a cada alteração significativa
+
+2. **Banco de dados de desenvolvimento (`tasks.prd_payload`):**
+   - O PRD em formato JSON estruturado, conforme `PRD_SCHEMA.md`
+   - Vinculado à task que originou o módulo
+   - Permite busca, auditoria e rastreabilidade via Filament UI
+
+3. **Documentação centralizada do sistema:**
+   - Referência no `ARCHITECTURE.md` ou em documento de índice que liste todos os módulos com links para seus PRDs
+   - Permite visão panorâmica do sistema sem navegar pelos diretórios
+
+**Por que três locais?** O arquivo `.md` no diretório serve para o desenvolvedor que está no código. O banco de dados serve para o sistema autônomo (agentes e Filament UI). A documentação central serve para visão estratégica e onboarding.
+
+### 12.2. WebMCP (Web Model Context Protocol) — Padrão Obrigatório
+
+Todo sistema web desenvolvido pelo AI-Dev **DEVE** implementar o padrão **WebMCP** (Web Model Context Protocol), criado pelo Google em conjunto com a Microsoft como proposta de padrão W3C.
+
+**O que é o WebMCP:**
+O WebMCP introduz a API `navigator.modelContext` diretamente no navegador (implementado experimentalmente no Chrome Canary), criando uma linguagem nativa e direta entre agentes de IA e aplicações web.
+
+**Como funciona:**
+
+| Sem WebMCP (legado) | Com WebMCP |
+|---|---|
+| Agente faz leitura visual (screenshots) ou parseia o DOM/HTML | Site expõe ferramentas estruturadas via `navigator.modelContext` |
+| Lento, alto gasto de tokens, quebra se layout muda | Eficiente, tipado, contrato estável entre IA e aplicação |
+| Adivinhação de onde clicar e o que preencher | Declaração proativa: "esta página tem estas funções chamáveis" |
+
+**Implementação obrigatória em cada página/componente:**
+
+```javascript
+// Exemplo: Página de produto expõe suas ações via WebMCP
+if ('modelContext' in navigator) {
+  navigator.modelContext.registerTools([
+    {
+      name: 'addToCart',
+      description: 'Adiciona o produto ao carrinho de compras',
+      parameters: {
+        productId: { type: 'string', required: true },
+        quantity: { type: 'integer', default: 1 }
+      },
+      handler: async ({ productId, quantity }) => {
+        return await addToCart(productId, quantity);
+      }
+    },
+    {
+      name: 'searchProducts',
+      description: 'Busca produtos por termo',
+      parameters: {
+        query: { type: 'string', required: true },
+        category: { type: 'string' }
+      },
+      handler: async ({ query, category }) => {
+        return await searchProducts(query, category);
+      }
+    }
+  ]);
+}
+```
+
+**Regras:**
+- Toda página com interações significativas (formulários, CRUDs, buscas, ações) DEVE registrar suas ferramentas via `navigator.modelContext.registerTools()`
+- Os nomes das ferramentas devem ser descritivos e em camelCase
+- Os parâmetros devem ter `type` e `description` explícitos
+- O `handler` deve retornar JSON estruturado com o resultado da ação
+- Componentes Livewire devem expor seus métodos públicos como ferramentas WebMCP
+- O registro deve ser feito no `x-init` do Alpine.js ou no `mount()` do Livewire
+
+**Benefício direto para o AI-Dev:** Quando o Sentinela ou um agente precisar interagir com a UI de um projeto desenvolvido (para teste funcional, por exemplo), ele poderá usar o WebMCP em vez de Dusk/screenshot, economizando tokens e eliminando flakiness.
+
+---
+
+## 13. Rastreabilidade de Commits e Rollback por Task
+
+### 13.1. Commit Hash por Subtask e Task
+
+O sistema salva o hash do commit Git (`commit_hash`) em dois níveis:
+
+- **`subtasks.commit_hash`**: Hash do commit gerado quando o QA Auditor aprova a subtask. Cada subtask aprovada = 1 commit atômico.
+- **`tasks.commit_hash`**: Hash do último commit da task (após todas as subtasks serem aprovadas). Representa o "ponto de restauração" completo.
+
+**Fluxo:**
+```text
+Subtask aprovada → git add -A → git commit "ai-dev: {título} [subtask:{id}]" → salva hash
+Todas subtasks OK → task.commit_hash = último hash → task = completed
+```
+
+**Rollback:**
+Para desfazer uma task inteira: `git revert <task.commit_hash>` ou, para rollback granular de uma subtask específica: `git revert <subtask.commit_hash>`.
+
+### 13.2. Redo de Tasks (Re-execução em vez de Nova Task)
+
+Quando uma task foi executada de forma incorreta ou precisa de ajustes, o sistema permite **refazer a mesma task** (redo) em vez de criar uma nova. Isso:
+- Mantém a rastreabilidade (a chain `original_task_id → redo → redo`)
+- Preserva o histórico de tentativas e feedbacks do QA
+- Evita duplicação de PRDs e poluição no banco de dados
+
+**Colunas envolvidas:**
+- `tasks.is_redo` (boolean): Indica se a task é um redo
+- `tasks.original_task_id` (FK → tasks.id): Aponta para a task original
+
+**Uso via código:**
+```php
+$task = Task::find($uuid);
+$redo = $task->redo(); // Cria redo linkado, status pending
+// Ou com PRD atualizado:
+$redo = $task->redo(updatedPrd: $novoPrd);
+OrchestratorJob::dispatch($redo);
+```
+
+---
+
+## 14. Segurança na Invocação dos LLMs (Sandboxing)
+
+### 14.1. Princípio Fundamental: IA Retorna Texto, Sistema Executa
+
+Os LLMs (Gemini e Claude) **NUNCA** têm acesso direto ao sistema operacional, ao banco de dados, ao filesystem ou a qualquer recurso do servidor. Toda interação com o ambiente é mediada exclusivamente pelo **ToolRouter** do AI-Dev.
+
+A IA recebe um prompt, retorna texto/JSON com instruções de tool calls, e o `ToolRouter.php` valida, executa e retorna os resultados. A IA **nunca** executa nada diretamente.
+
+### 14.2. Flags Obrigatórias nos Proxies
+
+**Proxy Claude (`infrastructure/proxy/claude_proxy.py` — porta 8002):**
+```bash
+claude -p \                           # --print: modo não-interativo, sem confirmações
+    --tools "" \                       # Desabilita TODAS as ferramentas internas (Bash, Edit, Read, etc.)
+    --permission-mode plan \           # Modo read-only: impede qualquer escrita direta no OS
+    --model <modelo> \
+    --session-id <project.claude_session_id> \
+    "<prompt>"
+```
+
+**Proxy Gemini (`infrastructure/proxy/gemini_proxy.py` — porta 8001):**
+```bash
+gemini --sandbox \                     # Modo sandboxed: impede acesso direto ao filesystem
+    --approval-mode plan \             # Modo read-only: sem execução direta de comandos
+    -m <modelo> \
+    -r <project.gemini_session_id> \   # Resume sessão do projeto para manter contexto
+    -p "<prompt>"
+```
+
+**Por que essas flags?**
+- `--tools ""` / `--sandbox`: Garante que a IA não pode executar `rm`, `chmod`, `DROP TABLE` ou qualquer comando diretamente. Tudo passa pelo nosso `ShellTool` que tem lista de comandos bloqueados.
+- `--permission-mode plan` / `--approval-mode plan`: Modo read-only — a IA só consegue retornar texto. Não pode modificar nada.
+- `-p` / `--prompt`: Modo não-interativo — sem perguntas "Deseja continuar? (y/n)". O proxy recebe o prompt, obtém a resposta e retorna imediatamente.
+
+### 14.3. Session ID Obrigatório por Projeto
+
+Toda chamada ao proxy **DEVE** incluir o `session_id` do projeto, resolvido automaticamente pelo `LLMGateway`:
+
+- Provider `gemini` → `project.gemini_session_id`
+- Provider `anthropic` → `project.claude_session_id`
+
+Se o proxy retornar um novo `session_id` (primeira chamada), o `LLMGateway` persiste automaticamente de volta na tabela `projects`. Isso garante que:
+1. A IA mantém contexto entre chamadas (memória da conversa)
+2. Cada projeto tem seu próprio contexto isolado
+3. O contexto da IA complementa a memória vetorial do AI-Dev (dupla camada de memória)

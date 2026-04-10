@@ -65,10 +65,17 @@ def discover_latest_session_id():
     return None
 
 def _try_gemini(prompt, model, session_id=None):
-    """Tenta executar o Gemini com um modelo específico. Retorna (texto, sucesso)."""
+    """Tenta executar o Gemini com um modelo específico. Retorna (texto, sucesso).
+
+    Flags de segurança:
+    - -p (--prompt): Modo não-interativo (headless), sem confirmações
+    - --sandbox: Modo sandboxed, impede acesso direto ao filesystem/OS
+    - --approval-mode plan: Modo read-only, a IA só retorna texto/JSON
+      Toda execução real de comandos passa pelo ToolRouter do AI-Dev
+    """
     try:
         resume_arg = session_id if session_id else "latest"
-        cmd_parts = ["gemini"]
+        cmd_parts = ["gemini", "--sandbox", "--approval-mode", "plan"]
         if model:
             cmd_parts.extend(["-m", model])
         cmd_parts.extend(["-r", resume_arg, "-p", prompt])

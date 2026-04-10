@@ -55,9 +55,21 @@ def classify_claude_tier(prompt: str) -> str:
     return "simple"
 
 def _try_claude(prompt, model, session_id=None):
-    """Tenta executar o Claude com um modelo específico. Retorna (texto, sucesso)."""
+    """Tenta executar o Claude com um modelo específico. Retorna (texto, sucesso).
+
+    Flags de segurança:
+    - -p (--print): Modo não-interativo, sem confirmações
+    - --tools "": Desabilita TODAS as ferramentas internas do Claude (Bash, Edit, etc.)
+      A IA retorna apenas texto/JSON — toda execução real passa pelo ToolRouter do AI-Dev
+    - --permission-mode plan: Modo read-only, impede qualquer escrita direta no OS/DB
+    """
     try:
-        cmd_parts = ["claude", "-p", "--model", model]
+        cmd_parts = [
+            "claude", "-p",
+            "--model", model,
+            "--tools", "",
+            "--permission-mode", "plan",
+        ]
         if session_id:
             cmd_parts.extend(["--session-id", session_id])
         cmd_parts.append(prompt)

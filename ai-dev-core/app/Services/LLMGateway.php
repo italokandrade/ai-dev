@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\AgentConfig;
-use App\Models\AgentExecution;
+use App\Models\Project;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -14,11 +14,21 @@ class LLMGateway
         'anthropic' => 'http://127.0.0.1:8002',
     ];
 
+    /**
+     * Envia uma mensagem para o LLM via proxy.
+     *
+     * O session_id é OBRIGATORIAMENTE resolvido a partir do projeto:
+     * - Provider gemini → usa project.gemini_session_id
+     * - Provider anthropic → usa project.claude_session_id
+     *
+     * Isso garante que TODA chamada mantém o contexto persistente da IA por projeto.
+     * Se o proxy retornar um novo session_id, ele é salvo de volta no projeto.
+     */
     public function chat(
         AgentConfig $agent,
         string $userMessage,
         ?string $systemPrompt = null,
-        ?string $sessionId = null,
+        ?Project $project = null,
         ?string $taskId = null,
         ?string $subtaskId = null,
     ): LLMResponse {
@@ -26,6 +36,9 @@ class LLMGateway
 
         $provider = $agent->provider->value;
         $baseUrl = self::PROXY_URLS[$provider] ?? self::PROXY_URLS['gemini'];
+
+        // Resolver session_id a partir do projeto (OBRIGATÓRIO)
+        $sessionId = $this->resolveSessionId($provider, $project);
 
         $messages = [];
         if ($systemPrompt) {
@@ -64,6 +77,9 @@ class LLMGateway
             $content = $data['choices'][0]['message']['content'] ?? '';
             $usedModel = $data['model'] ?? $agent->model;
             $usedSessionId = $data['session_id'] ?? $sessionId;
+
+            // Persistir session_id de volta no projeto para manter contexto entre chamadas
+            $this->persistSessionId($provider, $project, $usedSessionId);
 
             $usage = $data['usage'] ?? [];
 
@@ -123,6 +139,43 @@ class LLMGateway
         }
 
         return $toolCalls;
+    }
+
+    /**
+     * Resolve o session_id correto a partir do projeto e provider.
+     */
+    private function resolveSessionId(string $provider, ?Project $project): ?string
+    {
+        if (! $project) {
+            return null;
+        }
+
+        return match ($provider) {
+            'gemini' => $project->gemini_session_id,
+            'anthropic' => $project->claude_session_id,
+            default => null,
+        };
+    }
+
+    /**
+     * Persiste o session_id retornado pelo proxy de volta no projeto.
+     * Garante que chamadas futuras usem o mesmo contexto da IA.
+     */
+    private function persistSessionId(string $provider, ?Project $project, ?string $sessionId): void
+    {
+        if (! $project || ! $sessionId) {
+            return;
+        }
+
+        $column = match ($provider) {
+            'gemini' => 'gemini_session_id',
+            'anthropic' => 'claude_session_id',
+            default => null,
+        };
+
+        if ($column && $project->{$column} !== $sessionId) {
+            $project->update([$column => $sessionId]);
+        }
     }
 
     private function buildErrorResponse(
