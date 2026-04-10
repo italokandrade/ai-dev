@@ -69,7 +69,7 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `gemini_session_id` | String / Nullable | UUID da conversa persistida no Proxy Gemini — permite contexto infinito por projeto |
 | `claude_session_id` | String / Nullable | UUID da conversa persistida na Anthropic — idem |
 | `default_provider` | Enum: `gemini`, `claude`, `ollama` | Qual motor de IA usar por padrão para este projeto |
-| `default_model` | String(100) | Modelo padrão (ex: `gemini-2.5-flash`, `claude-sonnet-4`) |
+| `default_model` | String(100) | Modelo padrão (ex: `gemini-3.1-flash`, `claude-sonnet-4.6`) |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
@@ -175,7 +175,7 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 | `display_name` | String(100) | Nome legível para a UI (ex: "Especialista Backend TALL") |
 | `role_description` | Text | System Prompt base que define o comportamento do agente |
 | `provider` | String(50) | Provedor de IA (ex: `gemini`, `anthropic`, `ollama`) |
-| `model` | String(100) | Modelo específico (ex: `gemini-2.5-flash`, `claude-sonnet-4`) |
+| `model` | String(100) | Modelo específico (ex: `gemini-3.1-flash`, `claude-sonnet-4.6`) |
 | `api_key_env_var` | String(100) | Nome da variável de ambiente com a chave API (ex: `GEMINI_API_KEY`) |
 | `temperature` | Float (0.0 - 2.0) | Criatividade (0.0 = determinístico, 1.0+ = criativo). Orchestrator usa 0.2, Executores usam 0.4 |
 | `max_tokens` | Int | Máximo de tokens de saída por resposta. Padrão: 8192 |
@@ -188,13 +188,15 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 
 | ID | Papel | Provider Recomendado | Temperatura |
 |---|---|---|---|
-| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `anthropic` (Claude Sonnet 4) | 0.2 |
-| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `anthropic` (Claude Sonnet 4) | 0.1 |
-| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `gemini` (Gemini 2.5 Flash) | 0.4 |
-| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `gemini` (Gemini 2.5 Flash) | 0.5 |
-| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `gemini` (Gemini 2.5 Flash) | 0.3 |
-| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `gemini` (Gemini 2.5 Flash) | 0.2 |
-| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `gemini` (Gemini 2.5 Flash) | 0.2 |
+| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `anthropic` (Claude Sonnet 4.6) | 0.2 |
+| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `anthropic` (Claude Sonnet 4.6) | 0.1 |
+| `security-specialist` | Auditor — Pentest, OWASP Top 10, análise de vulnerabilidades | `anthropic` (Claude Sonnet 4.6) | 0.1 |
+| `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `gemini` (Gemini 3.1 Flash) | 0.2 |
+| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `gemini` (Gemini 3.1 Flash) | 0.4 |
+| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `gemini` (Gemini 3.1 Flash) | 0.5 |
+| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `gemini` (Gemini 3.1 Flash) | 0.3 |
+| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `gemini` (Gemini 3.1 Flash) | 0.2 |
+| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `gemini` (Gemini 3.1 Flash) | 0.2 |
 | `context-compressor` | Utilitário — Comprime sessões longas em resumos | `ollama` (qwen2.5:0.5b) | 0.1 |
 
 ---
@@ -257,7 +259,7 @@ Essencial para controle de custo, debugging e otimização.
 | `subtask_id` | FK → `subtasks.id` / Nullable | Subtask associada (se aplicável) |
 | `task_id` | FK → `tasks.id` / Nullable | Task associada |
 | `provider` | String(50) | Provedor usado nesta chamada (ex: `gemini`, `anthropic`) |
-| `model` | String(100) | Modelo usado (ex: `gemini-2.5-flash`) |
+| `model` | String(100) | Modelo usado (ex: `gemini-3.1-flash`) |
 | `prompt_tokens` | Int | Tokens de entrada consumidos |
 | `completion_tokens` | Int | Tokens de saída gerados |
 | `total_tokens` | Int | Total de tokens (entrada + saída) |
@@ -453,6 +455,8 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 | `queue:orchestrator` | Orchestrator | 1 | Apenas 1 worker — o planejador é sequencial (não pode planejar 2 tasks ao mesmo tempo) |
 | `queue:executors` | Subagentes | 3 | Até 3 subagentes executando em paralelo (configurável via Horizon) |
 | `queue:qa-auditor` | QA Auditor | 1 | Apenas 1 worker — a auditoria é sequencial |
+| `queue:security` | Security Specialist | 1 | Apenas 1 worker — auditoria de segurança pós-QA |
+| `queue:performance` | Performance Analyst | 1 | Apenas 1 worker — análise de performance pós-QA |
 | `queue:compressor` | Context Compressor | 1 | Apenas 1 worker — compressão de contexto em background |
 | `queue:sentinel` | Sentinel Watcher | 1 | Apenas 1 worker — processa erros runtime |
 
@@ -468,20 +472,27 @@ app/
 │   ├── OrchestratorJob.php          ← O Job "Planner" — recebe task_id, quebra em subtasks
 │   ├── SubagentJob.php              ← O Job "Executor" — recebe subtask_id, executa o Sub-PRD
 │   ├── QAAuditJob.php               ← O Job "Judge" — recebe task_id, audita todas as subtasks
+│   ├── SecurityAuditJob.php         ← O Job "Security" — pentest e OWASP scan pós-QA
+│   ├── PerformanceAnalysisJob.php   ← O Job "Performance" — N+1, slow queries, otimizações
 │   └── ContextCompressionJob.php    ← Comprime sessão quando atinge threshold 0.6
 │
 ├── Events/
 │   ├── TaskCreatedEvent.php         ← Disparado quando uma nova task é inserida
 │   ├── SubtaskCompletedEvent.php    ← Disparado quando um subagente termina
 │   ├── TaskAuditPassedEvent.php     ← Disparado quando QA aprova
+│   ├── SecurityAuditPassedEvent.php ← Disparado quando Security Specialist aprova
+│   ├── SecurityVulnerabilityEvent.php ← Disparado quando vulnerabilidade é detectada
 │   └── TaskEscalatedEvent.php       ← Disparado quando retentativas estouraram
 │
 ├── Listeners/
-│   ├── DispatchOrchestratorListener.php  ← Escuta TaskCreatedEvent → despacha OrchestratorJob
-│   ├── QAJobDispatcherListener.php       ← Escuta SubtaskCompletedEvent → verifica se todas terminaram
-│   ├── TaskCompletionListener.php        ← Escuta TaskAuditPassedEvent → CI/CD + vectorizar
-│   ├── EscalationNotifier.php            ← Escuta TaskEscalatedEvent → notifica humano via UI
-│   └── ProblemSolutionRecorder.php       ← Grava na tabela problems_solutions
+│   ├── DispatchOrchestratorListener.php   ← Escuta TaskCreatedEvent → despacha OrchestratorJob
+│   ├── QAJobDispatcherListener.php        ← Escuta SubtaskCompletedEvent → verifica se todas terminaram
+│   ├── SecurityDispatcherListener.php     ← Escuta TaskAuditPassedEvent → despacha SecurityAuditJob
+│   ├── PerformanceDispatcherListener.php  ← Escuta SecurityAuditPassedEvent → despacha PerformanceAnalysisJob
+│   ├── TaskCompletionListener.php         ← Escuta PerformanceAnalysisJob completion → CI/CD + vectorizar
+│   ├── VulnerabilityHandler.php           ← Escuta SecurityVulnerabilityEvent → cria subtask de correção
+│   ├── EscalationNotifier.php             ← Escuta TaskEscalatedEvent → notifica humano via UI
+│   └── ProblemSolutionRecorder.php        ← Grava na tabela problems_solutions
 │
 ├── Services/
 │   ├── LLMGateway.php               ← Abstração que roteia chamadas para Gemini/Claude/Ollama
@@ -498,6 +509,7 @@ app/
 │   ├── GitTool.php
 │   ├── SearchTool.php
 │   ├── TestTool.php
+│   ├── SecurityTool.php             ← Enlightn, Larastan, Nikto, SQLMap, dependency audit
 │   ├── DocsTool.php
 │   └── MetaTool.php
 │
@@ -519,7 +531,8 @@ app/
 │   ├── SubtaskStatus.php            ← pending, running, qa_audit, success, error, blocked
 │   ├── AgentProvider.php            ← gemini, anthropic, ollama
 │   ├── TaskSource.php               ← manual, webhook, sentinel, ci_cd
-│   └── KnowledgeArea.php            ← backend, frontend, database, filament, devops
+│   ├── KnowledgeArea.php            ← backend, frontend, database, filament, devops, security, performance
+│   └── SecuritySeverity.php         ← critical, high, medium, low, informational
 │
 └── Filament/
     └── Resources/
@@ -574,7 +587,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 4. [PLANEJAMENTO VIA PRD] (Planner: 'ORCHESTRATOR')
    → O OrchestratorJob monta o prompt:
      [System Prompt do Orchestrator] + [Contexto Global] + [PRD Principal da Task]
-   → Envia para o LLM (preferencialmente Claude Sonnet 4 por precisão no planejamento).
+   → Envia para o LLM (preferencialmente Claude Sonnet 4.6 por precisão no planejamento).
    → O LLM responde com a lista de Sub-PRDs estruturados em JSON.
    → O OrchestratorJob valida cada Sub-PRD contra o JSON Schema (via PRDValidator).
    → Insere múltiplas Subtasks na tabela `subtasks`, cada uma com:
@@ -657,29 +670,151 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
      → O Orchestrator faz um merge FINAL de todas as alterações no branch da task.
      → O QA Auditor faz a checagem MACRO: o conjunto de todas as alterações 
        atende ao PRD PRINCIPAL? (Não apenas individualmente, mas como um todo.)
-     → Se PASSAR: Avançar para CI/CD.
+     → Se PASSAR: Avançar para AUDITORIA DE SEGURANÇA.
      → Se FALHAR: Criar subtask de correção pontual.
 
-9. [CI/CD & COMMIT]
-   → O OrchestratorJob comanda o Git no diretório do projeto:
-     a. `git add .`
-     b. `git commit -m "feat(ai-dev): {task.title} [Task #{task.id_short}]"`
-     c. `git checkout main` (ou branch principal)
-     d. `git merge task/{task.id_short} --no-ff`
-        → O --no-ff preserva o histórico do branch da task para rastreio.
-     e. `git push origin main`
-     f. `git branch -d task/{task.id_short}` (limpa o branch local)
-   → Mudar status da task para 'testing'.
-   → Registrar em task_transitions.
+9. [AUDITORIA DE SEGURANÇA] (Security Specialist: 'security-specialist')
+   → O SecurityAuditJob é despachado AUTOMATICAMENTE após o QA aprovar.
+   → Este é um passo OBRIGATÓRIO — nenhum código vai para produção sem passar aqui.
+   → O Security Specialist executa 5 camadas de verificação:
 
-10. [FEEDBACK LOOP & SELF-HEALING (Auto-Correção Nativa)]
+     Camada 1: Análise Estática do Código (SAST)
+     → Roda `php artisan enlightn` no projeto (Enlightn OSS — 66 checks gratuitos)
+       → Verifica: debug mode em produção, cookies inseguros, mass assignment, 
+         SQL injection por concatenação, headers de segurança faltando
+     → Roda Larastan/PHPStan nível 6+ (`./vendor/bin/phpstan analyse`)
+       → Verifica: types incorretos, variáveis undefined, imports faltando,
+         chamadas de método inválidas (bugs que viram brechas de segurança)
 
-    O sistema possui duas camadas de feedback implacáveis:
+     Camada 2: Auditoria de Dependências (SCA)
+     → Roda `composer audit` (nativo do Composer 2.4+)
+       → Verifica: pacotes com CVEs conhecidas no composer.lock
+     → Roda `npm audit --json` 
+       → Verifica: pacotes npm com vulnerabilidades conhecidas
+     → Se encontrar CVE de severidade CRITICAL ou HIGH:
+       → BLOQUEIA o deploy. Cria subtask de atualização do pacote.
+       → Dispara SecurityVulnerabilityEvent.
 
-    **Camada 1: CI/CD Testing**
-    → O servidor de testes roda a suite completa (Pest/PHPUnit + Dusk):
-      `php artisan test --parallel`
-      `php artisan dusk`
+     Camada 3: Verificação OWASP Top 10 via LLM
+     → O Security Specialist (Claude Sonnet 4.6) recebe o git diff completo e analisa:
+       1. Injection (SQL, XSS, Command Injection) — Busca por DB::raw(), {!! !!}, exec()
+       2. Broken Authentication — Verifica middleware 'auth' em rotas protegidas
+       3. Sensitive Data Exposure — Busca por credenciais hardcoded, .env em público
+       4. Mass Assignment — Verifica $guarded / $fillable nos Models
+       5. Broken Access Control — Verifica Policies/Gates em Resources Filament
+       6. Security Misconfiguration — APP_DEBUG=true, APP_ENV=production
+       7. Cross-Site Scripting (XSS) — Busca por {!! $var !!} sem sanitização
+       8. Insecure Deserialization — Busca por unserialize() em inputs do usuário
+       9. Insufficient Logging — Verifica se ações críticas têm log (login, delete)
+       10. SSRF — Busca por file_get_contents($userInput) ou curl com URL dinâmica
+
+     Camada 4: Scan de Servidor Web (DAST — Dinâmico)
+     → Roda Nikto contra o endpoint DO PROJETO ALVO (não do AI-Dev):
+       `nikto -h http://{project_url} -o /tmp/nikto_report.txt -Format txt`
+       → Verifica: versões outdated de software, headers expostos, diretórios sensíveis
+     → (Fase 3): Roda OWASP ZAP em modo headless para scan mais profundo
+
+     Camada 5: Teste de SQL Injection Automatizado
+     → Roda SQLMap em modo não-destrutivo (--batch --level=1 --risk=1) contra forms do projeto:
+       `python3 sqlmap.py -u "http://{project_url}/login" --forms --batch --level=1 --risk=1`
+       → SOMENTE em ambiente de staging/development. NUNCA em produção.
+       → Se detectar vulnerabilidade: BLOQUEIA deploy + cria subtask de correção.
+
+   → Resultado do Security Specialist:
+     {
+       "passed": true/false,
+       "vulnerabilities": [
+         {"type": "sql_injection", "file": "app/Http/Controllers/PostController.php", 
+          "line": 45, "severity": "critical", "description": "DB::raw() com input não sanitizado",
+          "remediation": "Usar query builder com bindings: ->where('title', '=', $input)"}
+       ],
+       "enlightn_score": 85,
+       "dependencies_ok": true/false,
+       "nikto_findings": 2,
+       "overall_risk": "low|medium|high|critical"
+     }
+
+   → Se PASSAR (overall_risk = low): Avançar para ANÁLISE DE PERFORMANCE.
+   → Se FALHAR (overall_risk >= medium):
+     → Criar subtasks de correção de segurança (prioridade MÁXIMA).
+     → O subagente recebe a vulnerabilidade EXATA + remediation sugerida.
+     → Após correção: volta ao passo 7 (QA) → 9 (Security) de novo.
+   → Se CRITICAL e irrecuperável: Escalar para humano via Filament.
+
+10. [ANÁLISE DE PERFORMANCE] (Performance Analyst: 'performance-analyst')
+    → Disparado automaticamente APÓS a auditoria de segurança passar.
+    → O PerformanceAnalysisJob executa:
+
+      a. Detecção de N+1 Queries:
+         → Instala/usa `beyondcode/laravel-query-detector` temporariamente
+         → Roda Dusk ou requests simulados contra as rotas do projeto
+         → Cada query lazy-loaded é reportada com arquivo e linha
+      
+      b. Verificação de Índices Missing:
+         → Para cada Model do projeto, analisa as queries mais comuns
+         → Roda `EXPLAIN` nas queries e verifica se estão usando index scan
+         → Sugere criação de índices via migration
+      
+      c. Dusk Browser Simulation (Validação Real):
+         → Roda `php artisan dusk` para simular um USUÁRIO REAL navegando:
+           - Preenche formulários com dados realistas (via Factory)
+           - Clica em botões, navega entre páginas
+           - Verifica que JavaScript (Alpine.js/Livewire) funciona
+           - Captura screenshots em cada passo para evidência visual
+         → Se Dusk falhar:
+           - Captura screenshot do erro via TestTool.action = "screenshot"
+           - Inclui o screenshot no relatório para análise multimodal
+           - Cria subtask de correção com o screenshot como contexto
+      
+      d. Análise de Tempo de Resposta:
+         → Mede o tempo de resposta de cada rota principal do projeto
+         → Rotas com > 500ms são flagadas para otimização
+      
+      e. Verificação de Cache:
+         → Verifica se config/route/view estão cacheados em produção
+         → Sugere `php artisan optimize` se não estiverem
+
+    → Resultado do Performance Analyst:
+      {
+        "passed": true/false,
+        "n_plus_1_queries": [{"file": "...", "line": 45, "model": "Post", "relation": "comments"}],
+        "missing_indexes": [{"table": "posts", "column": "user_id", "query": "..."}],
+        "dusk_passed": true/false,
+        "dusk_screenshots": ["/storage/screenshots/..."],
+        "slow_routes": [{"route": "/posts", "time_ms": 780}],
+        "recommendations": ["Adicionar eager loading em PostController@index: Post::with('comments')"]
+      }
+
+    → Se PASSAR: Avançar para CI/CD.
+    → Se n_plus_1 ou slow_routes detectados: Criar subtask de otimização (prioridade média).
+    → Se dusk FALHAR: Criar subtask de correção (prioridade alta).
+    → Otimizações não são bloqueantes (o deploy continua), mas geram tasks futuras.
+
+11. [CI/CD & COMMIT]
+    → O OrchestratorJob comanda o Git no diretório do projeto:
+      a. `git add .`
+      b. `git commit -m "feat(ai-dev): {task.title} [Task #{task.id_short}]"`
+      c. `git checkout main` (ou branch principal)
+      d. `git merge task/{task.id_short} --no-ff`
+         → O --no-ff preserva o histórico do branch da task para rastreio.
+      e. `git push origin main`
+      f. `git branch -d task/{task.id_short}` (limpa o branch local)
+    → Mudar status da task para 'testing'.
+    → Registrar em task_transitions.
+
+12. [FEEDBACK LOOP & SELF-HEALING (Auto-Correção Nativa)]
+
+    O sistema possui TRÊS camadas de feedback implacáveis:
+
+    **Camada 1: CI/CD Testing (Testes Unitários + Integração + Browser)**
+    → O servidor de testes roda a suite COMPLETA em 3 etapas:
+      Etapa 1: `php artisan test --parallel` (Pest/PHPUnit — backend)
+      Etapa 2: `php artisan dusk` (Dusk — simulação browser com dados reais)
+      Etapa 3: `php artisan enlightn` (Enlightn — segurança + performance)
+    → POR QUE rodar Dusk AQUI também (além do passo 10)?
+      Porque o passo 10 testa o código no branch da task. O passo 12 testa 
+      APÓS o merge no main — pode haver conflitos que quebraram a aplicação.
+      O Dusk aqui valida que a aplicação COMPLETA funciona, não apenas a feature nova.
     → Se TODOS os testes passarem:
       → Task vai para 'completed'. Missão cumprida.
       → O ProblemSolutionRecorder salva PRD + solução no banco vetorial.
@@ -735,7 +870,7 @@ O Orchestrator e os Subagentes possuem uma **trava de compressão (threshold de 
 ```text
 1. O ContextManager monitora o total de tokens consumidos na sessão atual.
    → Ele calcula: (tokens_usados / janela_maxima_do_modelo)
-   → Ex: Se o Gemini 2.5 Flash tem janela de 1M tokens e a sessão está com 600K → ratio = 0.6
+   → Ex: Se o Gemini 3.1 Flash tem janela de 1M tokens e a sessão está com 600K → ratio = 0.6
 
 2. Quando ratio >= 0.6:
    → O ContextManager despacha um ContextCompressionJob na fila "compressor".
@@ -880,9 +1015,9 @@ Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
 
 O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
 
-*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 2.5 Flash`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto (campo `projects.gemini_session_id`). Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
+*   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto (campo `projects.gemini_session_id`). Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
 
-*   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4` e `Claude Opus 4`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
+*   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4.6` e `Claude Opus 4.6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
 
 *   **Motor Ollama (O Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (ex: `qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto e gerar embeddings — nunca é usado para gerar código ou planejar. Isso poupa os tokens caros dos modelos maiores.
 
@@ -893,12 +1028,14 @@ O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entr
 ```text
 O LLMGateway.php decide qual motor usar baseado em regras:
 
-1. Se a chamada é do OrchestratorJob (planejamento)  → Claude Sonnet 4
-2. Se a chamada é do QAAuditJob (auditoria)            → Claude Sonnet 4
-3. Se a chamada é do SubagentJob (execução)            → Gemini 2.5 Flash (default) 
+1. Se a chamada é do OrchestratorJob (planejamento)  → Claude Sonnet 4.6
+2. Se a chamada é do QAAuditJob (auditoria)            → Claude Sonnet 4.6
+3. Se a chamada é do SecurityAuditJob (segurança)      → Claude Sonnet 4.6
+4. Se a chamada é do SubagentJob (execução)            → Gemini 3.1 Flash (default) 
                                                           ou o model da agents_config
-4. Se a chamada é do ContextCompressionJob              → Ollama (qwen2.5:0.5b)
-5. Se a chamada é para gerar embeddings                 → Ollama (nomic-embed-text)
+5. Se a chamada é do PerformanceAnalysisJob            → Gemini 3.1 Flash
+6. Se a chamada é do ContextCompressionJob              → Ollama (qwen2.5:0.5b)
+7. Se a chamada é para gerar embeddings                 → Ollama (nomic-embed-text)
 
 O motor pode ser sobrescrito por projeto (projects.default_provider/default_model)
 ou por agente (agents_config.provider/model). A hierarquia é:
@@ -913,7 +1050,7 @@ Inspirado no OpenClaw, **o AI-Dev não embutirá ferramentas pesadas no código-
 
 O catálogo completo de ferramentas, com JSON Schemas de entrada/saída e exemplos práticos, está documentado em `FERRAMENTAS.md`. Abaixo temos o resumo consolidado:
 
-### Ferramentas Consolidadas (8 Ferramentas Atômicas)
+### Ferramentas Consolidadas (9 Ferramentas Atômicas)
 
 | # | Ferramenta | Classe | Ações Principais |
 |---|---|---|---|
@@ -923,10 +1060,11 @@ O catálogo completo de ferramentas, com JSON Schemas de entrada/saída e exempl
 | 4 | **GitTool** | `App\Tools\GitTool` | add, commit, push, pull, branch, merge, diff, stash, revert + API GitHub |
 | 5 | **SearchTool** | `App\Tools\SearchTool` | Pesquisa web (DuckDuckGo) + scraping inteligente (Firecrawl self-hosted) |
 | 6 | **TestTool** | `App\Tools\TestTool` | PHPUnit/Pest, Dusk, screenshots de falha, cobertura |
-| 7 | **DocsTool** | `App\Tools\DocsTool` | Criar/atualizar Markdown, TODOs, documentação técnica |
-| 8 | **MetaTool** | `App\Tools\MetaTool` | Criar novas ferramentas dinamicamente + logging de impossibilidades |
+| 7 | **SecurityTool** | `App\Tools\SecurityTool` | Enlightn, Larastan, Nikto, SQLMap, OWASP ZAP, dependency audit |
+| 8 | **DocsTool** | `App\Tools\DocsTool` | Criar/atualizar Markdown, TODOs, documentação técnica |
+| 9 | **MetaTool** | `App\Tools\MetaTool` | Criar novas ferramentas dinamicamente + logging de impossibilidades |
 
-**Por que consolidamos de 18+ para 8?** Muitos agentes LLM ficam confusos quando têm dezenas de ferramentas com nomes similares. Eles desperdiçam tokens "decidindo" entre `FileArchitectTool` e `FileSystemNavigatorTool`. Com ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a IA gasta menos tempo decidindo e mais tempo agindo.
+**Por que consolidamos de 18+ para 9?** Muitos agentes LLM ficam confusos quando têm dezenas de ferramentas com nomes similares. Eles desperdiçam tokens "decidindo" entre `FileArchitectTool` e `FileSystemNavigatorTool`. Com ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a IA gasta menos tempo decidindo e mais tempo agindo.
 
 ---
 

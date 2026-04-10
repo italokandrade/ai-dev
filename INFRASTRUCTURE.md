@@ -46,6 +46,8 @@ Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e
 | Orchestrator Worker | `/etc/supervisor/conf.d/aidev-orchestrator.conf` | 1 | `queue:orchestrator` |
 | Executor Workers | `/etc/supervisor/conf.d/aidev-executors.conf` | 3 | `queue:executors` |
 | QA Auditor Worker | `/etc/supervisor/conf.d/aidev-qa.conf` | 1 | `queue:qa-auditor` |
+| Security Worker | `/etc/supervisor/conf.d/aidev-security.conf` | 1 | `queue:security` |
+| Performance Worker | `/etc/supervisor/conf.d/aidev-performance.conf` | 1 | `queue:performance` |
 | Context Compressor | `/etc/supervisor/conf.d/aidev-compressor.conf` | 1 | `queue:compressor` |
 | Sentinel Watcher | `/etc/supervisor/conf.d/aidev-sentinel.conf` | 1 | `queue:sentinel` |
 | Gemini Proxy | `/etc/supervisor/conf.d/gemini-proxy.conf` | 1 | N/A (porta 8000) |
@@ -108,10 +110,10 @@ Para o AI-Dev operar com redundância e inteligência de elite, precisamos de 3 
 **O que precisa ser feito:**
 - Garantir que o proxy aceita o parâmetro `session_id` para contexto persistente por projeto
 - Mover o gerenciamento do processo do `nohup` para o Supervisor (config acima)
-- Validar que o modelo `gemini-2.5-flash` está funcionando
+- Validar que o modelo `gemini-3.1-flash` está funcionando
 - Criar endpoint de health check (`/health`) para o dashboard do AI-Dev monitorar
 
-**Custo estimado:** Gemini 2.5 Flash é gratuito até um limite generoso. Para uso pesado, o custo é ~$0.075/1M tokens de entrada e ~$0.30/1M tokens de saída.
+**Custo estimado:** Gemini 3.1 Flash é gratuito até um limite generoso. Para uso pesado, o custo é ~$0.075/1M tokens de entrada e ~$0.30/1M tokens de saída.
 
 #### Motor 2: Claude Code (O Cérebro de Elite)
 
@@ -119,7 +121,7 @@ Para o AI-Dev operar com redundância e inteligência de elite, precisamos de 3 
 
 **O que é:** O CLI oficial da Anthropic (@anthropic-ai/claude-code) que permite invocar Claude via terminal.
 
-**Por que usar Claude e não apenas Gemini?** Claude Sonnet 4 e Opus 4 demonstram raciocínio mais rigoroso em tarefas de planejamento (quebra de PRDs) e auditoria (validação de código). O AI-Dev usa Claude para o Orchestrator e o QA Auditor — as funções que exigem "pensamento" mais que "ação".
+**Por que usar Claude e não apenas Gemini?** Claude Sonnet 4.6 e Opus 4.6 demonstram raciocínio mais rigoroso em tarefas de planejamento (quebra de PRDs) e auditoria (validação de código). O AI-Dev usa Claude para o Orchestrator e o QA Auditor — as funções que exigem "pensamento" mais que "ação".
 
 **Instalação:**
 ```bash
@@ -140,7 +142,7 @@ claude --version
 - **API HTTP direta** (https://api.anthropic.com/v1/messages) — preferível para integração programática
 - **CLI** como fallback — `claude -p "prompt" --output-format json`
 
-**Custo estimado:** Claude Sonnet 4: ~$3/1M input + $15/1M output. Claude Opus 4: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
+**Custo estimado:** Claude Sonnet 4.6: ~$3/1M input + $15/1M output. Claude Opus 4.6: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
 
 #### Motor 3: Ollama (O Compressor de Memória)
 
@@ -290,7 +292,109 @@ Esta alternativa consome muito menos RAM e é suficiente para o MVP.
 
 ---
 
-### 2.5. Core Application do AI-Dev (Backend + Web UI)
+### 2.5. Ferramentas de Segurança e Pentest (100% Gratuitas)
+
+Para o Security Specialist operar, precisamos de ferramentas de análise de código, scan de servidor e teste de penetração. Todas as ferramentas abaixo são **open-source e gratuitas**:
+
+#### Enlightn OSS (Análise Estática Laravel)
+
+**O que é:** Package Composer que roda 66 verificações automatizadas de segurança, performance e confiabilidade em projetos Laravel. É instalado POR PROJETO, não globalmente.
+
+**Instalação (no projeto alvo):**
+```bash
+cd /var/www/html/projetos/{nome_do_projeto}
+composer require enlightn/enlightn --dev
+php artisan enlightn
+```
+
+**Verificações incluídas (gratuitas):**
+- Debug mode em produção, cookies inseguros, CSRF desabilitado
+- Mass assignment (Models sem $fillable/$guarded)
+- SQL injection por concatenação de strings
+- Headers de segurança faltando (X-Frame-Options, CSP, etc.)
+- N+1 queries, cache não configurado, middleware desnecessário
+
+#### Larastan / PHPStan (Análise Estática de Tipos)
+
+**O que é:** Extensão do PHPStan específica para Laravel. Detecta bugs de tipo, variáveis undefined, imports faltando e chamadas de método inválidas — SEM executar o código.
+
+**Instalação (no projeto alvo):**
+```bash
+cd /var/www/html/projetos/{nome_do_projeto}
+composer require larastan/larastan --dev
+
+# Criar phpstan.neon na raiz do projeto
+cat > phpstan.neon << 'EOF'
+includes:
+    - vendor/larastan/larastan/extension.neon
+parameters:
+    paths:
+        - app
+    level: 6
+EOF
+
+# Executar
+./vendor/bin/phpstan analyse
+```
+
+**Por que nível 6?** Níveis 0-5 são permissivos demais e perdem bugs reais. Nível 9 é agressivo demais e gera centenas de falsos positivos. Nível 6 é o equilíbrio ideal para projetos Laravel.
+
+#### Nikto (Scanner de Servidor Web)
+
+**O que é:** Scanner open-source que verifica ~7000 vulnerabilidades em servidores web: versões outdated, diretórios expostos, configurações inseguras, headers faltando.
+
+**Instalação (global no servidor):**
+```bash
+sudo apt install nikto -y
+
+# Verificar instalação
+nikto -Version
+
+# Uso básico
+nikto -h http://portal.test -o /tmp/nikto_report.txt -Format txt
+```
+
+**Importante:** Nikto faz milhares de requisições. Rodar APENAS em staging/development.
+
+#### SQLMap (Teste de SQL Injection Automatizado)
+
+**O que é:** Ferramenta Python de pentest que detecta e explora vulnerabilidades de SQL injection automaticamente. Suporta MySQL, MariaDB, PostgreSQL, Oracle e muitos outros.
+
+**Instalação (via Python — já temos o venv):**
+```bash
+source /root/venv/bin/activate
+pip install sqlmap
+
+# Uso seguro (modo non-destructive)
+python3 -m sqlmap -u "http://portal.test/api/posts?id=1" --batch --level=1 --risk=1
+
+# Testar todos os formulários de uma página
+python3 -m sqlmap -u "http://portal.test/login" --forms --batch --level=1 --risk=1
+```
+
+**⚠️ REGRA ABSOLUTA:** NUNCA rodar SQLMap contra servidores em produção. Apenas em ambiente de staging/development local.
+
+#### Composer Audit + NPM Audit (Auditoria de Dependências)
+
+**O que é:** Ferramentas NATIVAS do Composer e npm que verificam se as dependências do projeto têm CVEs (vulnerabilidades) conhecidas.
+
+**Instalação:** Nenhuma — já vem com Composer 2.4+ e npm.
+
+```bash
+# Verificar dependências PHP
+cd /var/www/html/projetos/{nome_do_projeto}
+composer audit
+
+# Verificar dependências JavaScript
+npm audit --json
+```
+
+**Custo:** $0 (zero). Todas as ferramentas são 100% open-source.
+**RAM:** Negligível — todas rodam sob demanda e encerram ao finalizar.
+
+---
+
+### 2.6. Core Application do AI-Dev (Backend + Web UI)
 
 **O que é:** O projeto Laravel 12 dedicado que atua como o "cérebro" do sistema. Contém os Jobs (Orchestrator, Subagentes, QA), os Models, as Migrations, a Prompt Factory, o Tool Router, e o Painel Filament.
 
@@ -349,13 +453,14 @@ Com tudo instalado e rodando simultaneamente:
 | MariaDB | ~400 MB | Moderado | ~500 MB (dados) |
 | Redis 7 | ~200 MB | Baixo | ~100 MB |
 | Laravel (AI-Dev Core) | ~150 MB | Moderado | ~200 MB |
-| Laravel Queue Workers (7x) | ~700 MB | Variável | N/A |
+| Laravel Queue Workers (9x) | ~900 MB | Variável | N/A |
 | Ollama (2 modelos) | ~850 MB | Pico durante inferência | ~700 MB |
 | ChromaDB | ~200 MB | Baixo | ~100 MB |
 | Node.js (Firecrawl/Proxy) | ~300 MB | Baixo | ~200 MB |
-| **TOTAL** | **~3.3 GB** | **Variável** | **~1.8 GB** |
+| Security Tools (sob demanda) | ~100 MB | Pico durante scan | ~50 MB |
+| **TOTAL** | **~3.6 GB** | **Variável** | **~1.85 GB** |
 
-**Veredicto:** O servidor com **8 GB de RAM** suporta confortavelmente toda a stack com ~4.7 GB de folga para picos. As 2 vCPUs são o gargalo principal — inferência LLM local (Ollama) consome CPU durante execução, mas o modelo é tão leve (0.5B params) que infere em ~1-2 segundos.
+**Veredicto:** O servidor com **8 GB de RAM** suporta confortavelmente toda a stack com ~4.4 GB de folga para picos. As ferramentas de segurança (Enlightn, PHPStan, Nikto, SQLMap) rodam sob demanda e encerram ao finalizar, então o consumo real é intermitente. As 2 vCPUs são o gargalo principal — inferência LLM local (Ollama) consome CPU durante execução, mas o modelo é tão leve (0.5B params) que infere em ~1-2 segundos.
 
 **Recomendação de escala futura:** Se o sistema crescer para 5+ projetos simultâneos com 10+ tasks em paralelo, considerar upgrade para 4 vCPUs e 16 GB RAM.
 
@@ -370,20 +475,28 @@ Com tudo instalado e rodando simultaneamente:
 1. sudo apt install supervisor
 2. laravel new ai-dev-core (no servidor)
 3. Instalar Filament v5 + Horizon
-4. Criar bank ai_dev_core + rodar migrations
+4. Criar banco ai_dev_core + rodar migrations
 5. Configurar Supervisor para workers (orchestrator, executors, qa)
 6. Migrar Gemini Proxy do nohup para Supervisor
 7. Testar ciclo completo com 1 task simples
 ```
 
-### Fase 2: Qualidade e UI (Adiciona Claude + Sentinel)
+### Fase 2: Qualidade, Segurança e UI (Adiciona Claude + Sentinel + Security Tools)
 
 ```bash
+# Adiciona capacidade de auditoria de segurança e performance
 1. npm install -g @anthropic-ai/claude-code
 2. Configurar ANTHROPIC_API_KEY no .env
-3. Implementar Filament Resources + Dashboard
-4. Criar Sentinel (Exception Handler nos projetos alvo)
-5. Configurar circuit breakers
+3. Instalar ferramentas de segurança no servidor:
+   sudo apt install nikto -y
+   source /root/venv/bin/activate && pip install sqlmap
+4. Instalar Enlightn + Larastan nos projetos alvo:
+   composer require enlightn/enlightn larastan/larastan --dev
+5. Implementar SecurityAuditJob + PerformanceAnalysisJob
+6. Configurar Supervisor para workers de segurança e performance
+7. Implementar Filament Resources + Dashboard
+8. Criar Sentinel (Exception Handler nos projetos alvo)
+9. Configurar circuit breakers
 ```
 
 ### Fase 3: IA Avançada (Adiciona Ollama + ChromaDB + Firecrawl)
@@ -394,7 +507,8 @@ Com tudo instalado e rodando simultaneamente:
 3. pip install chromadb (no venv Python)
 4. Instalar Firecrawl ou readability-cli
 5. Implementar RAG + Compressão de Contexto
-6. Configurar Supervisor para Ollama e ChromaDB
+6. (Opcional) Instalar OWASP ZAP para scan DAST avançado
+7. Configurar Supervisor para Ollama e ChromaDB
 ```
 
 ---

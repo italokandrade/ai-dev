@@ -1,8 +1,8 @@
 # Catálogo de Ferramentas Consolidadas (The Tool Layer)
 
-O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema possui **8 ferramentas atômicas** que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA. A IA gera apenas os **parâmetros e dados brutos** — as ferramentas executam os comandos no servidor de forma controlada, com logs, timeouts e restrições de segurança.
+O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema possui **9 ferramentas atômicas** que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA + Security. A IA gera apenas os **parâmetros e dados brutos** — as ferramentas executam os comandos no servidor de forma controlada, com logs, timeouts e restrições de segurança.
 
-**Por que 8 ferramentas e não 18+?** Modelos de linguagem consomem tokens processando a lista de ferramentas disponíveis. Com 18+ ferramentas de nomes parecidos (FileArchitectTool vs FileSystemNavigatorTool vs FileSurgeryTool), a IA gasta mais tempo "decidindo" qual usar e comete mais erros na seleção. Com 8 ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a decisão é rápida e precisa.
+**Por que 9 ferramentas e não 18+?** Modelos de linguagem consomem tokens processando a lista de ferramentas disponíveis. Com 18+ ferramentas de nomes parecidos (FileArchitectTool vs FileSystemNavigatorTool vs FileSurgeryTool), a IA gasta mais tempo "decidindo" qual usar e comete mais erros na seleção. Com 9 ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a decisão é rápida e precisa.
 
 **Arquitetura das Ferramentas:**
 Cada ferramenta é uma classe PHP em `app/Tools/` que implementa a interface `ToolInterface`:
@@ -701,7 +701,281 @@ Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteú
 
 ---
 
-## 7. DocsTool — Documentação Técnica e Anotações
+## 7. SecurityTool — Auditoria de Segurança e Pentest
+
+**Classe:** `App\Tools\SecurityTool`
+**Responsabilidade:** Executar verificações de segurança automatizadas no código e no servidor do projeto. Esta é a ferramenta exclusiva do `security-specialist` e também pode ser usada pelo `qa-auditor` para validações rápidas.
+
+**Ferramentas Gratuitas Integradas:**
+- **Enlightn OSS** — 66 checks automatizados de segurança/performance para Laravel (composer package)
+- **Larastan/PHPStan** — Análise estática de tipos e bugs (composer package)
+- **composer audit** — Verifica CVEs em dependências PHP (nativo do Composer 2.4+)
+- **npm audit** — Verifica CVEs em dependências JavaScript (nativo do npm)
+- **Nikto** — Scanner de servidor web (apt install nikto — 100% gratuito)
+- **SQLMap** — Teste automatizado de SQL injection (pip install sqlmap — 100% gratuito, Python)
+
+### Ações Disponíveis
+
+| Ação | Descrição | Ferramenta Usada | Uso |
+|---|---|---|---|
+| `enlightn` | Rodar Enlightn Security Analysis | `php artisan enlightn` | Verificar 66 checks de segurança/performance Laravel |
+| `static_analysis` | Rodar análise estática PHPStan/Larastan | `./vendor/bin/phpstan analyse` | Detectar bugs de tipo, variáveis undefined, chamadas inválidas |
+| `dependency_audit` | Verificar CVEs em dependências | `composer audit` + `npm audit` | Detectar pacotes vulneráveis no composer.lock e package-lock.json |
+| `server_scan` | Scan de servidor web | Nikto | Verificar headers, diretórios expostos, versões outdated |
+| `sql_injection_test` | Testar SQL injection em formulários | SQLMap (modo seguro) | Verificar se formulários são vulneráveis a SQL injection |
+| `full_audit` | Executar TODAS as ações acima em sequência | Todas | Auditoria completa de segurança |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["enlightn", "static_analysis", "dependency_audit", "server_scan", "sql_injection_test", "full_audit"],
+      "description": "Qual tipo de verificação de segurança executar."
+    },
+    "project_path": {
+      "type": "string",
+      "description": "Caminho do projeto. Se omitido, usa o local_path do projeto ativo.",
+      "examples": ["/var/www/html/projetos/portal"]
+    },
+    "target_url": {
+      "type": "string",
+      "description": "URL do projeto para 'server_scan' e 'sql_injection_test'. DEVE ser ambiente de staging/development, NUNCA produção para SQLMap.",
+      "examples": ["http://portal.test", "http://10.1.1.86:8080"]
+    },
+    "phpstan_level": {
+      "type": "integer",
+      "description": "Nível de rigor do PHPStan (0-9). Padrão: 6. Nível 9 é o mais rigoroso.",
+      "default": 6,
+      "minimum": 0,
+      "maximum": 9
+    },
+    "sqlmap_level": {
+      "type": "integer",
+      "description": "Nível de agressividade do SQLMap (1-5). Padrão: 1 (mais seguro). NUNCA usar > 2 em staging.",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 3
+    },
+    "sqlmap_risk": {
+      "type": "integer",
+      "description": "Nível de risco do SQLMap (1-3). Padrão: 1 (mais seguro). 3 = pode causar alterações no DB.",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 2
+    },
+    "sqlmap_forms": {
+      "type": "boolean",
+      "description": "Para 'sql_injection_test': testar automaticamente todos os formulários da URL. Padrão: true.",
+      "default": true
+    },
+    "nikto_output_path": {
+      "type": "string",
+      "description": "Para 'server_scan': caminho onde salvar o relatório Nikto.",
+      "examples": ["/var/www/html/projetos/portal/storage/security/nikto_report.txt"]
+    },
+    "enlightn_only_security": {
+      "type": "boolean",
+      "description": "Para 'enlightn': rodar apenas checks de segurança (ignora performance e reliability). Padrão: false.",
+      "default": false
+    }
+  }
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "overall_risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Nível de risco geral encontrado. 'low' = seguro para deploy."
+    },
+    "enlightn_results": {
+      "type": "object",
+      "description": "Resultados do Enlightn (para 'enlightn' e 'full_audit').",
+      "properties": {
+        "total_checks": {"type": "integer"},
+        "passed": {"type": "integer"},
+        "failed": {"type": "integer"},
+        "score": {"type": "integer", "description": "Score de 0 a 100"},
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "check": {"type": "string", "description": "Nome do check que falhou"},
+              "category": {"type": "string", "enum": ["security", "performance", "reliability"]},
+              "description": {"type": "string"},
+              "docs_url": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "static_analysis_results": {
+      "type": "object",
+      "description": "Resultados do PHPStan/Larastan (para 'static_analysis' e 'full_audit').",
+      "properties": {
+        "errors_count": {"type": "integer"},
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {"type": "string"},
+              "line": {"type": "integer"},
+              "message": {"type": "string"},
+              "severity": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "dependency_audit_results": {
+      "type": "object",
+      "description": "Resultados do composer audit + npm audit (para 'dependency_audit' e 'full_audit').",
+      "properties": {
+        "composer_vulnerabilities": {"type": "integer"},
+        "npm_vulnerabilities": {"type": "integer"},
+        "critical_cves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "package": {"type": "string"},
+              "installed_version": {"type": "string"},
+              "cve": {"type": "string"},
+              "severity": {"type": "string"},
+              "title": {"type": "string"},
+              "fix_version": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "server_scan_results": {
+      "type": "object",
+      "description": "Resultados do Nikto (para 'server_scan' e 'full_audit').",
+      "properties": {
+        "findings_count": {"type": "integer"},
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "severity": {"type": "string"}
+            }
+          }
+        },
+        "report_path": {"type": "string"}
+      }
+    },
+    "sql_injection_results": {
+      "type": "object",
+      "description": "Resultados do SQLMap (para 'sql_injection_test' e 'full_audit').",
+      "properties": {
+        "vulnerable": {"type": "boolean"},
+        "injectable_params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {"type": "string"},
+              "parameter": {"type": "string"},
+              "technique": {"type": "string"},
+              "dbms": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "vulnerabilities_summary": {
+      "type": "array",
+      "description": "Resumo consolidado de TODAS as vulnerabilidades encontradas (para 'full_audit').",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {"type": "string", "description": "De onde veio: enlightn, phpstan, composer_audit, npm_audit, nikto, sqlmap"},
+          "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "informational"]},
+          "description": {"type": "string"},
+          "remediation": {"type": "string"},
+          "file": {"type": "string"},
+          "line": {"type": "integer"}
+        }
+      }
+    },
+    "error": {"type": "string"}
+  }
+}
+```
+
+### Exemplo Prático: Full Audit
+
+```json
+{
+  "action": "full_audit",
+  "project_path": "/var/www/html/projetos/portal",
+  "target_url": "http://portal.test",
+  "phpstan_level": 6,
+  "sqlmap_level": 1,
+  "sqlmap_risk": 1
+}
+```
+
+Resposta (exemplo com vulnerabilidades detectadas):
+```json
+{
+  "success": true,
+  "overall_risk": "high",
+  "enlightn_results": {"total_checks": 66, "passed": 61, "failed": 5, "score": 85},
+  "dependency_audit_results": {"composer_vulnerabilities": 1, "npm_vulnerabilities": 0,
+    "critical_cves": [{"package": "laravel/framework", "cve": "CVE-2026-XXXX", "severity": "high", "fix_version": "12.1.1"}]},
+  "sql_injection_results": {"vulnerable": false, "injectable_params": []},
+  "vulnerabilities_summary": [
+    {"source": "enlightn", "severity": "high", "description": "APP_DEBUG está true em produção", "remediation": "Setar APP_DEBUG=false no .env"},
+    {"source": "composer_audit", "severity": "high", "description": "CVE-2026-XXXX em laravel/framework", "remediation": "composer update laravel/framework"}
+  ]
+}
+```
+
+### Restrições de Segurança da Própria Ferramenta
+
+- **SQLMap NUNCA roda em produção** — O SecurityTool verifica o APP_ENV antes de executar. Se for `production`, bloqueia e retorna erro.
+- **Nikto é barulhento** — Ele faz milhares de requisições. Rodar apenas em staging/development para não sobrecarregar o servidor.
+- **Resultados são confidenciais** — Os relatórios de segurança são salvos em `storage/security/` do projeto, nunca em diretórios públicos.
+- **Timeout de 5 minutos** — Se qualquer scan demorar mais de 5 minutos, é abortado para não travar o pipeline.
+
+### Instalação das Ferramentas de Segurança no Servidor
+
+```bash
+# Enlightn (no projeto Laravel alvo)
+composer require enlightn/enlightn --dev
+
+# Larastan/PHPStan (no projeto Laravel alvo)
+composer require larastan/larastan --dev
+
+# Nikto (no servidor — instalação global)
+sudo apt install nikto -y
+
+# SQLMap (via Python — já temos Python 3.12 e venv)
+source /root/venv/bin/activate
+pip install sqlmap
+```
+
+---
+
+## 8. DocsTool — Documentação Técnica e Anotações
 
 **Classe:** `App\Tools\DocsTool`
 **Responsabilidade:** Criar e atualizar documentação Markdown e gerenciar TODOs/anotações dos agentes. Substitui `MarkdownDocsTool` e `TaskTrackerTool`.
@@ -758,7 +1032,7 @@ Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteú
 
 ---
 
-## 8. MetaTool — Auto-Evolução e Logging de Impossibilidades
+## 9. MetaTool — Auto-Evolução e Logging de Impossibilidades
 
 **Classe:** `App\Tools\MetaTool`
 **Responsabilidade:** Permitir que o sistema evolua criando novas ferramentas permanentes para usos recorrentes não mapeados, e registrar situações onde o agente não conseguiu resolver o problema (para análise humana posterior).
@@ -839,38 +1113,48 @@ Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteú
 ## Resumo Visual: Mapa de Ferramentas → Casos de Uso
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    TOOL ROUTER (ToolRouter.php)                  │
-│                                                                  │
-│  LLM response → Parse tool_calls → Validate JSON Schema → Exec │
-│                                                                  │
-│  ┌───────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────┐ │
-│  │ ShellTool │  │ FileTool  │  │ DatabaseTool │  │ GitTool   │ │
-│  │           │  │           │  │              │  │           │ │
-│  │ artisan   │  │ read      │  │ describe     │  │ status    │ │
-│  │ npm       │  │ write     │  │ query        │  │ commit    │ │
-│  │ composer  │  │ patch     │  │ execute      │  │ push      │ │
-│  │ terminal  │  │ insert    │  │ dump         │  │ branch    │ │
-│  │           │  │ delete    │  │ optimize     │  │ merge     │ │
-│  │           │  │ rename    │  │              │  │ github    │ │
-│  │           │  │ list_dir  │  │              │  │           │ │
-│  │           │  │ tree      │  │              │  │           │ │
-│  │           │  │ perms     │  │              │  │           │ │
-│  └───────────┘  └───────────┘  └──────────────┘  └───────────┘ │
-│                                                                  │
-│  ┌────────────┐  ┌───────────┐  ┌──────────┐  ┌──────────────┐ │
-│  │ SearchTool │  │ TestTool  │  │ DocsTool │  │ MetaTool     │ │
-│  │            │  │           │  │          │  │              │ │
-│  │ ddg search │  │ run tests │  │ create   │  │ create_tool  │ │
-│  │ firecrawl  │  │ dusk      │  │ update   │  │ log_impossi  │ │
-│  │ grep_code  │  │ screenshot│  │ todos    │  │ request_human│ │
-│  │ find_files │  │ coverage  │  │          │  │              │ │
-│  └────────────┘  └───────────┘  └──────────┘  └──────────────┘ │
-│                                                                  │
-│  Segurança: Todo input validado contra JSON Schema              │
-│  Auditoria: Todo call logado em tool_calls_log                  │
-│  Sandbox: Apenas /var/www/html/projetos/ acessível              │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                    TOOL ROUTER (ToolRouter.php)                       │
+│                                                                       │
+│  LLM response → Parse tool_calls → Validate JSON Schema → Execute   │
+│                                                                       │
+│  ┌───────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────┐      │
+│  │ ShellTool │  │ FileTool  │  │ DatabaseTool │  │ GitTool   │      │
+│  │           │  │           │  │              │  │           │      │
+│  │ artisan   │  │ read      │  │ describe     │  │ status    │      │
+│  │ npm       │  │ write     │  │ query        │  │ commit    │      │
+│  │ composer  │  │ patch     │  │ execute      │  │ push      │      │
+│  │ terminal  │  │ insert    │  │ dump         │  │ branch    │      │
+│  │           │  │ delete    │  │ optimize     │  │ merge     │      │
+│  │           │  │ rename    │  │              │  │ github    │      │
+│  │           │  │ list_dir  │  │              │  │           │      │
+│  │           │  │ tree      │  │              │  │           │      │
+│  │           │  │ perms     │  │              │  │           │      │
+│  └───────────┘  └───────────┘  └──────────────┘  └───────────┘      │
+│                                                                       │
+│  ┌─────────────┐  ┌───────────┐  ┌───────────────┐                   │
+│  │ SearchTool  │  │ TestTool  │  │ SecurityTool  │                   │
+│  │             │  │           │  │               │                   │
+│  │ ddg search  │  │ run tests │  │ enlightn      │                   │
+│  │ firecrawl   │  │ dusk      │  │ phpstan       │                   │
+│  │ grep_code   │  │ screenshot│  │ dep_audit     │                   │
+│  │ find_files  │  │ coverage  │  │ nikto scan    │                   │
+│  │             │  │           │  │ sqlmap test   │                   │
+│  │             │  │           │  │ full_audit    │                   │
+│  └─────────────┘  └───────────┘  └───────────────┘                   │
+│                                                                       │
+│  ┌──────────┐  ┌──────────────┐                                      │
+│  │ DocsTool │  │ MetaTool     │                                      │
+│  │          │  │              │                                      │
+│  │ create   │  │ create_tool  │                                      │
+│  │ update   │  │ log_impossi  │                                      │
+│  │ todos    │  │ request_human│                                      │
+│  └──────────┘  └──────────────┘                                      │
+│                                                                       │
+│  9 Ferramentas Atômicas | Todo input validado contra JSON Schema     │
+│  Auditoria: Todo call logado em tool_calls_log                       │
+│  Sandbox: Apenas /var/www/html/projetos/ acessível                   │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

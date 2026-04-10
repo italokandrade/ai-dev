@@ -17,7 +17,7 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **Banco Relacional** | MariaDB |
 | **Filas/Cache** | Redis 7.0 |
 | **Banco Vetorial** | ChromaDB ou SQLite-Vec |
-| **IA Principal** | Gemini 2.5 Flash (Executor) + Claude Sonnet 4 (Planner/QA) |
+| **IA Principal** | Gemini 3.1 Flash (Executor) + Claude Sonnet 4.6 (Planner/QA/Security) |
 | **IA Local** | Ollama (qwen2.5:0.5b para compressão) |
 | **Orquestração** | Supervisor + Laravel Horizon |
 
@@ -73,7 +73,7 @@ O AI-Dev utiliza **12 tabelas** no MariaDB para controle total do estado:
 
 ---
 
-## 🔧 Ferramentas (8 Atômicas)
+## 🔧 Ferramentas (9 Atômicas)
 
 | # | Ferramenta | Ações Principais |
 |---|---|---|
@@ -83,8 +83,9 @@ O AI-Dev utiliza **12 tabelas** no MariaDB para controle total do estado:
 | 4 | **GitTool** | Status, commit, push, branch, merge, GitHub API |
 | 5 | **SearchTool** | DuckDuckGo, Firecrawl scraping, grep, find |
 | 6 | **TestTool** | Pest/PHPUnit, Dusk, screenshots, coverage |
-| 7 | **DocsTool** | Markdown, TODOs, documentação técnica |
-| 8 | **MetaTool** | Criar novas ferramentas, logging de impossibilidades |
+| 7 | **SecurityTool** | Enlightn, Larastan, Nikto, SQLMap, dependency audit |
+| 8 | **DocsTool** | Markdown, TODOs, documentação técnica |
+| 9 | **MetaTool** | Criar novas ferramentas, logging de impossibilidades |
 
 ---
 
@@ -94,9 +95,10 @@ O AI-Dev utiliza **12 tabelas** no MariaDB para controle total do estado:
 - Ciclo completo: Task → Orchestrator → Subagente → QA → Git Commit
 - 3 Tools (Shell, File, Git) + Gemini Flash + MariaDB + Redis + Supervisor
 
-### Fase 2: Qualidade e UI
-- QA Auditor com Claude + Sentinel Self-Healing + Filament Dashboard
-- Circuit breakers + Git branching por task
+### Fase 2: Qualidade, Segurança e UI
+- QA Auditor com Claude + Security Specialist + Performance Analyst
+- Sentinel Self-Healing + Enlightn + Larastan + Nikto + SQLMap
+- Filament Dashboard + Circuit breakers + Git branching por task
 
 ### Fase 3: IA Avançada
 - RAG Vetorial (ChromaDB) + Compressão de contexto (Ollama)
