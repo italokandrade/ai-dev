@@ -26,7 +26,7 @@ Atualmente o sistema usa `gemini_watchdog.sh` com `nohup`. Isso é frágil.
 ### 2.2. Motores LLM (Proxy Gemini, Claude Code e Ollama)
 Para que o sistema opere com redundância e inteligência de elite:
 *   **Proxy Gemini (O Executor Principal):** A ponte já existente nas portas 8000/8001 (`gemini_proxy.js`/`py`) para modelos como Gemini 3.1 Flash.
-*   **Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar Claude 3.5 Sonnet 4.6 e Opus 4.6. Utilizado para planejamento e auditoria.
+*   **Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar `Claude 3.5 Sonnet 4.6` e `Claude 3 Opus 4.6`. Utilizado para planejamento e auditoria de alta precisão.
 *   **Ollama (O "Compressor de Memória"):** Modelo ultraleve rodando em segundo plano para sumarização de contexto.
 *   **Firecrawl Nativo (Web Scraper Limpo):** Hospedagem local para extração de Markdown.
 

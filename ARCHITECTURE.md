@@ -140,7 +140,7 @@ A Fábrica de Prompts (Prompt Factory) usa isso para fazer uma "Injeção Cirúr
 O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
 
 *   **Motor Gemini (O Executor Veloz):** Utilizaremos a ponte do Proxy Gemini para modelos como o `Gemini 3.1 Flash`. O ID da sessão não é mais fixo em arquivo local, mas sim resgatado do Banco de Dados MariaDB por projeto. Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
-*   **Motor Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar modelos como o `Claude 3.5 Sonnet 4.6` e `Claude 3 Opus 4.6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR`.
+*   **Motor Claude Code (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic para acessar os modelos mais avançados: `Claude 3.5 Sonnet 4.6` e `Claude 3 Opus 4.6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR`.
 *   **Gestão Distribuída de Contexto:** O UUID da conversa é armazenado na tabela `projects`. A cada requisição, o sistema resgata esse ID e o envia para o proxy correspondente. Se um projeto for movido para outro servidor (ex: o ambiente web em `italoandrade.com`), a conexão com o banco garante que o histórico de "como o código foi construído" viaje junto com a aplicação.
 
 ## 6. Arsenal de Ferramentas (The Tool Layer) e MCP Isolado
