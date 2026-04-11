@@ -151,12 +151,6 @@ class ProjectModuleResource extends Resource
                     ->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
-            ->groups([
-                Tables\Grouping\Group::make('project.name')
-                    ->label('Projeto')
-                    ->collapsible(),
-            ])
-            ->defaultGroup('project.name')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->options(ModuleStatus::class),
