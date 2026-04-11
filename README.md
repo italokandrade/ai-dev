@@ -54,6 +54,7 @@ A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados 
 |---|---|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Visão completa da arquitetura: modelagem de banco (13 tabelas), protocolo inter-agentes, fluxo de vida das tasks, memória, métricas e fases de implementação |
 | [PRD_SCHEMA.md](./PRD_SCHEMA.md) | JSON Schema formal do PRD (Product Requirement Document) com exemplos completos |
+| [STANDARD_MODULES.md](./STANDARD_MODULES.md) | Catálogo de Módulos Padrão (Core Master) exigidos em todos os sistemas criados pela AndradeItalo.ai |
 | [FERRAMENTAS.md](./FERRAMENTAS.md) | Catálogo das 10 ferramentas consolidadas com JSON Schemas de entrada/saída |
 | [PROMPTS.md](./PROMPTS.md) | Engenharia de prompts: regras universais, role descriptions, template completo do prompt montado, segurança anti-injection |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Requisitos de servidor, instalação passo-a-passo, consumo de recursos estimado |
