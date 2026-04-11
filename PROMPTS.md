@@ -272,8 +272,8 @@ RESPONSABILIDADES:
 
 STACK DO SERVIDOR:
 - Ubuntu 24.04 LTS (servidor Supreme 10.1.1.86)
-- PHP 8.3.30, Node.js 22.x, Python 3.12
-- PostgreSQL 16 + pgvector, Redis 7.0
+- PHP 8.3.30, Node.js 22.x, Python 3.12 (venv — apenas para SQLMap)
+- PostgreSQL 16 + pgvector (busca vetorial nativa), Redis 7.0
 - Supervisor para workers
 - Nginx como reverse proxy
 
@@ -450,19 +450,22 @@ Confiança: {confidence_score * 100}%
 --- Fim ---
 ```
 
-### 5.3. Injeção de Contexto Comprimido (session_history)
+### 5.3. Injeção de Contexto Comprimido (agent_conversations via RemembersConversations)
 
 ```text
-[Injetado automaticamente quando existe sessão anterior para este projeto]
+[Injetado automaticamente quando existe conversa anterior para este projeto]
 
-=== CONTEXTO DA SESSÃO ANTERIOR (RESUMO COMPRIMIDO) ===
-O seguinte é um resumo das ações e decisões tomadas na sessão anterior
-de desenvolvimento deste projeto. Use para manter continuidade:
+O contexto anterior é recuperado automaticamente pelo SDK via:
+  $agent->continue($project->gemini_session_id, as: $systemUser)->prompt($prompt)
 
-{session_history.compressed_summary}
+O trait RemembersConversations carrega as últimas 100 mensagens do PostgreSQL
+(tabela agent_conversations + agent_conversation_messages) sem precisar de
+injeção manual no prompt — o SDK monta o histórico automaticamente.
 
-Tokens originais: {original_token_count} → Comprimido para: {compressed_token_count}
-=== FIM DO CONTEXTO ANTERIOR ===
+Quando o histórico ultrapassa 60% da janela de contexto:
+  → ContextCompressionJob dispara o ContextCompressor (Ollama qwen2.5:0.5b)
+  → O resumo comprimido (~500 tokens) é salvo como nova instrução adicional
+  → A conversa reinicia com: [System Prompt] + [Resumo] + [Últimas 3 mensagens]
 ```
 
 ---
@@ -549,8 +552,8 @@ Para referência, este é o prompt completo que o `PromptFactory.php` monta e en
 [SOLUÇÕES RELEVANTES]
 {Top 3 problems_solutions do RAG com similaridade > 0.7}
 
-[CONTEXTO DA SESSÃO ANTERIOR]
-{session_history.compressed_summary}
+[HISTÓRICO DA CONVERSA]
+{Carregado automaticamente via RemembersConversations — SDK monta o histórico do PostgreSQL}
 
 === CONTEXTO DINÂMICO (Não-Cacheável) ===
 

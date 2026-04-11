@@ -1,8 +1,13 @@
 # Plano de Migracao AI-Dev: Laravel 12 → Laravel 13
 
 > **Data:** 2026-04-10
-> **Status:** Planejamento (somente documentacao)
+> **Status:** ✅ CONCLUÍDA — O AI-Dev Core já roda Laravel 13 + Laravel AI SDK v0.5.1
 > **Laravel 13 Release:** 17 de Marco de 2026
+>
+> Este documento está arquivado para referência histórica. Todos os itens foram executados.
+> O projeto em `/var/www/html/projetos/ai-dev/ai-dev-core/` já usa Laravel 13, Filament v5,
+> PostgreSQL 16 + pgvector, Redis 7, Laravel AI SDK (`laravel/ai`), MCP (`laravel/mcp`),
+> Boost (`laravel/boost`) e Laravel Horizon com 4 supervisors configurados.
 
 ---
 

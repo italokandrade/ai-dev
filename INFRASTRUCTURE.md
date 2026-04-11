@@ -16,8 +16,8 @@ A infraestrutura base já é de alto nível e atende perfeitamente ao ecossistem
 | **PHP** | 8.3.30 | Runtime do Laravel 13 — onde roda o AI-Dev Core |
 | **Node.js** | 22.x | Runtime para npm scripts, compilação de assets (Vite/Tailwind) |
 | **Bun** | Latest | Runtime alternativo (pode ser usado para scripts de build mais rápidos) |
-| **Python** | 3.12 (venv) | Runtime para ChromaDB (banco vetorial) e scripts auxiliares |
-| **Laravel** | 12.x | Framework base do AI-Dev Core |
+| **Python** | 3.12 (venv) | Runtime para SQLMap (pentest) e scripts auxiliares |
+| **Laravel** | 13.x | Framework base do AI-Dev Core |
 | **Livewire** | 4.x | Interatividade real-time na Web UI |
 | **Filament** | v5 | Painel administrativo — Dashboard, Resources, gestão de projetos e tasks |
 | **Anime.js** | Latest | Animações na UI do Filament |
@@ -138,9 +138,12 @@ echo "ANTHROPIC_API_KEY=sk-ant-api03-..." >> /var/www/html/projetos/ai-dev-core/
 claude --version
 ```
 
-**Integração no AI-Dev:** O `LLMGateway.php` chamará Claude via:
-- **API HTTP direta** (https://api.anthropic.com/v1/messages) — preferível para integração programática
-- **CLI** como fallback — `claude -p "prompt" --output-format json`
+**Integração no AI-Dev:** O Laravel AI SDK (`laravel/ai`) usa o provider `anthropic` configurado em `config/ai.php`:
+```php
+// config/ai.php — já configurado
+'anthropic' => ['driver' => 'anthropic', 'key' => env('ANTHROPIC_API_KEY')],
+```
+Nos Agent classes: `#[Provider(Lab::Anthropic)]` `#[Model('claude-sonnet-4-6')]`
 
 **Custo estimado:** Claude Sonnet 4-6: ~$3/1M input + $15/1M output. Claude Opus 4-6: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
 
@@ -189,69 +192,45 @@ curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:0.5b","prompt":"O
 
 ### 2.3. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
 
-**O problema:** O MariaDB é excelente para relações e queries estruturadas, mas NÃO é otimizado para busca semântica vetorial (encontrar "textos similares" baseado em significado, não em palavras exatas).
+**Status:** ✅ **JÁ DISPONÍVEL** — pgvector está instalado no PostgreSQL 16 do servidor Supreme.
 
-**A solução:** Precisamos de um banco vetorial para a funcionalidade de RAG — resgatar soluções passadas e injetar padrões few-shot no prompt.
+**A solução adotada:** **pgvector** nativo no PostgreSQL 16. Eliminamos completamente a necessidade de ChromaDB ou SQLite-Vec — a busca vetorial roda no MESMO banco de dados relacional, sem serviço extra, sem RAM adicional, sem manutenção.
 
-**Duas opções (escolher UMA):**
+**Como funciona:**
 
-#### Opção A: ChromaDB (Recomendada para escala)
+```sql
+-- Coluna vector na tabela problems_solutions (já na migration)
+ALTER TABLE problems_solutions ADD COLUMN embedding vector(1536);
 
-**O que é:** Banco de dados vetorial open-source que roda como serviço Python. Leve, rápido, e com API REST simples.
-
-**Instalação:**
-```bash
-# 1. Ativar o venv Python
-source /root/venv/bin/activate
-
-# 2. Instalar ChromaDB
-pip install chromadb
-
-# 3. Iniciar como serviço (porta 8899)
-chroma run --host 0.0.0.0 --port 8899 --path /var/www/html/projetos/ai-dev-core/storage/chroma
-
-# 4. Adicionar ao Supervisor para rodar permanentemente
-# /etc/supervisor/conf.d/chroma.conf
+-- Criar índice HNSW para busca aproximada rápida
+CREATE INDEX ON problems_solutions USING hnsw (embedding vector_cosine_ops);
 ```
 
-**Integração no AI-Dev:** O `LLMGateway.php` chama a API do ChromaDB via HTTP:
-```
-POST http://localhost:8899/api/v1/collections/problems_solutions/query
-{
-  "query_embeddings": [[0.1, 0.2, ...]],  // Embedding do PRD atual
-  "n_results": 3                           // Top 3 mais similares
-}
-```
+**Integração no AI-Dev via Laravel AI SDK:**
+```php
+// Gerar embedding via SDK
+$embedding = AI::embeddings()->provider(Lab::Ollama)->embed($prdText);
 
-#### Opção B: SQLite-Vec (Recomendada para simplicidade)
+// Busca semântica via Eloquent (whereVectorSimilarTo — macro pgvector)
+$solutions = ProblemSolution::query()
+    ->whereVectorSimilarTo('embedding', $prdText, minSimilarity: 0.7)
+    ->limit(3)
+    ->get();
 
-**O que é:** Extensão do SQLite que adiciona suporte a vetores. Zero dependência extra — usa o SQLite que já vem com o PHP.
-
-**Instalação:**
-```bash
-# 1. Compilar a extensão sqlite-vec
-cd /tmp
-git clone https://github.com/asg017/sqlite-vec.git
-cd sqlite-vec
-make
-sudo cp dist/vec0.so /usr/lib/sqlite3/
-
-# 2. Habilitar no PHP
-echo "extension=vec0.so" >> /etc/php/8.3/cli/php.ini
+// Ou via toEmbeddings() macro no Stringable
+$embedding = str($prdText)->toEmbeddings()->provider(Lab::Ollama)->embed();
 ```
 
-**Prós e contras:**
+**Prós de usar pgvector em vez de ChromaDB:**
 
-| | ChromaDB | SQLite-Vec |
+| | pgvector (escolhido) | ChromaDB (descartado) |
 |---|---|---|
-| **Facilidade** | Simples (pip install) | Requer compilação |
-| **Performance** | Excelente para milhares de vetores | Boa para centenas |
-| **Dependência** | Python 3 (já temos) | Nenhuma extra |
-| **API** | REST (HTTP) | SQL nativo |
-| **Escala** | Até milhões de vetores | Até dezenas de milhares |
-| **RAM** | ~200 MB | ~50 MB |
-
-**Recomendação:** Começar com **ChromaDB** pela simplicidade de instalação e API limpa. Se o consumo de RAM se tornar problema no futuro, migrar para SQLite-Vec.
+| **Instalação** | Já instalado | pip install + serviço extra |
+| **Serviço extra** | Não (mesmo PostgreSQL) | Sim (processo Python) |
+| **RAM extra** | 0 MB | ~200 MB |
+| **Joins com tabelas** | SQL nativo | API HTTP |
+| **Backup** | Junto com pg_dump | Separado |
+| **Manutenção** | Zero | Versões Python, venv |
 
 ---
 
@@ -455,10 +434,10 @@ Com tudo instalado e rodando simultaneamente:
 | Laravel (AI-Dev Core) | ~150 MB | Moderado | ~200 MB |
 | Laravel Queue Workers (9x) | ~900 MB | Variável | N/A |
 | Ollama (2 modelos) | ~850 MB | Pico durante inferência | ~700 MB |
-| ChromaDB | ~200 MB | Baixo | ~100 MB |
-| Node.js (Firecrawl/Proxy) | ~300 MB | Baixo | ~200 MB |
+| pgvector | 0 MB extra | Incluso no PostgreSQL | 0 MB extra |
+| Node.js (Firecrawl) | ~300 MB | Baixo | ~200 MB |
 | Security Tools (sob demanda) | ~100 MB | Pico durante scan | ~50 MB |
-| **TOTAL** | **~3.6 GB** | **Variável** | **~1.85 GB** |
+| **TOTAL** | **~3.4 GB** | **Variável** | **~1.75 GB** |
 
 **Veredicto:** O servidor com **8 GB de RAM** suporta confortavelmente toda a stack com ~4.4 GB de folga para picos. As ferramentas de segurança (Enlightn, PHPStan, Nikto, SQLMap) rodam sob demanda e encerram ao finalizar, então o consumo real é intermitente. As 2 vCPUs são o gargalo principal — inferência LLM local (Ollama) consome CPU durante execução, mas o modelo é tão leve (0.5B params) que infere em ~1-2 segundos.
 
@@ -468,47 +447,46 @@ Com tudo instalado e rodando simultaneamente:
 
 ## 4. Resumo de Ação por Fase (Alinhado com ARCHITECTURE.md seção 10)
 
-### Fase 1: Core Loop (NÃO precisa de Ollama, ChromaDB nem Firecrawl)
+### Fase 1: Core Loop (NÃO precisa de Ollama nem Firecrawl)
 
 ```bash
 # Apenas o essencial para o ciclo Task → Orchestrator → Subagente → QA → Commit
-1. sudo apt install supervisor
-2. laravel new ai-dev-core (no servidor)
-3. Instalar Filament v5 + Horizon
-4. Criar banco ai_dev_core + rodar migrations
-5. Configurar Supervisor para workers (orchestrator, executors, qa)
-6. Migrar Gemini Proxy do nohup para Supervisor
+1. Projeto Laravel 13 ai-dev-core já existe em /var/www/html/projetos/ai-dev/ai-dev-core/
+2. Configurar ANTHROPIC_API_KEY e GEMINI_API_KEY no .env
+3. Rodar migrations: php artisan migrate
+4. Configurar Laravel Horizon (já instalado) para workers
+5. Configurar Supervisor para 4 workers (orchestrator, executors, qa, default)
+6. Implementar Agent classes + Tool classes
 7. Testar ciclo completo com 1 task simples
 ```
 
-### Fase 2: Qualidade, Segurança e UI (Adiciona Claude + Sentinel + Security Tools)
+### Fase 2: Qualidade, Segurança e UI (Adiciona Sentinel + Security Tools)
 
 ```bash
 # Adiciona capacidade de auditoria de segurança e performance
-1. npm install -g @anthropic-ai/claude-code
-2. Configurar ANTHROPIC_API_KEY no .env
-3. Instalar ferramentas de segurança no servidor:
+1. Configurar ANTHROPIC_API_KEY no .env (Claude para OrchestratorAgent e QAAuditorAgent)
+2. Instalar ferramentas de segurança no servidor:
    sudo apt install nikto -y
    source /root/venv/bin/activate && pip install sqlmap
-4. Instalar Enlightn + Larastan nos projetos alvo:
+3. Instalar Enlightn + Larastan nos projetos alvo:
    composer require enlightn/enlightn larastan/larastan --dev
-5. Implementar SecurityAuditJob + PerformanceAnalysisJob
-6. Configurar Supervisor para workers de segurança e performance
-7. Implementar Filament Resources + Dashboard
-8. Criar Sentinel (Exception Handler nos projetos alvo)
-9. Configurar circuit breakers
+4. Implementar SecurityAuditJob + PerformanceAnalysisJob
+5. Configurar Supervisor para workers de segurança e performance
+6. Criar Sentinel (Exception Handler nos projetos alvo)
+7. Implementar circuit breakers (limites de custo, retries, tempo)
 ```
 
-### Fase 3: IA Avançada (Adiciona Ollama + ChromaDB + Firecrawl)
+### Fase 3: IA Avançada (Adiciona Ollama + Firecrawl + RAG pgvector)
 
 ```bash
 1. curl -fsSL https://ollama.com/install.sh | sh
 2. ollama pull qwen2.5:0.5b && ollama pull nomic-embed-text
-3. pip install chromadb (no venv Python)
-4. Instalar Firecrawl ou readability-cli
-5. Implementar RAG + Compressão de Contexto
-6. (Opcional) Instalar OWASP ZAP para scan DAST avançado
-7. Configurar Supervisor para Ollama e ChromaDB
+3. Habilitar extensão pgvector (já disponível no PostgreSQL 16 do servidor)
+4. Rodar migration problems_solutions com coluna vector(1536)
+5. Instalar Firecrawl self-hosted (Node.js — já temos Node 22.x)
+6. Implementar ContextCompressionJob + RAG (whereVectorSimilarTo)
+7. (Opcional) Instalar OWASP ZAP para scan DAST avançado
+8. Configurar Supervisor para Ollama worker
 ```
 
 ---

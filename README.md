@@ -79,7 +79,7 @@ O AI-Dev utiliza **12 tabelas** no PostgreSQL para controle total do estado:
 
 ## 🔧 Ferramentas (9 Atômicas — `implements Laravel\Ai\Contracts\Tool`)
 
-Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schema(JsonSchema)` para entrada e `handle(array $arguments): string` para execução. O SDK roteia automaticamente as tool calls — o antigo `ToolRouter` custom foi eliminado.
+Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schema(JsonSchema $schema): array` para validação de entrada e `handle(Request $request): string` para execução. O SDK despacha automaticamente as tool calls do LLM para o método `handle()` correto.
 
 | # | Ferramenta | Ações Principais |
 |---|---|---|

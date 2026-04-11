@@ -5,20 +5,36 @@ O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)*
 **Por que 9 ferramentas e não 18+?** Modelos de linguagem consomem tokens processando a lista de ferramentas disponíveis. Com 18+ ferramentas de nomes parecidos (FileArchitectTool vs FileSystemNavigatorTool vs FileSurgeryTool), a IA gasta mais tempo "decidindo" qual usar e comete mais erros na seleção. Com 9 ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a decisão é rápida e precisa.
 
 **Arquitetura das Ferramentas:**
-Cada ferramenta é uma classe PHP em `app/Tools/` que implementa a interface `ToolInterface`:
+Cada ferramenta é uma classe PHP em `app/Ai/Tools/` que implementa o contrato `Tool` do **Laravel AI SDK** (`laravel/ai`):
 
 ```php
-interface ToolInterface
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+
+class ShellTool implements Tool
 {
-    public function name(): string;           // Nome da ferramenta (ex: "ShellTool")
-    public function description(): string;    // Descrição para o LLM
-    public function inputSchema(): array;     // JSON Schema de entrada (validação rigorosa)
-    public function outputSchema(): array;    // JSON Schema de saída
-    public function execute(array $params): ToolResult;  // Execução real
+    public function description(): string       // Descrição para o LLM
+    {
+        return 'Execute shell commands on the server in a controlled way.';
+    }
+
+    public function schema(JsonSchema $schema): array  // Parâmetros de entrada (JsonSchema builder)
+    {
+        return [
+            'action'  => $schema->string()->enum(['execute', 'execute_background', 'kill']),
+            'command' => $schema->string()->description('Full command with absolute paths'),
+        ];
+    }
+
+    public function handle(Request $request): string   // Execução real
+    {
+        // $request->get('action'), $request->get('command')
+    }
 }
 ```
 
-O `ToolRouter.php` recebe as tool calls do LLM, valida os parâmetros contra o `inputSchema()`, e se válido, chama `execute()`. Se a validação falhar, retorna o erro detalhado para o LLM corrigir — o LLM NUNCA interage com o sistema operacional diretamente.
+O **Laravel AI SDK** despacha automaticamente as tool calls do LLM para o método `handle()` correto, validando os parâmetros contra o `schema()`. Se o schema falhar, o SDK retorna o erro ao LLM para que ele corrija — o LLM NUNCA interage com o sistema operacional diretamente.
 
 ---
 
@@ -1114,9 +1130,9 @@ pip install sqlmap
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│                    TOOL ROUTER (ToolRouter.php)                       │
+│              LARAVEL AI SDK (tool calling nativo)                     │
 │                                                                       │
-│  LLM response → Parse tool_calls → Validate JSON Schema → Execute   │
+│  LLM response → Parse tool_calls → schema() validate → handle()     │
 │                                                                       │
 │  ┌───────────┐  ┌───────────┐  ┌──────────────┐  ┌───────────┐      │
 │  │ ShellTool │  │ FileTool  │  │ DatabaseTool │  │ GitTool   │      │
