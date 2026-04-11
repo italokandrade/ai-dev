@@ -59,13 +59,23 @@ class Project extends Model
 
     public function overallProgress(): float
     {
-        $modules = $this->modules;
+        $totalTasks = $this->tasks()->count();
 
-        if ($modules->isEmpty()) {
-            return 0;
+        // Se houver tarefas, o progresso absoluto é medido por elas (melhor precisão)
+        if ($totalTasks > 0) {
+            $completedTasks = $this->tasks()->where('status', 'completed')->count();
+            return round(($completedTasks / $totalTasks) * 100, 1);
         }
 
-        return round($modules->avg('progress_percentage'), 1);
+        // Se o projeto ainda não tem tarefas, baseia-se no volume de módulos concluídos
+        $totalModules = $this->modules()->count();
+        
+        if ($totalModules > 0) {
+            $completedModules = $this->modules()->where('status', 'completed')->count();
+            return round(($completedModules / $totalModules) * 100, 1);
+        }
+
+        return 0;
     }
 
     public function quotations(): HasMany
