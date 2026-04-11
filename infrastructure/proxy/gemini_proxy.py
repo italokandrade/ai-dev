@@ -142,5 +142,5 @@ if __name__ == '__main__':
         res, used_sid, used_model = run_gemini(prompt, sid)
         print(f"ID: {used_sid}\nModel: {used_model}\n---\n{res}")
     else:
-        print(f"Proxy Gemini Ativo — Modelo: {GEMINI_MODEL} | Modo: plan (read-only) | Porta: 8001")
+        print(f"Proxy Gemini Ativo — Modelo: {GEMINI_MODEL} | Porta: 8001")
         app.run(port=8001, host='0.0.0.0', threaded=True)

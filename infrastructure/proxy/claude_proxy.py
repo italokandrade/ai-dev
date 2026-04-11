@@ -109,5 +109,5 @@ if __name__ == '__main__':
         res, used_sid, used_model = run_claude(prompt, sid)
         print(f"ID: {used_sid}\nModel: {used_model}\n---\n{res}")
     else:
-        print("Proxy Claude Ativo — Modelo: auto | Modo: plan (read-only) | Porta: 8002")
+        print("Proxy Claude Ativo — Modelo: auto | Porta: 8002")
         app.run(port=8002, host='0.0.0.0', threaded=True)
