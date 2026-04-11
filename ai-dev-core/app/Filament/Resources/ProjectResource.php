@@ -277,6 +277,32 @@ class ProjectResource extends Resource
                             ->placeholder('Não configurado'),
                     ]),
 
+                Section::make('Especificação Técnica')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('currentSpecification.user_description')
+                            ->label('Descrição do Usuário')
+                            ->markdown()
+                            ->columnSpanFull(),
+
+                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
+                            ->label('Objetivo (gerado pela IA)')
+                            ->placeholder('Aguardando geração')
+                            ->columnSpanFull(),
+
+                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
+                            ->label('Funcionalidades Principais')
+                            ->listWithLineBreaks()
+                            ->bulleted()
+                            ->columnSpanFull(),
+
+                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
+                            ->label('Requisitos Não-Funcionais')
+                            ->listWithLineBreaks()
+                            ->bulleted()
+                            ->columnSpanFull(),
+                    ])
+                    ->collapsible(),
+
                 Section::make('Roadmap de Módulos')
                     ->schema([
                         Infolists\Components\RepeatableEntry::make('modules')
@@ -304,32 +330,6 @@ class ProjectResource extends Resource
                                     ->label('')
                                     ->color('gray'),
                             ])
-                            ->columnSpanFull(),
-                    ])
-                    ->collapsible(),
-
-                Section::make('Especificação Técnica')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('currentSpecification.user_description')
-                            ->label('Descrição do Usuário')
-                            ->markdown()
-                            ->columnSpanFull(),
-
-                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
-                            ->label('Objetivo (gerado pela IA)')
-                            ->placeholder('Aguardando geração')
-                            ->columnSpanFull(),
-
-                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
-                            ->label('Funcionalidades Principais')
-                            ->listWithLineBreaks()
-                            ->bulleted()
-                            ->columnSpanFull(),
-
-                        Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
-                            ->label('Requisitos Não-Funcionais')
-                            ->listWithLineBreaks()
-                            ->bulleted()
                             ->columnSpanFull(),
                     ])
                     ->collapsible(),
