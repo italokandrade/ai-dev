@@ -14,9 +14,34 @@ class SystemContextService
             'database' => self::getDatabaseInfo(),
             'php' => PHP_VERSION,
             'stack' => self::getStackVersions(),
+            'workflow' => self::getWorkflowRoutes(),
         ];
 
         return self::formatToPrompt($context);
+    }
+
+    private static function getWorkflowRoutes(): array
+    {
+        try {
+            return collect(\Illuminate\Support\Facades\Route::getRoutes())
+                ->filter(function ($route) {
+                    $uri = $route->uri();
+                    // Focamos apenas nas rotas administrativas que definem o fluxo de desenvolvimento
+                    return str_contains($uri, 'admin/') && 
+                           !str_contains($uri, 'login') && 
+                           !str_contains($uri, 'logout') &&
+                           !str_contains($uri, 'filament');
+                })
+                ->map(fn($route) => [
+                    'uri' => $route->uri(),
+                    'name' => $route->getName(),
+                    'methods' => $route->methods(),
+                ])
+                ->values()
+                ->toArray();
+        } catch (\Exception $e) {
+            return ['error' => 'Could not map routes'];
+        }
     }
 
     private static function getOperatingSystem(): string
@@ -94,7 +119,13 @@ class SystemContextService
         foreach ($context['stack'] as $tech => $ver) {
             $out .= "  - {$tech}: {$ver}\n";
         }
-        $out .= "\nIMPORTANTE: Use estritamente as tecnologias acima. Não sugira nada fora deste escopo.";
+        
+        $out .= "\nARQUITETURA DE WORKFLOW (ROTAS ATIVAS):\n";
+        foreach ($context['workflow'] as $route) {
+            $out .= "  - URI: {$route['uri']} (Destino de Dados)\n";
+        }
+
+        $out .= "\nIMPORTANTE: Use estritamente as tecnologias e o workflow acima para entender como os dados fluem. Não sugira nada fora deste escopo e NÃO cite as URIs/Rotas no seu texto de saída.";
         
         return $out;
     }
