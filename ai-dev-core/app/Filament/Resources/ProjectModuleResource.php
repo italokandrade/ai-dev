@@ -144,6 +144,11 @@ class ProjectModuleResource extends Resource
                         default => 'gray',
                     })
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('completed_tasks_count')
+                    ->label('Concluídas')
+                    ->counts('completedTasks')
+                    ->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
             ->groups([
