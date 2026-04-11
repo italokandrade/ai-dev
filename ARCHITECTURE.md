@@ -195,8 +195,8 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 | Classe | Provider Principal | Provider Backup | Motivo |
 |---|---|---|---|
 | **Orchestrator** | **Gemini** (via proxy) | Claude (fallback) | Gemini tem maior cota de uso gratuito; o Orchestrator é chamado muito frequentemente |
-| **Todos os Agentes Specialists** | **Claude** (via proxy) | Gemini (fallback) | Claude produz código mais preciso e com menos alucinações nos especialistas |
-| **QA Auditor** | **Claude** (via proxy) | Gemini (fallback) | Auditoria exige raciocínio rigoroso — Claude é superior aqui |
+| **Todos os Agentes Specialists** | **Claude Sonnet 4.6** (via proxy) + Opus 4.6 como advisor | Gemini (fallback) | Sonnet 4.6 gera código preciso; Opus 4.6 age como advisor automático via `--fallback-model` |
+| **QA Auditor** | **Claude Sonnet 4.6** (via proxy) + Opus 4.6 como advisor | Gemini (fallback) | Auditoria exige raciocínio rigoroso — Opus 4.6 escala automaticamente se necessário |
 | **Context Compressor** | **Ollama** (local) | — | Sem custo de API; modelo leve suficiente para sumarização |
 
 **SDK Default (`config/ai.php`):** `openai` com modelo `gpt-5-nano` — usado como fallback geral e para tasks onde nenhum provider específico foi configurado.
@@ -1084,11 +1084,15 @@ Cada Agent class define provider/model via PHP Attributes com array de fallback:
 class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
 → Gemini tem maior cota; orquestrador é chamado com alta frequência
 
-// AGENTS SPECIALISTS — Claude principal, Gemini backup
+// AGENTS SPECIALISTS — Claude Sonnet 4.6 principal, Gemini backup
+// --fallback-model claude-opus-4-6 no proxy ativa o Opus automaticamente
+// como "advisor" quando o Sonnet está sobrecarregado ou a tarefa exige mais raciocínio
+// (equivalente ao /advisor do Claude Code — mesma função, nível de modelo acima)
 #[Provider([Lab::Anthropic, Lab::Gemini])]
 #[Model('claude-sonnet-4-6')]
 class BackendSpecialist implements Agent, Conversational, HasTools { ... }
 → Claude gera código mais preciso e com menos alucinações
+→ Opus 4.6 age como advisor automático via --fallback-model no proxy
 
 // CONTEXT COMPRESSOR — Ollama local, sem custo de API
 #[Provider(Lab::Ollama)]
@@ -1553,27 +1557,36 @@ A IA recebe um prompt, retorna tool calls estruturadas, e o SDK valida o schema 
 
 **Proxy Claude (`infrastructure/proxy/claude_proxy.py` — porta 8002):**
 ```bash
-claude -p \                           # --print: modo não-interativo, sem confirmações
-    --tools "" \                       # Desabilita TODAS as ferramentas internas (Bash, Edit, Read, etc.)
-    --permission-mode plan \           # Modo read-only: impede qualquer escrita direta no OS
-    --model <modelo> \
-    --session-id <project.claude_session_id> \
+claude -p \                                    # --print: modo não-interativo, sem confirmações
+    --model claude-sonnet-4-6 \                # Modelo fixo: Sonnet 4.6 (primário)
+    --fallback-model claude-opus-4-6 \         # Advisor: Opus 4.6 escala automaticamente
+                                               # (equivalente ao /advisor do Claude Code)
+    --tools "" \                               # Desabilita TODAS as ferramentas internas
+                                               # (Bash, Edit, Read, Write, etc.)
+    --permission-mode plan \                   # Modo read-only: impede qualquer escrita no OS
+    --session-id <project.claude_session_id> \ # Resume sessão do projeto
     "<prompt>"
+
+# Uso direto (sem API): python3 infrastructure/proxy/claude_proxy.py "mensagem"
 ```
 
 **Proxy Gemini (`infrastructure/proxy/gemini_proxy.py` — porta 8001):**
 ```bash
-gemini --sandbox \                     # Modo sandboxed: impede acesso direto ao filesystem
+gemini \
     --approval-mode plan \             # Modo read-only: sem execução direta de comandos
-    -m <modelo> \
+                                       # Nenhuma confirmação solicitada — responde direto
+    -m gemini-3.1-pro-preview \        # Modelo fixo
     -r <project.gemini_session_id> \   # Resume sessão do projeto para manter contexto
     -p "<prompt>"
+
+# Uso direto (sem API): python3 infrastructure/proxy/gemini_proxy.py "mensagem"
 ```
 
 **Por que essas flags?**
-- `--tools ""` / `--sandbox`: Garante que a IA não pode executar `rm`, `chmod`, `DROP TABLE` ou qualquer comando diretamente. Tudo passa pelo nosso `ShellTool` que tem lista de comandos bloqueados.
-- `--permission-mode plan` / `--approval-mode plan`: Modo read-only — a IA só consegue retornar texto. Não pode modificar nada.
-- `-p` / `--prompt`: Modo não-interativo — sem perguntas "Deseja continuar? (y/n)". O proxy recebe o prompt, obtém a resposta e retorna imediatamente.
+- `--tools ""`: Desabilita todas as ferramentas internas do Claude Code (Bash, Edit, Read, Write). A IA só retorna texto — toda execução real passa pelas Tool classes do AI-Dev com sandboxing próprio.
+- `--permission-mode plan` / `--approval-mode plan`: Modo read-only — a IA não pode modificar arquivos, pastas, permissões ou processos do SO. Combinado com `--tools ""` garante isolamento total.
+- `-p` / `--print`: Modo não-interativo — sem perguntas "Deseja continuar? (y/n)". O proxy recebe o prompt, obtém a resposta e retorna imediatamente.
+- `--fallback-model claude-opus-4-6`: Quando Sonnet está sobrecarregado ou a tarefa requer mais raciocínio, o Opus 4.6 assume automaticamente — equivalente ao `/advisor` do Claude Code.
 
 ### 14.3. Session ID Obrigatório por Projeto
 

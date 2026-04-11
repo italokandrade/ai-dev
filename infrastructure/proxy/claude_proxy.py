@@ -10,63 +10,39 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Cadeia de fallback (prioridade: opus -> sonnet -> haiku)
-CLAUDE_FALLBACK_CHAIN = [
-    "claude-opus-4-6",
-    "claude-sonnet-4-6",
-    "claude-haiku-4-5",
-]
+# Modelo fixo: claude-sonnet-4-6 (primário)
+# Advisor/fallback: claude-opus-4-6 — ativado automaticamente pelo --fallback-model
+# Sem auto-seleção por palavras-chave — modelo único sempre
+CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_ADVISOR = "claude-opus-4-6"
 
-# Mapeamento do classificador para posição inicial na cadeia
-CLAUDE_TIER = {
-    "complex": 0,  # começa no opus
-    "medium":  1,  # começa no sonnet
-    "simple":  2,  # começa no haiku
-}
 
-# Palavras que sugerem tarefa complexa
-_COMPLEX_KEYWORDS = [
-    "arquitet", "refator", "debug", "analis", "otimiz", "algoritmo",
-    "complex", "design pattern", "raciocin", "prove", "demonstre",
-    "implemente um sistema", "projete", "compare profundamente",
-    "architect", "refactor", "optimize", "reasoning", "prove ",
-]
-# Palavras que sugerem tarefa média
-_MEDIUM_KEYWORDS = [
-    "código", "code", "função", "function", "script", "bug", "erro",
-    "explique", "explain", "escreva", "write", "traduz", "translate",
-    "resum", "summar", "documenta", "teste", "test ",
-]
+def _try_claude(prompt, session_id=None):
+    """Executa o Claude e retorna (texto, sucesso).
 
-def classify_claude_tier(prompt: str) -> str:
-    """Classifica o prompt em complex/medium/simple."""
-    if not prompt:
-        return "simple"
-    p = prompt.lower()
-    length = len(prompt)
-
-    complex_hits = sum(1 for k in _COMPLEX_KEYWORDS if k in p)
-    medium_hits  = sum(1 for k in _MEDIUM_KEYWORDS if k in p)
-
-    if length > 1500 or complex_hits >= 2 or (complex_hits >= 1 and length > 600):
-        return "complex"
-    if medium_hits >= 1 or complex_hits >= 1 or length > 250:
-        return "medium"
-    return "simple"
-
-def _try_claude(prompt, model, session_id=None):
-    """Tenta executar o Claude com um modelo específico. Retorna (texto, sucesso).
-
-    Flags de segurança:
-    - -p (--print): Modo não-interativo, sem confirmações
-    - --tools "": Desabilita TODAS as ferramentas internas do Claude (Bash, Edit, etc.)
-      A IA retorna apenas texto/JSON — toda execução real passa pelo ToolRouter do AI-Dev
-    - --permission-mode plan: Modo read-only, impede qualquer escrita direta no OS/DB
+    Flags de segurança obrigatórias:
+    -p (--print)             → Modo não-interativo, sem confirmações, saída direta
+    --model CLAUDE_MODEL     → Modelo fixo: claude-sonnet-4-6
+    --fallback-model ADVISOR → Advisor: claude-opus-4-6 (escala automaticamente
+                               quando Sonnet está sobrecarregado ou para tarefas
+                               que exigem mais raciocínio — equivalente ao /advisor
+                               do Claude Code)
+    --tools ""               → Desabilita TODAS as ferramentas internas do Claude
+                               Code (Bash, Edit, Read, Write, etc.). A IA retorna
+                               apenas texto — toda execução real passa pelas Tools
+                               do AI-Dev (ShellTool, FileTool, etc.) com sandboxing
+                               próprio. Sem tools, nenhuma manipulação direta do SO
+                               é possível — arquivos, permissões, processos, etc.
+    --permission-mode plan   → Modo read-only: impede qualquer escrita direta no
+                               sistema operacional. Combinado com --tools "" garante
+                               isolamento total. Nenhuma confirmação é solicitada —
+                               o modelo processa e responde sem interrupções.
     """
     try:
         cmd_parts = [
             "claude", "-p",
-            "--model", model,
+            "--model", CLAUDE_MODEL,
+            "--fallback-model", CLAUDE_ADVISOR,
             "--tools", "",
             "--permission-mode", "plan",
         ]
@@ -82,37 +58,21 @@ def _try_claude(prompt, model, session_id=None):
 
         if clean_text:
             return clean_text, True
-        # Sem output -> falha
         return stderr, False
+
     except subprocess.TimeoutExpired:
         return "Timeout", False
     except Exception as e:
         return str(e), False
 
-def run_claude_with_fallback(prompt, session_id=None, model=None):
-    """Executa o Claude com fallback automático pela cadeia de modelos."""
-    errors = []
 
-    if model:
-        # Modelo explícito: tenta só esse
-        text, ok = _try_claude(prompt, model, session_id)
-        if ok:
-            return text, session_id, model
-        return f"Erro na geração de resposta pelo Claude ({model}): {text}", session_id, model
+def run_claude(prompt, session_id=None):
+    """Executa o Claude com modelo fixo (claude-sonnet-4-6) e advisor (claude-opus-4-6)."""
+    text, ok = _try_claude(prompt, session_id)
+    if ok:
+        return text, session_id, CLAUDE_MODEL
+    return f"Erro na geração de resposta pelo Claude: {text}", session_id, CLAUDE_MODEL
 
-    # Auto-seleção: determina posição inicial e percorre a cadeia
-    tier = classify_claude_tier(prompt)
-    start_idx = CLAUDE_TIER[tier]
-
-    for model_name in CLAUDE_FALLBACK_CHAIN[start_idx:]:
-        text, ok = _try_claude(prompt, model_name, session_id)
-        if ok:
-            return text, session_id, model_name
-        errors.append(f"{model_name}: {text[:120]}")
-
-    # Todos falharam
-    detail = " | ".join(errors)
-    return f"Erro na geração de resposta pelo Claude. Todos os modelos falharam: {detail}", session_id, "none"
 
 # --- ENDPOINTS API ---
 
@@ -120,14 +80,13 @@ def run_claude_with_fallback(prompt, session_id=None, model=None):
 def openai_chat():
     data = request.json
     session_id = data.get("session_id") or request.headers.get("X-Session-Id")
-    req_model = data.get("model")
-    if req_model in (None, "", "auto"):
-        req_model = None
 
     messages = data.get("messages", [])
     user_msg = messages[-1].get("content", "oi") if messages else "oi"
+    if isinstance(user_msg, list):
+        user_msg = " ".join([p.get("text", "") for p in user_msg if p.get("type") == "text"])
 
-    response_text, used_id, used_model = run_claude_with_fallback(user_msg, session_id, req_model)
+    response_text, used_id, used_model = run_claude(user_msg, session_id)
 
     return jsonify({
         "id": "chatcmpl-claude-" + str(used_id or "new"),
@@ -135,22 +94,22 @@ def openai_chat():
         "created": int(time.time()),
         "model": used_model,
         "session_id": used_id,
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": response_text}, "finish_reason": "stop"}]
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": response_text}, "finish_reason": "stop"}],
     })
+
 
 @app.route('/v1/messages', methods=['POST'])
 @app.route('/v1/v1/messages', methods=['POST'])
 def anthropic_messages():
     data = request.json
     session_id = data.get("session_id") or request.headers.get("X-Session-Id")
-    req_model = data.get("model")
-    if req_model in (None, "", "auto"):
-        req_model = None
 
     messages = data.get("messages", [])
     user_msg = messages[-1].get("content", "oi") if messages else "oi"
+    if isinstance(user_msg, list):
+        user_msg = " ".join([p.get("text", "") for p in user_msg if p.get("type") == "text"])
 
-    response_text, used_id, used_model = run_claude_with_fallback(user_msg, session_id, req_model)
+    response_text, used_id, used_model = run_claude(user_msg, session_id)
 
     return jsonify({
         "id": "msg-claude-" + str(used_id or "new"),
@@ -160,14 +119,17 @@ def anthropic_messages():
         "session_id": used_id,
         "content": [{"type": "text", "text": response_text}],
         "stop_reason": "end_turn",
-        "usage": {"input_tokens": 0, "output_tokens": 0}
+        "usage": {"input_tokens": 0, "output_tokens": 0},
     })
+
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        prompt = " ".join(sys.argv[1:])
-        res, sid, used = run_claude_with_fallback(prompt)
-        print(f"ID: {sid}\nModel: {used}\n---\n{res}")
+        # Uso direto: python claude_proxy.py "mensagem" [session_id]
+        prompt = sys.argv[1]
+        sid = sys.argv[2] if len(sys.argv) > 2 else None
+        res, used_sid, used_model = run_claude(prompt, sid)
+        print(f"ID: {used_sid}\nModel: {used_model}\n---\n{res}")
     else:
-        print("Proxy Claude Ativo (Auto-Model + Fallback: opus->sonnet->haiku) na Porta 8002")
+        print(f"Proxy Claude Ativo — Modelo: {CLAUDE_MODEL} | Advisor: {CLAUDE_ADVISOR} | Modo: plan (read-only) | Porta: 8002")
         app.run(port=8002, host='0.0.0.0', threaded=True)
