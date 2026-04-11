@@ -3,9 +3,7 @@
 namespace App\Jobs;
 
 use App\Ai\Agents\SpecificationAgent;
-use App\Enums\ModuleStatus;
 use App\Models\Project;
-use App\Models\ProjectModule;
 use App\Models\ProjectSpecification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -63,18 +61,22 @@ class GenerateProjectSpecificationJob implements ShouldQueue
             'ai_specification' => $aiSpec,
         ]);
 
-        $this->createModulesFromSpec($project, $aiSpec);
-
-        Log::info("GenerateProjectSpecificationJob: Concluído para '{$project->name}' — {$aiSpec['estimated_modules']} módulos");
+        Log::info("GenerateProjectSpecificationJob: Concluído para '{$project->name}' — " . ($aiSpec['estimated_modules'] ?? 0) . " módulos estimados");
     }
 
     private function buildPrompt(string $userDescription): string
     {
         return <<<PROMPT
-O usuário descreveu o sistema abaixo. Transforme em especificação técnica estruturada.
+O usuário descreveu o sistema abaixo. Transforme em especificação técnica estruturada em JSON.
 
 DESCRIÇÃO DO USUÁRIO:
 {$userDescription}
+
+DIRETRIZ DE ARQUITETURA E GRANULARIDADE (MUITO IMPORTANTE):
+- Divida o sistema em módulos e submódulos muito bem definidos, atômicos e granulares.
+- Os agentes de inteligência artificial terão mais facilidade de programar se cada módulo/submódulo tiver uma responsabilidade única e escopo isolado.
+- Evite módulos monolíticos. Quebre funcionalidades grandes em submódulos específicos.
+- A prioridade deve ser "high", "medium" ou "normal".
 
 Retorne EXATAMENTE este JSON (sem markdown):
 {
@@ -92,12 +94,18 @@ Retorne EXATAMENTE este JSON (sem markdown):
   "non_functional_requirements": ["NFR 1", "NFR 2"],
   "modules": [
     {
-      "name": "Nome do Módulo",
-      "description": "O que este módulo faz",
-      "acceptance_criteria": ["Critério 1", "Critério 2", "Critério 3"],
+      "name": "Nome do Módulo Pai",
+      "description": "Visão geral do módulo",
+      "priority": "high",
       "dependencies": [],
-      "estimated_tasks": 4,
-      "priority": 90
+      "submodules": [
+        {
+          "name": "Submódulo Específico",
+          "description": "Responsabilidade única deste submódulo",
+          "priority": "high",
+          "dependencies": []
+        }
+      ]
     }
   ],
   "estimated_modules": 6,
@@ -128,68 +136,5 @@ PROMPT;
             '_error'                    => $error,
             '_prompt'                   => $prompt,
         ];
-    }
-}
-ind CSS v4',
-                'admin'    => 'Filament v5',
-                'database' => 'PostgreSQL 16',
-                'extras'   => [],
-            ],
-            'non_functional_requirements' => [],
-            'modules'                   => [],
-            'estimated_modules'         => 0,
-            'estimated_complexity'      => 'moderate',
-            '_status'                   => 'ai_generation_failed',
-            '_error'                    => $error,
-            '_prompt'                   => $prompt,
-        ];
-    }
-
-    private function createModulesFromSpec(Project $project, array $aiSpec): void
-    {
-        if (empty($aiSpec['modules'])) {
-            return;
-        }
-
-        // Remove módulos anteriores desta versão (se reprocessamento)
-        // Mantém apenas os criados por versões anteriores de spec
-        $moduleIdMap = [];
-
-        foreach ($aiSpec['modules'] as $moduleData) {
-            $priorityVal = $moduleData['priority'] ?? 50;
-            $priorityEnum = match (true) {
-                $priorityVal >= 80 => \App\Enums\Priority::High,
-                $priorityVal >= 40 => \App\Enums\Priority::Medium,
-                default => \App\Enums\Priority::Normal,
-            };
-
-            $module = ProjectModule::create([
-                'project_id'         => $project->id,
-                'name'               => $moduleData['name'],
-                'description'        => $moduleData['description'],
-                'status'             => ModuleStatus::Planned,
-                'priority'           => $priorityEnum,
-                'dependencies'       => null,
-            ]);
-
-            $moduleIdMap[$moduleData['name']] = $module->id;
-        }
-
-        // Resolver dependências por nome → UUID
-        foreach ($aiSpec['modules'] as $moduleData) {
-            if (! empty($moduleData['dependencies'])) {
-                $depIds = collect($moduleData['dependencies'])
-                    ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
-                    ->filter()
-                    ->values()
-                    ->all();
-
-                if (! empty($depIds)) {
-                    ProjectModule::where('project_id', $project->id)
-                        ->where('name', $moduleData['name'])
-                        ->update(['dependencies' => $depIds]);
-                }
-            }
-        }
     }
 }
