@@ -253,94 +253,92 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Grid::make(['default' => 1, 'lg' => 2])
-                    ->schema([
-                        \Filament\Schemas\Components\Group::make([
-                            Section::make('Visão Geral')
+                \Filament\Schemas\Components\Group::make([
+                    Section::make('Visão Geral')
+                        ->schema([
+                            Grid::make(3)
                                 ->schema([
-                                    Grid::make(3)
+                                    Infolists\Components\TextEntry::make('name')
+                                        ->label('Projeto'),
+
+                                    Infolists\Components\TextEntry::make('status')
+                                        ->label('Status')
+                                        ->badge(),
+
+                                    Infolists\Components\TextEntry::make('overall_progress')
+                                        ->label('Progresso Geral')
+                                        ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%'),
+                                ]),
+
+                            Infolists\Components\TextEntry::make('local_path')
+                                ->label('Caminho Local'),
+
+                            Infolists\Components\TextEntry::make('github_repo')
+                                ->label('Repositório GitHub')
+                                ->placeholder('Não configurado'),
+                        ]),
+
+                    Section::make('Roadmap de Módulos')
+                        ->schema([
+                            Infolists\Components\RepeatableEntry::make('modules')
+                                ->schema([
+                                    Grid::make(4)
                                         ->schema([
                                             Infolists\Components\TextEntry::make('name')
-                                                ->label('Projeto'),
+                                                ->label('Módulo')
+                                                ->weight('bold'),
 
                                             Infolists\Components\TextEntry::make('status')
                                                 ->label('Status')
                                                 ->badge(),
 
-                                            Infolists\Components\TextEntry::make('overall_progress')
-                                                ->label('Progresso Geral')
-                                                ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%'),
+                                            Infolists\Components\TextEntry::make('progress_percentage')
+                                                ->label('Progresso')
+                                                ->formatStateUsing(fn ($state) => $state . '%'),
+
+                                            Infolists\Components\TextEntry::make('tasks_count')
+                                                ->label('Tasks')
+                                                ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count()),
                                         ]),
 
-                                    Infolists\Components\TextEntry::make('local_path')
-                                        ->label('Caminho Local'),
-
-                                    Infolists\Components\TextEntry::make('github_repo')
-                                        ->label('Repositório GitHub')
-                                        ->placeholder('Não configurado'),
-                                ]),
-
-                            Section::make('Roadmap de Módulos')
-                                ->schema([
-                                    Infolists\Components\RepeatableEntry::make('modules')
-                                        ->schema([
-                                            Grid::make(4)
-                                                ->schema([
-                                                    Infolists\Components\TextEntry::make('name')
-                                                        ->label('Módulo')
-                                                        ->weight('bold'),
-
-                                                    Infolists\Components\TextEntry::make('status')
-                                                        ->label('Status')
-                                                        ->badge(),
-
-                                                    Infolists\Components\TextEntry::make('progress_percentage')
-                                                        ->label('Progresso')
-                                                        ->formatStateUsing(fn ($state) => $state . '%'),
-
-                                                    Infolists\Components\TextEntry::make('tasks_count')
-                                                        ->label('Tasks')
-                                                        ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count()),
-                                                ]),
-
-                                            Infolists\Components\TextEntry::make('description')
-                                                ->label('')
-                                                ->color('gray'),
-                                        ])
-                                        ->columnSpanFull(),
+                                    Infolists\Components\TextEntry::make('description')
+                                        ->label('')
+                                        ->color('gray'),
                                 ])
-                                ->collapsible(),
-                        ]),
+                                ->columnSpanFull(),
+                        ])
+                        ->collapsible(),
+                ])->columnSpan(['default' => 1, 'xl' => 2]),
 
-                        \Filament\Schemas\Components\Group::make([
-                            Section::make('Especificação Técnica')
-                                ->schema([
-                                    Infolists\Components\TextEntry::make('currentSpecification.user_description')
-                                        ->label('Descrição do Usuário')
-                                        ->markdown()
-                                        ->columnSpanFull(),
+                \Filament\Schemas\Components\Group::make([
+                    Section::make('Especificação Técnica')
+                        ->schema([
+                            Infolists\Components\TextEntry::make('currentSpecification.user_description')
+                                ->label('Descrição do Usuário')
+                                ->markdown()
+                                ->columnSpanFull(),
 
-                                    Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
-                                        ->label('Objetivo (gerado pela IA)')
-                                        ->placeholder('Aguardando geração')
-                                        ->columnSpanFull(),
+                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
+                                ->label('Objetivo (gerado pela IA)')
+                                ->placeholder('Aguardando geração')
+                                ->columnSpanFull(),
 
-                                    Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
-                                        ->label('Funcionalidades Principais')
-                                        ->listWithLineBreaks()
-                                        ->bulleted()
-                                        ->columnSpanFull(),
+                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
+                                ->label('Funcionalidades Principais')
+                                ->listWithLineBreaks()
+                                ->bulleted()
+                                ->columnSpanFull(),
 
-                                    Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
-                                        ->label('Requisitos Não-Funcionais')
-                                        ->listWithLineBreaks()
-                                        ->bulleted()
-                                        ->columnSpanFull(),
-                                ])
-                                ->collapsible(),
-                        ]),
-                    ]),
-            ]);
+                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
+                                ->label('Requisitos Não-Funcionais')
+                                ->listWithLineBreaks()
+                                ->bulleted()
+                                ->columnSpanFull(),
+                        ])
+                        ->collapsible(),
+                ])->columnSpan(['default' => 1, 'xl' => 1]),
+            ])
+            ->columns(['default' => 1, 'xl' => 3]);
     }
 
     public static function getRelations(): array
