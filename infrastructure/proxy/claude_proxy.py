@@ -10,39 +10,29 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Modelo fixo: claude-sonnet-4-6 (primário)
-# Advisor/fallback: claude-opus-4-6 — ativado automaticamente pelo --fallback-model
-# Sem auto-seleção por palavras-chave — modelo único sempre
-CLAUDE_MODEL = "claude-sonnet-4-6"
-CLAUDE_ADVISOR = "claude-opus-4-6"
+# Modo auto — sem modelo fixo, o Claude Code seleciona automaticamente
+# Claude atua como auxiliar do Gemini (backup/agentes specialists)
 
 
 def _try_claude(prompt, session_id=None):
     """Executa o Claude e retorna (texto, sucesso).
 
     Flags de segurança obrigatórias:
-    -p (--print)             → Modo não-interativo, sem confirmações, saída direta
-    --model CLAUDE_MODEL     → Modelo fixo: claude-sonnet-4-6
-    --fallback-model ADVISOR → Advisor: claude-opus-4-6 (escala automaticamente
-                               quando Sonnet está sobrecarregado ou para tarefas
-                               que exigem mais raciocínio — equivalente ao /advisor
-                               do Claude Code)
-    --tools ""               → Desabilita TODAS as ferramentas internas do Claude
-                               Code (Bash, Edit, Read, Write, etc.). A IA retorna
-                               apenas texto — toda execução real passa pelas Tools
-                               do AI-Dev (ShellTool, FileTool, etc.) com sandboxing
-                               próprio. Sem tools, nenhuma manipulação direta do SO
-                               é possível — arquivos, permissões, processos, etc.
-    --permission-mode plan   → Modo read-only: impede qualquer escrita direta no
-                               sistema operacional. Combinado com --tools "" garante
-                               isolamento total. Nenhuma confirmação é solicitada —
-                               o modelo processa e responde sem interrupções.
+    -p (--print)           → Modo não-interativo, sem confirmações, saída direta
+    --tools ""             → Desabilita TODAS as ferramentas internas do Claude
+                             Code (Bash, Edit, Read, Write, etc.). A IA retorna
+                             apenas texto — toda execução real passa pelas Tools
+                             do AI-Dev (ShellTool, FileTool, etc.) com sandboxing
+                             próprio. Sem tools, nenhuma manipulação direta do SO
+                             é possível — arquivos, permissões, processos, etc.
+    --permission-mode plan → Modo read-only: impede qualquer escrita direta no
+                             sistema operacional. Combinado com --tools "" garante
+                             isolamento total. Nenhuma confirmação é solicitada —
+                             o modelo processa e responde sem interrupções.
     """
     try:
         cmd_parts = [
             "claude", "-p",
-            "--model", CLAUDE_MODEL,
-            "--fallback-model", CLAUDE_ADVISOR,
             "--tools", "",
             "--permission-mode", "plan",
         ]
@@ -67,11 +57,11 @@ def _try_claude(prompt, session_id=None):
 
 
 def run_claude(prompt, session_id=None):
-    """Executa o Claude com modelo fixo (claude-sonnet-4-6) e advisor (claude-opus-4-6)."""
+    """Executa o Claude em modo auto (modelo selecionado pelo Claude Code)."""
     text, ok = _try_claude(prompt, session_id)
     if ok:
-        return text, session_id, CLAUDE_MODEL
-    return f"Erro na geração de resposta pelo Claude: {text}", session_id, CLAUDE_MODEL
+        return text, session_id, "auto"
+    return f"Erro na geração de resposta pelo Claude: {text}", session_id, "auto"
 
 
 # --- ENDPOINTS API ---
@@ -131,5 +121,5 @@ if __name__ == '__main__':
         res, used_sid, used_model = run_claude(prompt, sid)
         print(f"ID: {used_sid}\nModel: {used_model}\n---\n{res}")
     else:
-        print(f"Proxy Claude Ativo — Modelo: {CLAUDE_MODEL} | Advisor: {CLAUDE_ADVISOR} | Modo: plan (read-only) | Porta: 8002")
+        print("Proxy Claude Ativo — Modelo: auto | Modo: plan (read-only) | Porta: 8002")
         app.run(port=8002, host='0.0.0.0', threaded=True)
