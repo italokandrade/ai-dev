@@ -180,8 +180,7 @@ class ProjectResource extends Resource
                                             ->send();
                                     })
                             ),
-                    ])
-                    ->visibleOn('create'),
+                    ]),
 
                 Section::make('Senha do Banco de Dados')
                     ->description('Senha para o usuário PostgreSQL que será criado para este projeto.')
