@@ -102,9 +102,52 @@ class ProjectResource extends Resource
                                     ->form([
                                         Forms\Components\Textarea::make('suggested_description')
                                             ->label('Sugestão da IA')
-                                            ->helperText('Você pode editar esta sugestão antes de aceitar.')
+                                            ->helperText('Você pode editar esta sugestão livremente.')
                                             ->rows(8)
                                             ->required(),
+
+                                        Forms\Components\TextInput::make('refinement_query')
+                                            ->label('O que deseja adicionar ou modificar?')
+                                            ->placeholder('Ex: Adicione um módulo de chat, ou mude o tom para mais formal...')
+                                            ->helperText('Digite suas alterações e clique no botão circular ao lado para atualizar.')
+                                            ->suffixAction(
+                                                \Filament\Actions\Action::make('applyRefinement')
+                                                    ->icon('heroicon-o-arrow-path')
+                                                    ->action(function (\Filament\Schemas\Components\Utilities\Set $set, \Filament\Schemas\Components\Utilities\Get $get) {
+                                                        $query = $get('refinement_query');
+                                                        $currentText = $get('suggested_description');
+
+                                                        if (blank($query)) {
+                                                            Notification::make()
+                                                                ->title('Informe o que deseja alterar')
+                                                                ->warning()
+                                                                ->send();
+                                                            return;
+                                                        }
+
+                                                        try {
+                                                            $refined = \App\Ai\Agents\RefineDescriptionAgent::make()
+                                                                ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n" . 
+                                                                        $currentText . 
+                                                                        "\n\nInstrução de modificação do usuário:\n" . 
+                                                                        $query);
+                                                            
+                                                            $set('suggested_description', (string) $refined);
+                                                            $set('refinement_query', ''); // Limpa o campo de entrada
+                                                            
+                                                            Notification::make()
+                                                                ->title('Sugestão atualizada')
+                                                                ->success()
+                                                                ->send();
+                                                        } catch (\Exception $e) {
+                                                            Notification::make()
+                                                                ->title('Erro ao processar alteração')
+                                                                ->body($e->getMessage())
+                                                                ->danger()
+                                                                ->send();
+                                                        }
+                                                    })
+                                            ),
                                     ])
                                     ->mountUsing(function (\Filament\Schemas\Schema $form, Forms\Components\Textarea $component) {
                                         $state = $component->getState();
