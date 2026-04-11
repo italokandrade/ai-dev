@@ -31,23 +31,14 @@ def discover_latest_session_id():
 def _try_gemini(prompt, session_id=None):
     """Executa o Gemini e retorna (texto, sucesso).
 
-    Flags de segurança obrigatórias:
-    --approval-mode plan  → Modo read-only: o modelo SÓ retorna texto/plano.
-                            Não tem capacidade de executar comandos, modificar
-                            arquivos, alterar permissões ou qualquer outra ação
-                            direta no SO. Toda execução real passa pelas Tools do
-                            AI-Dev (ShellTool, FileTool, etc.) com sandboxing próprio.
-                            Como nada pode ser executado, nenhuma confirmação é
-                            solicitada — o modelo processa e responde sem interrupções.
-    -m GEMINI_MODEL       → Modelo fixo: gemini-3.1-pro-preview
-    -r session / latest   → Retoma a conversa do projeto para manter contexto
-    -p prompt             → Modo headless (não-interativo)
+    -m GEMINI_MODEL → Modelo fixo: gemini-3.1-pro-preview
+    -r session      → Retoma a conversa do projeto para manter contexto
+    -p prompt       → Modo headless (não-interativo, sem confirmações)
     """
     try:
         resume_arg = session_id if session_id else "latest"
         cmd_parts = [
             "gemini",
-            "--approval-mode", "plan",
             "-m", GEMINI_MODEL,
             "-r", resume_arg,
             "-p", prompt,

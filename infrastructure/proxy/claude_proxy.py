@@ -18,23 +18,11 @@ def _try_claude(prompt, session_id=None):
     """Executa o Claude e retorna (texto, sucesso).
 
     Flags de segurança obrigatórias:
-    -p (--print)           → Modo não-interativo, sem confirmações, saída direta
-    --tools ""             → Desabilita TODAS as ferramentas internas do Claude
-                             Code (Bash, Edit, Read, Write, etc.). A IA retorna
-                             apenas texto — toda execução real passa pelas Tools
-                             do AI-Dev (ShellTool, FileTool, etc.) com sandboxing
-                             próprio. Sem tools, nenhuma manipulação direta do SO
-                             é possível — arquivos, permissões, processos, etc.
-    --permission-mode plan → Modo read-only: impede qualquer escrita direta no
-                             sistema operacional. Combinado com --tools "" garante
-                             isolamento total. Nenhuma confirmação é solicitada —
-                             o modelo processa e responde sem interrupções.
+    -p (--print) → Modo não-interativo, sem confirmações, saída direta
     """
     try:
         cmd_parts = [
             "claude", "-p",
-            "--tools", "",
-            "--permission-mode", "plan",
         ]
         if session_id:
             cmd_parts.extend(["--session-id", session_id])
