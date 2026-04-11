@@ -12,6 +12,8 @@ use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectSpecification;
 use Filament\Forms;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Infolists;
 use Filament\Notifications\Notification;
@@ -38,14 +40,14 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Forms\Components\Section::make('Dados do Projeto')
+                Section::make('Dados do Projeto')
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->label('Nome do Projeto')
                             ->helperText('Nome técnico (sem espaços, lowercase). Ex: portal-italoandrde, meu-saas')
                             ->required()
                             ->maxLength(255)
-                            ->unique(ignoreRecord: true)
+                            ->scopedUnique(ignoreRecord: true)
                             ->rules(['regex:/^[a-z0-9\-_]+$/'])
                             ->validationMessages([
                                 'regex' => 'Apenas letras minúsculas, números, hífens e underscores.',
@@ -56,7 +58,7 @@ class ProjectResource extends Resource
                             ->placeholder('usuario/repositorio')
                             ->maxLength(255),
 
-                        Forms\Components\Grid::make(2)
+                        Grid::make(2)
                             ->schema([
                                 Forms\Components\Select::make('default_provider')
                                     ->label('Provider Padrão')
@@ -79,7 +81,7 @@ class ProjectResource extends Resource
                     ])
                     ->columns(1),
 
-                Forms\Components\Section::make('Descrição do Sistema')
+                Section::make('Descrição do Sistema')
                     ->description('Descreva o que este sistema deve fazer. A IA irá reescrever sua descrição em uma especificação técnica completa e sugerir os módulos do sistema.')
                     ->schema([
                         Forms\Components\Textarea::make('user_description')
@@ -92,7 +94,7 @@ class ProjectResource extends Resource
                     ])
                     ->visibleOn('create'),
 
-                Forms\Components\Section::make('Senha do Banco de Dados')
+                Section::make('Senha do Banco de Dados')
                     ->description('Senha para o usuário PostgreSQL que será criado para este projeto.')
                     ->schema([
                         Forms\Components\TextInput::make('db_password')
@@ -158,8 +160,8 @@ class ProjectResource extends Resource
                     ->options(ProjectStatus::class),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
             ])
             ->bulkActions([]);
     }
@@ -168,9 +170,9 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Infolists\Components\Section::make('Visão Geral')
+                Section::make('Visão Geral')
                     ->schema([
-                        Infolists\Components\Grid::make(3)
+                        Grid::make(3)
                             ->schema([
                                 Infolists\Components\TextEntry::make('name')
                                     ->label('Projeto'),
@@ -192,7 +194,7 @@ class ProjectResource extends Resource
                             ->placeholder('Não configurado'),
                     ]),
 
-                Infolists\Components\Section::make('Especificação Técnica')
+                Section::make('Especificação Técnica')
                     ->schema([
                         Infolists\Components\TextEntry::make('currentSpecification.user_description')
                             ->label('Descrição do Usuário')
@@ -218,11 +220,11 @@ class ProjectResource extends Resource
                     ])
                     ->collapsible(),
 
-                Infolists\Components\Section::make('Roadmap de Módulos')
+                Section::make('Roadmap de Módulos')
                     ->schema([
                         Infolists\Components\RepeatableEntry::make('modules')
                             ->schema([
-                                Infolists\Components\Grid::make(4)
+                                Grid::make(4)
                                     ->schema([
                                         Infolists\Components\TextEntry::make('name')
                                             ->label('Módulo')
