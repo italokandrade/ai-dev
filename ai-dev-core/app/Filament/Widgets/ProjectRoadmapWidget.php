@@ -61,7 +61,7 @@ class ProjectRoadmapWidget extends BaseWidget
                     ->sortable(),
             ])
             ->actions([
-                Tables\Actions\Action::make('view')
+                \Filament\Actions\Action::make('view')
                     ->label('Ver')
                     ->icon('heroicon-o-eye')
                     ->url(fn (Project $record) => route('filament.admin.resources.projects.view', $record)),

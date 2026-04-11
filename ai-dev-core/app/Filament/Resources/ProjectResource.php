@@ -90,7 +90,53 @@ class ProjectResource extends Resource
                             ->placeholder('Ex: Quero um site profissional com portfolio dos meus projetos, blog pra postar artigos técnicos, área de admin pra gerenciar tudo, formulário de contato e que seja bonito com animações modernas. Precisa ser rápido e ter SEO bom.')
                             ->rows(6)
                             ->required()
-                            ->columnSpanFull(),
+                            ->columnSpanFull()
+                            ->hintAction(
+                                \Filament\Actions\Action::make('refineWithAi')
+                                    ->label('Refinar com IA')
+                                    ->icon('heroicon-o-sparkles')
+                                    ->color('primary')
+                                    ->modalHeading('Refinar Descrição com IA')
+                                    ->modalDescription('A IA irá reescrever sua descrição seguindo os padrões do Laravel 13 e TALL Stack.')
+                                    ->modalSubmitActionLabel('Usar esta sugestão')
+                                    ->form([
+                                        Forms\Components\Textarea::make('suggested_description')
+                                            ->label('Sugestão da IA')
+                                            ->helperText('Você pode editar esta sugestão antes de aceitar.')
+                                            ->rows(8)
+                                            ->required(),
+                                    ])
+                                    ->mountUsing(function (\Filament\Schemas\Schema $form, Forms\Components\Textarea $component) {
+                                        $state = $component->getState();
+                                        
+                                        if (blank($state)) {
+                                            return;
+                                        }
+
+                                        try {
+                                            $refined = \App\Ai\Agents\RefineDescriptionAgent::make()
+                                                ->prompt("Refine a seguinte descrição de projeto: \n\n" . $state);
+                                            
+                                            $form->fill([
+                                                'suggested_description' => (string) $refined,
+                                            ]);
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Erro ao refinar com IA')
+                                                ->body($e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                                    ->action(function (array $data, Forms\Components\Textarea $component) {
+                                        $component->state($data['suggested_description']);
+                                        
+                                        Notification::make()
+                                            ->title('Descrição atualizada')
+                                            ->success()
+                                            ->send();
+                                    })
+                            ),
                     ])
                     ->visibleOn('create'),
 

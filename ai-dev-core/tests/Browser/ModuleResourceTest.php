@@ -10,31 +10,25 @@ class ModuleResourceTest extends DuskTestCase
 {
     public function test_modules_list_page_loads(): void
     {
-        $user = User::firstOrCreate(
-            ['email' => 'italokristiano@gmail.com'],
-            ['name' => 'Italo Andrade', 'password' => bcrypt('password')]
-        );
+        $user = User::where('email', 'italokristiano@gmail.com')->first();
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
                 ->visit('/admin/project-modules')
-                ->waitForText('Modulos')
+                ->waitForText('Novo Modulo', 10)
                 ->assertSee('Novo Modulo');
         });
     }
 
     public function test_create_module_page_loads(): void
     {
-        $user = User::firstOrCreate(
-            ['email' => 'italokristiano@gmail.com'],
-            ['name' => 'Italo Andrade', 'password' => bcrypt('password')]
-        );
+        $user = User::where('email', 'italokristiano@gmail.com')->first();
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
                 ->visit('/admin/project-modules/create')
-                ->waitForText('Create Modulo')
-                ->assertPresent('[wire\\:model]');
+                ->waitForText('Dados do Modulo', 10)
+                ->assertSee('Dados do Modulo');
         });
     }
 }

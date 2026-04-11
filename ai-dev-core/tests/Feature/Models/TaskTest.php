@@ -3,6 +3,7 @@
 namespace Tests\Feature\Models;
 
 use App\Enums\TaskStatus;
+use App\Enums\Priority;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,7 +37,7 @@ class TaskTest extends TestCase
                 'knowledge_areas' => ['backend', 'filament'],
             ],
             'status' => 'pending',
-            'priority' => 70,
+            'priority' => Priority::High,
             'source' => 'manual',
         ]);
 
@@ -54,7 +55,7 @@ class TaskTest extends TestCase
             'title' => 'Test transition',
             'prd_payload' => ['objective' => 'test'],
             'status' => 'pending',
-            'priority' => 50,
+            'priority' => Priority::Medium,
             'source' => 'manual',
         ]);
 
@@ -71,7 +72,7 @@ class TaskTest extends TestCase
             'title' => 'Test invalid transition',
             'prd_payload' => ['objective' => 'test'],
             'status' => 'pending',
-            'priority' => 50,
+            'priority' => Priority::Medium,
             'source' => 'manual',
         ]);
 
@@ -90,7 +91,7 @@ class TaskTest extends TestCase
             'title' => 'Test retry',
             'prd_payload' => ['objective' => 'test'],
             'status' => 'pending',
-            'priority' => 50,
+            'priority' => Priority::Medium,
             'source' => 'manual',
             'retry_count' => 2,
             'max_retries' => 3,

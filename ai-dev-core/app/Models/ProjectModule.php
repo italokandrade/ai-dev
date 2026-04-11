@@ -14,15 +14,13 @@ class ProjectModule extends Model
 
     protected $fillable = [
         'project_id',
+        'parent_id',
         'name',
         'description',
         'status',
         'priority',
-        'order',
         'dependencies',
-        'acceptance_criteria',
         'progress_percentage',
-        'estimated_tasks',
         'started_at',
         'completed_at',
     ];
@@ -31,12 +29,9 @@ class ProjectModule extends Model
     {
         return [
             'status' => ModuleStatus::class,
+            'priority' => \App\Enums\Priority::class,
             'dependencies' => 'array',
-            'acceptance_criteria' => 'array',
-            'priority' => 'integer',
-            'order' => 'integer',
-            'progress_percentage' => 'integer',
-            'estimated_tasks' => 'integer',
+            'progress_percentage' => 'float',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
@@ -45,6 +40,16 @@ class ProjectModule extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('created_at');
     }
 
     public function tasks(): HasMany
@@ -75,7 +80,7 @@ class ProjectModule extends Model
         }
 
         $completed = $this->completedTasks()->count();
-        $percentage = (int) round(($completed / $total) * 100);
+        $percentage = round(($completed / $total) * 100, 1);
 
         $this->update(['progress_percentage' => $percentage]);
 

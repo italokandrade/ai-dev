@@ -7,6 +7,9 @@ use App\Filament\Resources\ProjectModuleResource\Pages;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use Filament\Forms;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -31,14 +34,26 @@ class ProjectModuleResource extends Resource
     {
         return $schema
             ->schema([
-                Forms\Components\Section::make('Dados do Módulo')
+                Section::make('Dados do Módulo')
                     ->schema([
                         Forms\Components\Select::make('project_id')
                             ->label('Projeto')
                             ->relationship('project', 'name')
                             ->required()
                             ->searchable()
-                            ->preload(),
+                            ->preload()
+                            ->live(),
+
+                        Forms\Components\Select::make('parent_id')
+                            ->label('Módulo Pai')
+                            ->placeholder('Nenhum (Módulo Raiz)')
+                            ->options(fn (Get $get, ?ProjectModule $record) => ProjectModule::query()
+                                ->where('project_id', $get('project_id'))
+                                ->when($record, fn ($q, $rec) => $q->where('id', '!=', $rec->id))
+                                ->pluck('name', 'id'))
+                            ->searchable()
+                            ->preload()
+                            ->visible(fn (Get $get) => filled($get('project_id'))),
 
                         Forms\Components\TextInput::make('name')
                             ->label('Nome do Módulo')
@@ -52,7 +67,7 @@ class ProjectModuleResource extends Resource
                             ->required()
                             ->rows(3),
 
-                        Forms\Components\Grid::make(3)
+                        Grid::make(3)
                             ->schema([
                                 Forms\Components\Select::make('status')
                                     ->label('Status')
@@ -60,46 +75,34 @@ class ProjectModuleResource extends Resource
                                     ->default('planned')
                                     ->required(),
 
-                                Forms\Components\TextInput::make('priority')
+                                Forms\Components\Select::make('priority')
                                     ->label('Prioridade')
-                                    ->numeric()
-                                    ->minValue(1)
-                                    ->maxValue(100)
-                                    ->default(50),
-
-                                Forms\Components\TextInput::make('order')
-                                    ->label('Ordem')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->default(0),
+                                    ->options(\App\Enums\Priority::class)
+                                    ->default(\App\Enums\Priority::Normal)
+                                    ->required(),
                             ]),
-
-                        Forms\Components\TextInput::make('estimated_tasks')
-                            ->label('Tasks Estimadas')
-                            ->numeric()
-                            ->placeholder('Estimativa gerada pela IA'),
                     ]),
 
-                Forms\Components\Section::make('Critérios de Aceite')
-                    ->description('Lista de critérios objetivos que definem quando este módulo está pronto.')
-                    ->schema([
-                        Forms\Components\TagsInput::make('acceptance_criteria')
-                            ->label('')
-                            ->placeholder('Adicione um critério e pressione Enter')
-                            ->helperText('Cada critério deve ser mensurável. Ex: "CRUD de posts com paginação funcionando"'),
-                    ]),
-
-                Forms\Components\Section::make('Dependências')
+                Section::make('Dependências')
                     ->description('Módulos que precisam estar concluídos antes deste.')
                     ->schema([
                         Forms\Components\Select::make('dependencies')
                             ->label('Depende de')
                             ->multiple()
-                            ->options(fn (Forms\Get $get) => ProjectModule::query()
+                            ->options(fn (Get $get, ?ProjectModule $record) => ProjectModule::query()
                                 ->where('project_id', $get('project_id'))
-                                ->when($get('id'), fn ($q, $id) => $q->where('id', '!=', $id))
+                                ->where(function ($query) use ($record) {
+                                    $query->where('status', ModuleStatus::Completed);
+                                    
+                                    // Manter as dependências já selecionadas na lista, mesmo que não estejam concluídas
+                                    if ($record && !empty($record->dependencies)) {
+                                        $query->orWhereIn('id', $record->dependencies);
+                                    }
+                                })
+                                ->when($record, fn ($q, $rec) => $q->where('id', '!=', $rec->id))
                                 ->pluck('name', 'id'))
-                            ->searchable(),
+                            ->searchable()
+                            ->preload(),
                     ])
                     ->collapsible(),
             ]);
@@ -109,11 +112,6 @@ class ProjectModuleResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('order')
-                    ->label('#')
-                    ->sortable()
-                    ->width('50px'),
-
                 Tables\Columns\TextColumn::make('project.name')
                     ->label('Projeto')
                     ->searchable()
@@ -123,10 +121,16 @@ class ProjectModuleResource extends Resource
                     ->label('Módulo')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->description(fn (ProjectModule $record) => $record->parent?->name),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
+                    ->badge()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('priority')
+                    ->label('Prioridade')
                     ->badge()
                     ->sortable(),
 
@@ -150,13 +154,8 @@ class ProjectModuleResource extends Resource
                     ->label('Concluídas')
                     ->counts('completedTasks')
                     ->sortable(),
-
-                Tables\Columns\TextColumn::make('priority')
-                    ->label('Prioridade')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('order')
+            ->defaultSort('created_at', 'desc')
             ->groups([
                 Tables\Grouping\Group::make('project.name')
                     ->label('Projeto')
@@ -167,14 +166,20 @@ class ProjectModuleResource extends Resource
                 Tables\Filters\SelectFilter::make('status')
                     ->options(ModuleStatus::class),
 
+                Tables\Filters\SelectFilter::make('parent_id')
+                    ->label('Módulo Pai')
+                    ->relationship('parent', 'name')
+                    ->searchable()
+                    ->preload(),
+
                 Tables\Filters\SelectFilter::make('project_id')
                     ->label('Projeto')
                     ->relationship('project', 'name'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                \Filament\Actions\EditAction::make(),
 
-                Tables\Actions\Action::make('recalculate')
+                \Filament\Actions\Action::make('recalculate')
                     ->label('Recalcular')
                     ->icon('heroicon-o-calculator')
                     ->color('gray')
@@ -188,7 +193,7 @@ class ProjectModuleResource extends Resource
                             ->send();
                     }),
 
-                Tables\Actions\Action::make('create_task')
+                \Filament\Actions\Action::make('create_task')
                     ->label('Nova Task')
                     ->icon('heroicon-o-plus')
                     ->color('primary')

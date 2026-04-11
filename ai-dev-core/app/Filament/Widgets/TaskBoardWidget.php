@@ -23,7 +23,6 @@ class TaskBoardWidget extends BaseWidget
                 Task::query()
                     ->with(['project', 'module'])
                     ->whereNotIn('status', [TaskStatus::Completed, TaskStatus::Failed])
-                    ->orderByDesc('priority')
                     ->orderByDesc('created_at')
             )
             ->columns([
@@ -48,12 +47,8 @@ class TaskBoardWidget extends BaseWidget
 
                 Tables\Columns\TextColumn::make('priority')
                     ->label('Prioridade')
-                    ->sortable()
-                    ->color(fn ($state) => match (true) {
-                        $state >= 80 => 'danger',
-                        $state >= 50 => 'warning',
-                        default => 'gray',
-                    }),
+                    ->badge()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('assignedAgent.display_name')
                     ->label('Agente')
@@ -65,7 +60,7 @@ class TaskBoardWidget extends BaseWidget
                     ->sortable(),
             ])
             ->actions([
-                Tables\Actions\Action::make('view')
+                \Filament\Actions\Action::make('view')
                     ->label('Ver')
                     ->icon('heroicon-o-eye')
                     ->url(fn (Task $record) => route('filament.admin.resources.tasks.view', $record)),

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Models;
 
 use App\Enums\ModuleStatus;
+use App\Enums\Priority;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\Task;
@@ -32,13 +33,12 @@ class ProjectModuleTest extends TestCase
             'name' => 'Authentication',
             'description' => 'User authentication module',
             'status' => 'planned',
-            'priority' => 90,
-            'order' => 1,
+            'priority' => Priority::High,
         ]);
 
         $this->assertInstanceOf(ProjectModule::class, $module);
         $this->assertEquals(ModuleStatus::Planned, $module->status);
-        $this->assertEquals(90, $module->priority);
+        $this->assertEquals(Priority::High, $module->priority);
     }
 
     public function test_module_recalculates_progress_from_tasks(): void
@@ -58,7 +58,7 @@ class ProjectModuleTest extends TestCase
             'title' => 'Task 1',
             'prd_payload' => ['objective' => 'test'],
             'status' => 'completed',
-            'priority' => 50,
+            'priority' => Priority::Medium,
             'source' => 'manual',
         ]);
 
@@ -68,7 +68,7 @@ class ProjectModuleTest extends TestCase
             'title' => 'Task 2',
             'prd_payload' => ['objective' => 'test'],
             'status' => 'pending',
-            'priority' => 50,
+            'priority' => Priority::Medium,
             'source' => 'manual',
         ]);
 

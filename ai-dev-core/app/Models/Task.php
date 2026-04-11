@@ -15,6 +15,7 @@ class Task extends Model
 
     protected $fillable = [
         'project_id',
+        'module_id',
         'title',
         'prd_payload',
         'status',
@@ -39,7 +40,7 @@ class Task extends Model
             'status' => TaskStatus::class,
             'source' => TaskSource::class,
             'prd_payload' => 'array',
-            'priority' => 'integer',
+            'priority' => \App\Enums\Priority::class,
             'retry_count' => 'integer',
             'max_retries' => 'integer',
             'is_redo' => 'boolean',
@@ -51,6 +52,11 @@ class Task extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function module(): BelongsTo
+    {
+        return $this->belongsTo(ProjectModule::class, 'module_id');
     }
 
     public function originalTask(): BelongsTo

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\AgentConfigResource\Pages;
 use App\Filament\Resources\AgentConfigResource;
 use Filament\Actions;
 use Filament\Infolists;
+use Filament\Schemas\Components\Section;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Schema;
 
@@ -16,7 +17,7 @@ class ViewAgentConfig extends ViewRecord
     {
         return $schema
             ->schema([
-                Infolists\Components\Section::make('Identificacao')
+                Section::make('Identificacao')
                     ->schema([
                         Infolists\Components\TextEntry::make('id')
                             ->label('ID')
@@ -31,7 +32,7 @@ class ViewAgentConfig extends ViewRecord
                     ])
                     ->columns(3),
 
-                Infolists\Components\Section::make('Modelo de IA')
+                Section::make('Modelo de IA')
                     ->schema([
                         Infolists\Components\TextEntry::make('provider')
                             ->label('Provider')
@@ -55,7 +56,7 @@ class ViewAgentConfig extends ViewRecord
                     ])
                     ->columns(3),
 
-                Infolists\Components\Section::make('Funcao')
+                Section::make('Funcao')
                     ->schema([
                         Infolists\Components\TextEntry::make('role_description')
                             ->label('Descricao do Papel')

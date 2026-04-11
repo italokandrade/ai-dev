@@ -40,7 +40,7 @@ class Project extends Model
 
     public function modules(): HasMany
     {
-        return $this->hasMany(ProjectModule::class)->orderBy('order');
+        return $this->hasMany(ProjectModule::class);
     }
 
     public function specifications(): HasMany

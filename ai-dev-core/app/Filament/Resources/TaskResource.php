@@ -8,6 +8,10 @@ use App\Filament\Resources\TaskResource\Pages;
 use App\Models\ProjectModule;
 use App\Models\Task;
 use Filament\Forms;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -31,7 +35,7 @@ class TaskResource extends Resource
     {
         return $schema
             ->schema([
-                Forms\Components\Section::make('Vinculação')
+                Section::make('Vinculação')
                     ->schema([
                         Forms\Components\Select::make('project_id')
                             ->label('Projeto')
@@ -41,13 +45,12 @@ class TaskResource extends Resource
                             ->preload()
                             ->live()
                             ->default(request()->query('project_id'))
-                            ->afterStateUpdated(fn (Forms\Set $set) => $set('module_id', null)),
+                            ->afterStateUpdated(fn (Set $set) => $set('module_id', null)),
 
                         Forms\Components\Select::make('module_id')
                             ->label('Módulo')
-                            ->options(fn (Forms\Get $get) => ProjectModule::query()
+                            ->options(fn (Get $get) => ProjectModule::query()
                                 ->where('project_id', $get('project_id'))
-                                ->orderBy('order')
                                 ->pluck('name', 'id'))
                             ->searchable()
                             ->preload()
@@ -56,7 +59,7 @@ class TaskResource extends Resource
                     ])
                     ->columns(2),
 
-                Forms\Components\Section::make('Definição da Task')
+                Section::make('Definição da Task')
                     ->schema([
                         Forms\Components\TextInput::make('title')
                             ->label('Título')
@@ -100,19 +103,14 @@ class TaskResource extends Resource
                             ->columns(3),
                     ]),
 
-                Forms\Components\Section::make('Configuração')
+                Section::make('Configuração')
                     ->schema([
-                        Forms\Components\Grid::make(3)
+                        Grid::make(3)
                             ->schema([
                                 Forms\Components\Select::make('priority')
                                     ->label('Prioridade')
-                                    ->options([
-                                        90 => 'Crítica (90)',
-                                        70 => 'Alta (70)',
-                                        50 => 'Média (50)',
-                                        30 => 'Baixa (30)',
-                                    ])
-                                    ->default(50)
+                                    ->options(\App\Enums\Priority::class)
+                                    ->default(\App\Enums\Priority::Normal)
                                     ->required(),
 
                                 Forms\Components\Select::make('source')
@@ -164,12 +162,8 @@ class TaskResource extends Resource
 
                 Tables\Columns\TextColumn::make('priority')
                     ->label('Prioridade')
-                    ->sortable()
-                    ->color(fn ($state) => match (true) {
-                        $state >= 80 => 'danger',
-                        $state >= 50 => 'warning',
-                        default => 'gray',
-                    }),
+                    ->badge()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('source')
                     ->label('Origem')
@@ -218,8 +212,8 @@ class TaskResource extends Resource
                     ->options(TaskSource::class),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
             ])
             ->bulkActions([]);
     }

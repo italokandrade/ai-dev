@@ -5,6 +5,7 @@ namespace App\Filament\Resources\TaskResource\Pages;
 use App\Filament\Resources\TaskResource;
 use Filament\Actions;
 use Filament\Infolists;
+use Filament\Schemas\Components\Section;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Schema;
 
@@ -16,7 +17,7 @@ class ViewTask extends ViewRecord
     {
         return $schema
             ->schema([
-                Infolists\Components\Section::make('Visao Geral')
+                Section::make('Visao Geral')
                     ->schema([
                         Infolists\Components\TextEntry::make('title')
                             ->label('Titulo')
@@ -46,7 +47,7 @@ class ViewTask extends ViewRecord
                     ])
                     ->columns(3),
 
-                Infolists\Components\Section::make('PRD')
+                Section::make('PRD')
                     ->schema([
                         Infolists\Components\TextEntry::make('prd_payload.objective')
                             ->label('Objetivo')
@@ -71,7 +72,7 @@ class ViewTask extends ViewRecord
                             ->columnSpanFull(),
                     ]),
 
-                Infolists\Components\Section::make('Execucao')
+                Section::make('Execucao')
                     ->schema([
                         Infolists\Components\TextEntry::make('git_branch')
                             ->label('Branch')
@@ -101,7 +102,7 @@ class ViewTask extends ViewRecord
                     ])
                     ->columns(3),
 
-                Infolists\Components\Section::make('Log de Erros')
+                Section::make('Log de Erros')
                     ->schema([
                         Infolists\Components\TextEntry::make('error_log')
                             ->label('')

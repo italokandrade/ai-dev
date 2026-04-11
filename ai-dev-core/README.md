@@ -1,58 +1,41 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# AI-Dev Core (Painel de Gestão)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Este é o coração do ecossistema AI-Dev, desenvolvido em **Laravel 13** com **Filament v5**. Ele atua como o cérebro central e interface de comando para a orquestração de agentes.
 
-## About Laravel
+## 🚀 Tecnologias
+- **PHP 8.4**
+- **Filament v5** (Web UI)
+- **Laravel AI SDK** (Integração com LLMs)
+- **PostgreSQL 16** (Estado Central)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🛠️ Componentes Principais (Filament Resources)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### [Módulos (ProjectModuleResource)](app/Filament/Resources/ProjectModuleResource.php)
+Gerencia a decomposição dos projetos em partes menores.
+- **Hierarquia:** Suporta módulos pai e filhos para refinamento de contexto.
+- **Dependências:** Filtro inteligente que permite apenas dependências de módulos já concluídos.
+- **Prioridade:** Classificação semântica (Padrão, Média, Alta) em vez de numérica.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### [Tasks (TaskResource)](app/Filament/Resources/TaskResource.php)
+Unidade fundamental de trabalho dos agentes.
+- **PRD Automático:** Armazena o payload JSON com objetivos e critérios de aceite.
+- **Máquina de Estados:** Controla o ciclo de vida da tarefa desde a pendência até o deploy.
 
-## Learning Laravel
+### [Agentes (AgentConfigResource)](app/Filament/Resources/AgentConfigResource.php)
+Configuração individual de cada especialista.
+- Definição de `system_prompt`, `model` e `temperature`.
+- Limites de retentativas e custos por execução.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### [Orçamentos (ProjectQuotationResource)](app/Filament/Resources/ProjectQuotationResource.php)
+Ferramenta de cálculo de viabilidade econômica.
+- Compara custo humano (Senior/h) vs. custo AI-Dev.
+- Rastreia consumo real de tokens via `agent_executions`.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 📂 Estrutura de Pastas Relevante
+- `app/Filament/Resources/`: Definições da interface administrativa.
+- `app/Models/`: Modelagem do banco de dados com lógica de transições.
+- `app/Enums/`: Enums estritos para status e prioridades.
+- `database/migrations/`: Evolução do schema (incluindo simplificação de prioridade e hierarquia).
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
-```
-
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+---
+Para documentação de arquitetura global e ferramentas, consulte o [README da raiz](../README.md).

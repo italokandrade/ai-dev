@@ -12,7 +12,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->string('name', 255);
             $table->string('github_repo', 255)->nullable();
-            $table->string('local_path', 500);
+            $table->string('local_path', 500)->nullable();
             $table->string('gemini_session_id')->nullable();
             $table->string('claude_session_id')->nullable();
             $table->string('default_provider', 50)->default('gemini');

@@ -7,6 +7,10 @@ use App\Enums\KnowledgeArea;
 use App\Filament\Resources\AgentConfigResource\Pages;
 use App\Models\AgentConfig;
 use Filament\Forms;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
@@ -32,7 +36,7 @@ class AgentConfigResource extends Resource
     {
         return $schema
             ->schema([
-                Forms\Components\Section::make('Identificacao')
+                Section::make('Identificacao')
                     ->schema([
                         Forms\Components\TextInput::make('id')
                             ->label('ID (slug)')
@@ -56,14 +60,14 @@ class AgentConfigResource extends Resource
                     ])
                     ->columns(3),
 
-                Forms\Components\Section::make('Modelo de IA')
+                Section::make('Modelo de IA')
                     ->schema([
                         Forms\Components\Select::make('provider')
                             ->label('Provider')
                             ->options(AgentProvider::class)
                             ->required()
                             ->live()
-                            ->afterStateUpdated(function (Forms\Set $set, ?string $state) {
+                            ->afterStateUpdated(function (Set $set, ?string $state) {
                                 if ($state) {
                                     $provider = AgentProvider::from($state);
                                     $set('model', $provider->defaultModel());
@@ -81,7 +85,7 @@ class AgentConfigResource extends Resource
                             ->maxLength(100)
                             ->helperText('Nome da variavel .env que contem a API key.'),
 
-                        Forms\Components\Grid::make(3)
+                        Grid::make(3)
                             ->schema([
                                 Forms\Components\TextInput::make('temperature')
                                     ->label('Temperature')
@@ -107,7 +111,7 @@ class AgentConfigResource extends Resource
                             ]),
                     ]),
 
-                Forms\Components\Section::make('Funcao e Conhecimento')
+                Section::make('Funcao e Conhecimento')
                     ->schema([
                         Forms\Components\Textarea::make('role_description')
                             ->label('Descricao do Papel')
@@ -123,7 +127,7 @@ class AgentConfigResource extends Resource
 
                         Forms\Components\Select::make('fallback_agent_id')
                             ->label('Agente de Fallback')
-                            ->options(fn (Forms\Get $get) => AgentConfig::query()
+                            ->options(fn (Get $get) => AgentConfig::query()
                                 ->when($get('id'), fn ($q, $id) => $q->where('id', '!=', $id))
                                 ->where('is_active', true)
                                 ->pluck('display_name', 'id'))
@@ -202,8 +206,8 @@ class AgentConfigResource extends Resource
                     ->falseLabel('Inativos'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                \Filament\Actions\ViewAction::make(),
+                \Filament\Actions\EditAction::make(),
             ])
             ->bulkActions([]);
     }

@@ -36,8 +36,8 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
 │  ┌───────────────────────┐  ┌───────────────────────────────────┐   │
-│  │ ChromaDB/SQLite-Vec   │  │ Sentinel (Self-Healing Runtime)   │   │
-│  │ (Memória Vetorial)    │  │ (Exception Handler Customizado)   │   │
+│  │ pgvector (Embeddings  │  │ Sentinel (Self-Healing Runtime)   │   │
+│  │ + Semantic Search)    │  │ (Exception Handler Customizado)   │   │
 │  └───────────────────────┘  └───────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -311,7 +311,7 @@ Toda vez que o Sentinela detecta um erro e os agentes resolvem, a dupla (problem
 | `solution_diff` | Text | O diff exato do código que resolveu o problema |
 | `related_files` | JSON | Array de arquivos envolvidos (ex: `["/app/Models/User.php"]`) |
 | `tags` | JSON | Tags para busca (ex: `["eloquent", "relationship", "n+1"]`) |
-| `embedding_vector` | BLOB / Nullable | Vetor de embedding para busca semântica (gerado pelo ChromaDB/SQLite-Vec) |
+| `embedding` | vector(1536) / Nullable | Vetor de embedding para busca semântica via pgvector nativo no PostgreSQL |
 | `confidence_score` | Float (0.0 - 1.0) | O quão confiante estamos que esta solução é correta (baseado em se os testes passaram) |
 | `times_reused` | Int (default: 0) | Quantas vezes esta solução já foi reutilizada com sucesso |
 | `created_at` | Timestamp | Data de criação |
@@ -328,22 +328,26 @@ Toda vez que o Sentinela detecta um erro e os agentes resolvem, a dupla (problem
 
 ---
 
-**`session_history`** — Histórico comprimido de sessões para contexto infinito.
-Em vez de manter o chat inteiro na memória (que explode a janela de contexto), o sistema comprime periodicamente.
+**`agent_conversations` + `agent_conversation_messages`** — Conversas persistidas automaticamente pelo Laravel AI SDK.
 
-| Coluna | Tipo | Descrição |
+O Laravel 13 AI SDK gerencia automaticamente estas tabelas via o trait `RemembersConversations`. Substituem a antiga tabela `session_history` com compressão manual.
+
+| Tabela | Gerenciada por | Descrição |
 |---|---|---|
-| `id` | UUID / PK | Identificador único |
-| `project_id` | FK → `projects.id` | Projeto associado |
-| `task_id` | FK → `tasks.id` / Nullable | Task associada (se aplicável) |
-| `agent_id` | FK → `agents_config.id` | Qual agente gerou este histórico |
-| `session_id` | String | ID da sessão LLM |
-| `original_token_count` | Int | Quantos tokens o histórico original tinha |
-| `compressed_token_count` | Int | Quantos tokens tem após compressão |
-| `compression_ratio` | Float | Taxa de compressão (ex: 0.15 = comprimiu 85%) |
-| `compressed_summary` | Text | O resumo denso gerado pelo modelo local (Ollama) |
-| `full_history_path` | String / Nullable | Caminho para o histórico completo em disco (backup) |
-| `created_at` | Timestamp | Quando a compressão foi feita |
+| `agent_conversations` | SDK (`RemembersConversations`) | Registro de cada conversa por agente/usuário |
+| `agent_conversation_messages` | SDK (`RemembersConversations`) | Mensagens individuais (role + content) de cada conversa |
+
+**Uso no código:**
+```php
+// Iniciar conversa
+$response = BackendSpecialist::make()->forUser($user)->prompt('Crie o Model Post');
+$conversationId = $response->conversationId;
+
+// Continuar conversa (contexto automático)
+$response = BackendSpecialist::make()->continue($conversationId, as: $user)->prompt('Agora adicione soft deletes');
+```
+
+**Compressão opcional:** Para sessões longas, o `ContextCompressionJob` pode comprimir o histórico via Ollama (modelo local) e reiniciar a conversa com o resumo comprimido como instrução adicional.
 
 ---
 
@@ -386,9 +390,9 @@ context_library (standalone — padrões globais, não vinculados a projeto)
 
 Este é o detalhe técnico mais crítico do sistema: **como exatamente diferentes agentes se comunicam entre si, trocam resultados e se coordenam?**
 
-### 3.1. Modelo Técnico: Laravel Jobs + Redis Queues + Events
+### 3.1. Modelo Técnico: Agent Classes + Laravel Queue + Redis + Events
 
-A comunicação **NÃO** é feita por chamada HTTP entre serviços, nem por invocação direta de classe. Cada agente é implementado como um **Laravel Job** que roda numa **fila Redis nomeada**, gerenciado pelo **Laravel Horizon + Supervisor**.
+A comunicação **NÃO** é feita por chamada HTTP entre serviços, nem por invocação direta de classe. Cada agente é implementado como uma **Agent class** do Laravel AI SDK (`implements Agent`) que pode ser despachada via **Laravel Queue + Redis**, gerenciado pelo **Laravel Horizon + Supervisor**.
 
 ```text
                     ┌────────────────────────────┐
@@ -468,57 +472,87 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 
 **Como escalar os subagentes?** Basta alterar o `processes` no config do Horizon para a fila `executors`. Em um servidor com mais RAM, pode-se subir para 5 ou 10 workers paralelos. O sistema se adapta automaticamente porque cada SubagentJob já sabe qual subtask processar (via `subtask_id`).
 
-### 3.3. Classes Laravel Envolvidas (Mapa do Código)
+### 3.3. Classes Laravel Envolvidas (Mapa do Código — Laravel 13)
 
 ```text
 app/
+├── Ai/
+│   ├── Agents/
+│   │   ├── OrchestratorAgent.php        ← implements Agent, HasStructuredOutput, HasTools — Planner
+│   │   ├── QAAuditorAgent.php           ← implements Agent, HasStructuredOutput — Judge
+│   │   ├── BackendSpecialist.php        ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── FrontendSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── FilamentSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── DatabaseSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── DevOpsSpecialist.php         ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── SecuritySpecialist.php       ← implements Agent, HasTools — Auditor de Segurança
+│   │   ├── PerformanceAnalyst.php       ← implements Agent, HasStructuredOutput — Analista
+│   │   └── ContextCompressor.php        ← implements Agent (usa Ollama) — Compressão
+│   └── Tools/
+│       ├── ShellTool.php                ← implements Laravel\Ai\Contracts\Tool
+│       ├── FileTool.php                 ← implements Laravel\Ai\Contracts\Tool
+│       ├── GitTool.php                  ← implements Laravel\Ai\Contracts\Tool
+│       ├── DatabaseTool.php             ← implements Laravel\Ai\Contracts\Tool
+│       ├── SearchTool.php               ← implements Laravel\Ai\Contracts\Tool
+│       ├── TestTool.php                 ← implements Laravel\Ai\Contracts\Tool
+│       ├── SecurityTool.php             ← implements Laravel\Ai\Contracts\Tool
+│       ├── DocsTool.php                 ← implements Laravel\Ai\Contracts\Tool
+│       └── MetaTool.php                 ← implements Laravel\Ai\Contracts\Tool
+│
 ├── Jobs/
-│   ├── OrchestratorJob.php          ← O Job "Planner" — recebe task_id, quebra em subtasks
-│   ├── SubagentJob.php              ← O Job "Executor" — recebe subtask_id, executa o Sub-PRD
-│   ├── QAAuditJob.php               ← O Job "Judge" — recebe task_id, audita todas as subtasks
-│   ├── SecurityAuditJob.php         ← O Job "Security" — pentest e OWASP scan pós-QA
-│   ├── PerformanceAnalysisJob.php   ← O Job "Performance" — N+1, slow queries, otimizações
-│   └── ContextCompressionJob.php    ← Comprime sessão quando atinge threshold 0.6
+│   ├── ProcessTaskJob.php               ← Orquestra o pipeline Agent→QA→Git (simplificado)
+│   └── ContextCompressionJob.php        ← Comprime sessão quando atinge threshold 0.6
 │
 ├── Events/
-│   ├── TaskCreatedEvent.php         ← Disparado quando uma nova task é inserida
-│   ├── SubtaskCompletedEvent.php    ← Disparado quando um subagente termina
-│   ├── TaskAuditPassedEvent.php     ← Disparado quando QA aprova
-│   ├── SecurityAuditPassedEvent.php ← Disparado quando Security Specialist aprova
-│   ├── SecurityVulnerabilityEvent.php ← Disparado quando vulnerabilidade é detectada
-│   └── TaskEscalatedEvent.php       ← Disparado quando retentativas estouraram
+│   ├── TaskCreatedEvent.php             ← Disparado quando uma nova task é inserida
+│   ├── SubtaskCompletedEvent.php        ← Disparado quando um subagente termina
+│   ├── TaskAuditPassedEvent.php         ← Disparado quando QA aprova
+│   ├── SecurityAuditPassedEvent.php     ← Disparado quando Security Specialist aprova
+│   ├── SecurityVulnerabilityEvent.php   ← Disparado quando vulnerabilidade é detectada
+│   └── TaskEscalatedEvent.php           ← Disparado quando retentativas estouraram
 │
 ├── Listeners/
-│   ├── DispatchOrchestratorListener.php   ← Escuta TaskCreatedEvent → despacha OrchestratorJob
-│   ├── QAJobDispatcherListener.php        ← Escuta SubtaskCompletedEvent → verifica se todas terminaram
-│   ├── SecurityDispatcherListener.php     ← Escuta TaskAuditPassedEvent → despacha SecurityAuditJob
-│   ├── PerformanceDispatcherListener.php  ← Escuta SecurityAuditPassedEvent → despacha PerformanceAnalysisJob
-│   ├── TaskCompletionListener.php         ← Escuta PerformanceAnalysisJob completion → CI/CD + vectorizar
+│   ├── DispatchOrchestratorListener.php   ← Escuta TaskCreatedEvent → despacha OrchestratorAgent
+│   ├── QADispatcherListener.php           ← Escuta SubtaskCompletedEvent → verifica se todas terminaram
+│   ├── SecurityDispatcherListener.php     ← Escuta TaskAuditPassedEvent → despacha SecuritySpecialist
+│   ├── PerformanceDispatcherListener.php  ← Escuta SecurityAuditPassedEvent → despacha PerformanceAnalyst
+│   ├── TaskCompletionListener.php         ← Escuta completion → CI/CD + vetorizar via pgvector
 │   ├── VulnerabilityHandler.php           ← Escuta SecurityVulnerabilityEvent → cria subtask de correção
 │   ├── EscalationNotifier.php             ← Escuta TaskEscalatedEvent → notifica humano via UI
 │   └── ProblemSolutionRecorder.php        ← Grava na tabela problems_solutions
 │
 ├── Services/
-│   ├── LLMGateway.php               ← Abstração que roteia chamadas para Gemini/Claude/Ollama
-│   ├── PromptFactory.php            ← Monta o prompt completo (System + Context + PRD)
-│   ├── ToolRouter.php               ← Recebe tool calls do LLM e despacha para o Tool correto
-│   ├── ContextManager.php           ← Gerencia janela de contexto, threshold e compressão
+│   ├── PromptFactory.php            ← Monta contexto dinâmico (padrões TALL + RAG) — simplificado
 │   ├── FileLockManager.php          ← Mutex de arquivos para subtasks paralelas
-│   └── PRDValidator.php             ← Valida PRD contra o JSON Schema
+│   ├── PRDValidator.php             ← Valida PRD contra o JSON Schema (usa JsonSchema do SDK)
+│   └── TaskOrchestrator.php         ← Coordena o pipeline Agent→QA→Git
 │
-├── Tools/  (Plugin Layer — ver FERRAMENTAS.md)
-│   ├── ShellTool.php
-│   ├── FileTool.php
-│   ├── DatabaseTool.php
-│   ├── GitTool.php
-│   ├── SearchTool.php
-│   ├── TestTool.php
-│   ├── SecurityTool.php             ← Enlightn, Larastan, Nikto, SQLMap, dependency audit
-│   ├── DocsTool.php
-│   └── MetaTool.php
+├── Ai/
+│   ├── Agents/  (Agent classes — ver seção 3.3)
+│   │   ├── OrchestratorAgent.php    ← implements Agent, HasStructuredOutput, HasTools
+│   │   ├── QAAuditorAgent.php       ← implements Agent, HasStructuredOutput
+│   │   ├── BackendSpecialist.php    ← implements Agent, Conversational, HasTools
+│   │   ├── FrontendSpecialist.php   ← (idem)
+│   │   ├── FilamentSpecialist.php
+│   │   ├── DatabaseSpecialist.php
+│   │   ├── DevOpsSpecialist.php
+│   │   ├── SecuritySpecialist.php
+│   │   ├── PerformanceAnalyst.php
+│   │   └── ContextCompressor.php
+│   └── Tools/  (Tool contract nativo — ver FERRAMENTAS.md)
+│       ├── ShellTool.php            ← implements Laravel\Ai\Contracts\Tool
+│       ├── FileTool.php
+│       ├── DatabaseTool.php
+│       ├── GitTool.php
+│       ├── SearchTool.php
+│       ├── TestTool.php
+│       ├── SecurityTool.php         ← Enlightn, Larastan, Nikto, SQLMap, dependency audit
+│       ├── DocsTool.php
+│       └── MetaTool.php
 │
 ├── Models/
 │   ├── Project.php
+│   ├── ProjectModule.php
 │   ├── Task.php
 │   ├── Subtask.php
 │   ├── AgentConfig.php
@@ -527,7 +561,6 @@ app/
 │   ├── AgentExecution.php
 │   ├── ToolCallLog.php
 │   ├── ProblemSolution.php
-│   ├── SessionHistory.php
 │   └── WebhookConfig.php
 │
 ├── Enums/
@@ -943,14 +976,14 @@ o cache NUNCA seria aproveitado porque o início do prompt mudaria a cada chamad
 **Implementação no `PromptFactory.php`:**
 O PromptFactory é o serviço responsável por montar o prompt completo. Ele segue rigorosamente a ordem acima. A Anthropic exige uma flag `cache_control: {"type": "ephemeral"}` nos blocos que devem ser cacheados. O Gemini faz isso automaticamente se os primeiros tokens forem idênticos.
 
-### 5.3. RAG Vetorial (Long-term)
+### 5.3. RAG Vetorial via pgvector (Long-term)
 
 *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos na tabela `problems_solutions`.
-*   **Como gerar embeddings:** O modelo local via Ollama (ex: `nomic-embed-text`) gera os vetores. Isso evita custo de API e mantém privacidade total.
-*   **Onde armazenar:** ChromaDB (rodando como serviço Python no servidor) ou SQLite-Vec (extensão nativa do SQLite — zero dependência extra). Ambos suportam busca por similaridade de cosseno.
+*   **Como gerar embeddings:** Via Laravel AI SDK (`AI::embeddings()->provider(Lab::OpenAI)->embed(...)`) ou modelo local via Ollama. O SDK suporta múltiplos provedores de embeddings (OpenAI, Gemini, Cohere, Jina, VoyageAI).
+*   **Onde armazenar:** Coluna `vector(1536)` na tabela `problems_solutions` via **pgvector** nativo no PostgreSQL 16. Eliminamos a necessidade de ChromaDB ou SQLite-Vec — busca vetorial nativa no mesmo banco relacional.
 *   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o Top 3 de contextos relevantes:
-    - O PRD atual é vetorizado (via Ollama).
-    - O vetor é comparado contra todos os vetores em `problems_solutions` do mesmo projeto.
+    - O PRD atual é vetorizado via `AI::embeddings()`.
+    - O vetor é comparado via `whereVectorSimilarTo()` do Eloquent (pgvector).
     - Os 3 registros com maior similaridade de cosseno (>0.7) são injetados no prompt como few-shot.
 *   **Exemplo prático:** O Orchestrator recebe um PRD "Criar sistema de notificações em tempo real". O RAG encontra que 2 meses atrás uma task similar ("Criar chat em tempo real") usou WebSocket via Laravel Reverb. Essa solução é injetada, e o agente reutiliza a mesma abordagem validada.
 
