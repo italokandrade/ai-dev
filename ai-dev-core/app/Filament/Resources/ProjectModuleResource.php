@@ -144,16 +144,6 @@ class ProjectModuleResource extends Resource
                         default => 'gray',
                     })
                     ->sortable(),
-
-                Tables\Columns\TextColumn::make('tasks_count')
-                    ->label('Tasks')
-                    ->counts('tasks')
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('completed_tasks_count')
-                    ->label('Concluídas')
-                    ->counts('completedTasks')
-                    ->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
             ->groups([
@@ -178,29 +168,6 @@ class ProjectModuleResource extends Resource
             ])
             ->actions([
                 \Filament\Actions\EditAction::make(),
-
-                \Filament\Actions\Action::make('recalculate')
-                    ->label('Recalcular')
-                    ->icon('heroicon-o-calculator')
-                    ->color('gray')
-                    ->action(function (ProjectModule $record) {
-                        $record->recalculateProgress();
-
-                        Notification::make()
-                            ->title('Progresso recalculado')
-                            ->body("{$record->name}: {$record->progress_percentage}%")
-                            ->success()
-                            ->send();
-                    }),
-
-                \Filament\Actions\Action::make('create_task')
-                    ->label('Nova Task')
-                    ->icon('heroicon-o-plus')
-                    ->color('primary')
-                    ->url(fn (ProjectModule $record) => TaskResource::getUrl('create', [
-                        'module_id' => $record->id,
-                        'project_id' => $record->project_id,
-                    ])),
             ])
             ->bulkActions([]);
     }
