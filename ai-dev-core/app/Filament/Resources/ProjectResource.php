@@ -308,7 +308,7 @@ class ProjectResource extends Resource
                                 ->columnSpanFull(),
                         ])
                         ->collapsible(),
-                ])->columnSpan(['default' => 1, 'xl' => 2]),
+                ])->columnSpan(['default' => 1, 'xl' => 1]),
 
                 \Filament\Schemas\Components\Group::make([
                     Section::make('Especificação Técnica')
@@ -338,7 +338,7 @@ class ProjectResource extends Resource
                         ->collapsible(),
                 ])->columnSpan(['default' => 1, 'xl' => 1]),
             ])
-            ->columns(['default' => 1, 'xl' => 3]);
+            ->columns(['default' => 1, 'xl' => 2]);
     }
 
     public static function getRelations(): array
