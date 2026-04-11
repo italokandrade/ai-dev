@@ -50,7 +50,8 @@ Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e
 | Performance Worker | `/etc/supervisor/conf.d/aidev-performance.conf` | 1 | `queue:performance` |
 | Context Compressor | `/etc/supervisor/conf.d/aidev-compressor.conf` | 1 | `queue:compressor` |
 | Sentinel Watcher | `/etc/supervisor/conf.d/aidev-sentinel.conf` | 1 | `queue:sentinel` |
-| Gemini Proxy | `/etc/supervisor/conf.d/gemini-proxy.conf` | 1 | N/A (porta 8000) |
+| Gemini Proxy | `/etc/supervisor/conf.d/gemini-proxy.conf` | 1 | N/A (porta 8001) |
+| Claude Proxy | `/etc/supervisor/conf.d/claude-proxy.conf` | 1 | N/A (porta 8002) |
 
 **Exemplo de config do Supervisor para o Orchestrator Worker:**
 
@@ -103,49 +104,71 @@ O Horizon substituiría o `queue:work` nos configs do Supervisor por `php artisa
 
 Para o AI-Dev operar com redundância e inteligência de elite, precisamos de 3 motores:
 
-#### Motor 1: Proxy Gemini (O Executor Principal)
+#### Motor 1: Proxy Gemini (O Orquestrador)
 
-**Status:** ✅ Já existe parcialmente (portas 8000/8001, `gemini_proxy.js`/`gemini_proxy.py`).
+**Status:** ✅ Operacional — `infrastructure/proxy/gemini_proxy.py` rodando na porta 8001.
 
-**O que precisa ser feito:**
-- Garantir que o proxy aceita o parâmetro `session_id` para contexto persistente por projeto
-- Mover o gerenciamento do processo do `nohup` para o Supervisor (config acima)
-- Validar que o modelo `gemini-3.1-flash-lite-preview` está funcionando
+**Configuração atual:**
+- Modelo fixo: `gemini-3.1-pro-preview`
+- Modo headless: `-p` (sem confirmações, sem ferramentas nativas do Gemini CLI)
+- Sessão persistente: `-r <session_id>` para contexto por projeto
+- API endpoints: `/v1/chat/completions` e `/v1/messages`
+
+**O que ainda falta:**
+- Mover do `nohup` para o Supervisor (config abaixo)
 - Criar endpoint de health check (`/health`) para o dashboard do AI-Dev monitorar
 
-**Custo estimado:** Gemini 3.1 Flash Lite Preview é gratuito até um limite generoso. Para uso pesado, o custo é ~$0.075/1M tokens de entrada e ~$0.30/1M tokens de saída.
+**Custo estimado:** Gemini 3.1 Pro Preview: ~$1.25/1M tokens de entrada e ~$5.00/1M tokens de saída.
 
-#### Motor 2: Claude Code (O Cérebro de Elite)
+#### Motor 2: Proxy Claude (O Auxiliar / Agentes Specialists)
 
-**Status:** ❌ Precisa ser instalado.
+**Status:** ✅ Operacional — `infrastructure/proxy/claude_proxy.py` rodando na porta 8002.
 
-**O que é:** O CLI oficial da Anthropic (@anthropic-ai/claude-code) que permite invocar Claude via terminal.
+**Configuração atual:**
+- Modelo: `auto` (Claude Code seleciona automaticamente conforme disponibilidade e cota)
+- Modo headless: `-p` (sem confirmações)
+- Papel: agentes specialists (BackendSpecialist, FrontendSpecialist, QAAuditor, etc.) e backup do Gemini
+- API endpoints: `/v1/chat/completions` e `/v1/messages`
 
-**Por que usar Claude e não apenas Gemini?** Claude Sonnet 4-6 e Opus 4-6 demonstram raciocínio mais rigoroso em tarefas de planejamento (quebra de PRDs) e auditoria (validação de código). O AI-Dev usa Claude para o Orchestrator e o QA Auditor — as funções que exigem "pensamento" mais que "ação".
+**O que ainda falta:**
+- Mover do `nohup` para o Supervisor (config abaixo)
+- Criar endpoint de health check (`/health`)
 
-**Instalação:**
+**Instalação do Claude Code CLI (se ainda não instalado):**
 ```bash
 # 1. Instalar o CLI global via npm
 npm install -g @anthropic-ai/claude-code
 
-# 2. Configurar a API key
-export ANTHROPIC_API_KEY="sk-ant-api03-..."
+# 2. Autenticar
+claude auth
 
-# 3. Adicionar ao .env do AI-Dev Core
-echo "ANTHROPIC_API_KEY=sk-ant-api03-..." >> /var/www/html/projetos/ai-dev-core/.env
-
-# 4. Verificar
+# 3. Verificar
 claude --version
 ```
 
-**Integração no AI-Dev:** O Laravel AI SDK (`laravel/ai`) usa o provider `anthropic` configurado em `config/ai.php`:
+**Integração no AI-Dev:** O Laravel AI SDK usa o provider `anthropic` configurado em `config/ai.php`:
 ```php
 // config/ai.php — já configurado
 'anthropic' => ['driver' => 'anthropic', 'key' => env('ANTHROPIC_API_KEY')],
 ```
-Nos Agent classes: `#[Provider(Lab::Anthropic)]` `#[Model('claude-sonnet-4-6')]`
 
-**Custo estimado:** Claude Sonnet 4-6: ~$3/1M input + $15/1M output. Claude Opus 4-6: ~$15/1M input + $75/1M output. O Orchestrator e QA usam poucas chamadas (1-3 por task), então o custo por task é ~$0.05-0.20.
+**Custo estimado:** Variável conforme modelo selecionado automaticamente pelo Claude Code. Sonnet 4.6: ~$3/1M input + $15/1M output. Opus 4.6: ~$15/1M input + $75/1M output.
+
+**Config do Supervisor para o Claude Proxy:**
+```ini
+[program:claude-proxy]
+process_name=%(program_name)s
+command=python3 /var/www/html/projetos/ai-dev/infrastructure/proxy/claude_proxy.py
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=root
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/www/html/projetos/ai-dev/storage/logs/claude-proxy.log
+stopwaitsecs=60
+```
 
 #### Motor 3: Ollama (O Compressor de Memória)
 
@@ -393,16 +416,17 @@ composer require laravel/horizon
 php artisan horizon:install
 
 # 4. Configurar .env
-# DB_CONNECTION=mysql
+# DB_CONNECTION=pgsql
 # DB_HOST=127.0.0.1
+# DB_PORT=5432
 # DB_DATABASE=ai_dev_core
-# DB_USERNAME=root
+# DB_USERNAME=postgres
 # DB_PASSWORD=***
 # QUEUE_CONNECTION=redis
 # REDIS_HOST=127.0.0.1
 
 # 5. Criar o banco
-mysql -u root -p -e "CREATE DATABASE ai_dev_core CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+psql -U postgres -c "CREATE DATABASE ai_dev_core;"
 
 # 6. Rodar migrations
 php artisan migrate

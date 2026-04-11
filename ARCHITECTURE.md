@@ -1063,9 +1063,9 @@ Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
 
 O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
 
-*   **Motor Gemini (O Executor Veloz):** Utilizaremos o SDK nativo Laravel AI SDK (`laravel/ai`) para modelos como o `gemini-3.1-flash-lite-preview`. O ID da sessão é gerenciado automaticamente nas tabelas de conversas do SDK no PostgreSQL. Isso garante que cada sistema desenvolvido tenha sua própria linha do tempo de aprendizado persistente.
+*   **Motor Gemini (O Orquestrador):** Proxy Python em `infrastructure/proxy/gemini_proxy.py` (porta 8001) invoca o Gemini CLI com modelo fixo `gemini-3.1-pro-preview`. Atua como orquestrador: recebe o PRD, planeja e despacha Sub-PRDs para os agentes specialists. O session ID é armazenado em `projects.gemini_session_id` para contexto persistente por projeto.
 
-*   **Motor Claude (O Cérebro de Elite):** Integração com o CLI oficial da Anthropic (`@anthropic-ai/claude-code`) para acessar modelos como `Claude Sonnet 4-6` e `Claude Opus 4-6`. Este motor será priorizado para tarefas de alta complexidade como a quebra de PRDs pelo `ORCHESTRATOR` e a auditoria pelo `QA_AUDITOR`. O motivo: Claude demonstra raciocínio mais rigoroso e menor taxa de alucinação em tarefas de planejamento.
+*   **Motor Claude (O Auxiliar/Specialist):** Proxy Python em `infrastructure/proxy/claude_proxy.py` (porta 8002) invoca o Claude Code CLI em modo `auto` (sem modelo fixo — Claude Code seleciona conforme disponibilidade e cota). Atua como agentes specialists: executa Sub-PRDs, gera código, audita qualidade. Também é o backup do Gemini em caso de falha.
 
 *   **Motor Ollama (O Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (ex: `qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto e gerar embeddings — nunca é usado para gerar código ou planejar. Isso poupa os tokens caros dos modelos maiores.
 
@@ -1078,9 +1078,9 @@ SDK default (config/ai.php): provider 'openai', model 'gpt-5-nano' — fallback 
 
 Cada Agent class define provider/model via PHP Attributes com array de fallback:
 
-// ORCHESTRATOR — Gemini principal, Claude backup
+// ORCHESTRATOR — Gemini principal (gemini-3.1-pro-preview via proxy), Claude backup
 #[Provider([Lab::Gemini, Lab::Anthropic])]
-#[Model('gemini-2.0-flash')]
+#[Model('gemini-3.1-pro-preview')]
 class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
 → Gemini tem maior cota; orquestrador é chamado com alta frequência
 
@@ -1574,7 +1574,49 @@ claude -p \                                    # Modo não-interativo, sem confi
 **Por que `-p` é suficiente?**
 O `-p` (print/headless) garante que nenhum dos CLIs solicita confirmação ou interação humana. Como ambos os proxies não usam ferramentas nativas dos CLIs (o Gemini não executa `run_shell_command`, o Claude não usa Bash/Edit/Read), não há risco de travamento por prompt de permissão.
 
-### 14.3. Session ID Obrigatório por Projeto
+### 14.3. Endpoints dos Proxies
+
+Ambos os proxies expõem duas rotas compatíveis com os formatos OpenAI e Anthropic:
+
+| Método | Rota | Porta | Proxy |
+|---|---|---|---|
+| POST | `/v1/chat/completions` | 8001 | Gemini |
+| POST | `/v1/messages` | 8001 | Gemini |
+| POST | `/v1/chat/completions` | 8002 | Claude |
+| POST | `/v1/messages` | 8002 | Claude |
+
+**Formato de request (ambos os proxies aceitam o mesmo esquema):**
+```json
+{
+  "messages": [{"role": "user", "content": "Seu prompt aqui"}],
+  "session_id": "uuid-da-sessao-do-projeto"
+}
+```
+
+**Formato de response:**
+```json
+{
+  "id": "msg-<session_id>",
+  "model": "gemini-3.1-pro-preview",
+  "session_id": "uuid-da-sessao-do-projeto",
+  "content": [{"type": "text", "text": "Resposta do modelo"}],
+  "stop_reason": "end_turn"
+}
+```
+
+### 14.4. Estratégia de Failover
+
+Se o Gemini (orquestrador principal) falhar, o Laravel AI SDK dispara o evento `AgentFailedOver` e tenta o próximo provider no array do PHP Attribute:
+
+```php
+// Se Gemini falhar → SDK tenta Lab::Anthropic automaticamente
+#[Provider([Lab::Gemini, Lab::Anthropic])]
+class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
+```
+
+O mesmo vale para os agentes specialists (Claude → Gemini como backup). O SDK não expõe esse failover ao código de negócio — acontece de forma transparente. O `agent_executions` registra qual provider foi efetivamente usado em cada chamada para auditoria.
+
+### 14.5. Session ID Obrigatório por Projeto
 
 O conversation ID da sessão SDK é armazenado na tabela `projects`:
 
