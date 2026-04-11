@@ -2,7 +2,7 @@
 
 **Sistema de Desenvolvimento de Software Autônomo, Multi-Agente e Auto-Corretivo.**
 
-O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional PostgreSQL 16 (com pgvector), com memória vetorial de longo prazo e auto-correção nativa via Sentinela.
+O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para desenvolver, testar, auditar e fazer deploy de aplicações Laravel/TALL automaticamente. Os agentes operam em background, guiados por um banco de dados relacional PostgreSQL 16 (com pgvector), com memória vetorial de longo prazo, auto-correção nativa via Sentinela e publicação automática em redes sociais.
 
 ---
 
@@ -19,8 +19,11 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **AI SDK** | Laravel AI SDK (`laravel/ai`) — Agents, Tools, Structured Output, Conversations |
 | **MCP** | Laravel MCP (`laravel/mcp`) — Model Context Protocol servers para interação com agentes |
 | **Boost** | Laravel Boost (`laravel/boost`) — Guidelines, Skills e Documentation API para agentes |
-| **IA Principal** | Gemini 3.1 Flash Lite Preview (Executor) + Claude Sonnet 4-6 (Planner/QA/Security) |
-| **IA Local** | Ollama (qwen2.5:0.5b para compressão e embeddings) |
+| **SDK Default** | OpenAI `gpt-5-nano` — provider padrão do Laravel AI SDK (`config/ai.php`) |
+| **Orchestrator** | Gemini (primário) + Claude (backup) — maior cota de uso no Orchestrator |
+| **Agents** | Claude Sonnet 4-6 (primário) + Gemini (backup) — código mais preciso nos especialistas |
+| **IA Local** | Ollama (qwen2.5:0.5b para compressão e nomic-embed-text para embeddings) |
+| **Redes Sociais** | `hamzahassanm/laravel-social-auto-post` — Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram |
 | **Orquestração** | Supervisor + Laravel Horizon |
 
 ---
@@ -31,13 +34,15 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 Humano/Webhook → [Task + PRD] → Orchestrator → Sub-PRDs → Subagentes → QA Auditor → Git Push
                                                                            ↑
                                                                     Sentinela (Self-Healing)
+                                                                           ↓
+                                                                    SocialTool (Auto-Post)
 ```
 
 O sistema utiliza 3 classes de agentes, todos implementados como **Agent classes** do Laravel AI SDK (`laravel/ai`):
 
-1. **OrchestratorAgent (Planner)** — `implements Agent, HasStructuredOutput, HasTools` — Recebe o PRD principal e o decompõe em Sub-PRDs focados
-2. **Specialist Agents (Executors)** — `implements Agent, Conversational, HasTools` — Especialistas (Backend, Frontend, Filament, DBA, DevOps) que executam cada Sub-PRD
-3. **QAAuditorAgent (Judge)** — `implements Agent, HasStructuredOutput` — Audita toda entrega contra o PRD original e rejeita se não atender aos critérios
+1. **OrchestratorAgent (Planner)** — `implements Agent, HasStructuredOutput, HasTools` — Recebe o PRD principal e o decompõe em Sub-PRDs focados. **Provider: Gemini (primário), Claude (backup)**
+2. **Specialist Agents (Executors)** — `implements Agent, Conversational, HasTools` — Especialistas (Backend, Frontend, Filament, DBA, DevOps) que executam cada Sub-PRD. **Provider: Claude (primário), Gemini (backup)**
+3. **QAAuditorAgent (Judge)** — `implements Agent, HasStructuredOutput` — Audita toda entrega contra o PRD original. **Provider: Claude (primário), Gemini (backup)**
 
 A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados no PostgreSQL, conversas persistidas via `RemembersConversations` do SDK, e rollback via Git branch por task.
 
@@ -47,10 +52,9 @@ A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados 
 
 | Arquivo | Conteúdo |
 |---|---|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Visão completa da arquitetura: modelagem de banco (12 tabelas), protocolo inter-agentes, fluxo de vida das tasks, memória, métricas e fases de implementação |
-| [ADMIN_GUIDE.md](./ADMIN_GUIDE.md) | Guia do Painel Administrativo (Web UI): gestão de módulos hierárquicos, prioridades, dependências e orçamentos |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Visão completa da arquitetura: modelagem de banco (13 tabelas), protocolo inter-agentes, fluxo de vida das tasks, memória, métricas e fases de implementação |
 | [PRD_SCHEMA.md](./PRD_SCHEMA.md) | JSON Schema formal do PRD (Product Requirement Document) com exemplos completos |
-| [FERRAMENTAS.md](./FERRAMENTAS.md) | Catálogo das 8 ferramentas consolidadas com JSON Schemas de entrada/saída |
+| [FERRAMENTAS.md](./FERRAMENTAS.md) | Catálogo das 10 ferramentas consolidadas com JSON Schemas de entrada/saída |
 | [PROMPTS.md](./PROMPTS.md) | Engenharia de prompts: regras universais, role descriptions, template completo do prompt montado, segurança anti-injection |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Requisitos de servidor, instalação passo-a-passo, consumo de recursos estimado |
 
@@ -58,7 +62,7 @@ A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados 
 
 ## 🗄️ Modelagem do Banco de Dados
 
-O AI-Dev utiliza **12 tabelas** no PostgreSQL para controle total do estado:
+O AI-Dev utiliza **13 tabelas** no PostgreSQL para controle total do estado:
 
 | Tabela | Propósito |
 |---|---|
@@ -73,11 +77,12 @@ O AI-Dev utiliza **12 tabelas** no PostgreSQL para controle total do estado:
 | `problems_solutions` | Base de conhecimento auto-alimentada (RAG vetorial via pgvector) |
 | `agent_conversations` | Conversas persistidas automaticamente pelo Laravel AI SDK |
 | `agent_conversation_messages` | Mensagens das conversas (gerenciado pelo SDK) |
+| `social_accounts` | Credenciais de redes sociais por projeto (criptografadas) |
 | `webhooks_config` | Configuração de webhooks de entrada (GitHub, CI/CD) |
 
 ---
 
-## 🔧 Ferramentas (9 Atômicas — `implements Laravel\Ai\Contracts\Tool`)
+## 🔧 Ferramentas (10 Atômicas — `implements Laravel\Ai\Contracts\Tool`)
 
 Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schema(JsonSchema $schema): array` para validação de entrada e `handle(Request $request): string` para execução. O SDK despacha automaticamente as tool calls do LLM para o método `handle()` correto.
 
@@ -91,7 +96,8 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 | 6 | **TestTool** | Pest/PHPUnit, Dusk, screenshots, coverage |
 | 7 | **SecurityTool** | Enlightn, Larastan, Nikto, SQLMap, dependency audit |
 | 8 | **DocsTool** | Markdown, TODOs, documentação técnica |
-| 9 | **MetaTool** | Criar novas ferramentas, logging de impossibilidades |
+| 9 | **SocialTool** | Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram |
+| 10 | **MetaTool** | Criar novas ferramentas, logging de impossibilidades |
 
 ---
 
@@ -100,7 +106,8 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 ### Fase 1: Core Loop (MVP) — Laravel AI SDK
 - Ciclo completo: Task → OrchestratorAgent → Specialist Agents → QAAuditorAgent → Git Commit
 - Agent classes com `HasTools`, `HasStructuredOutput`, `Conversational` (SDK nativo)
-- 9 Tools (`implements Tool`) + config/ai.php + PostgreSQL + Redis + Supervisor
+- 10 Tools (`implements Tool`) + config/ai.php (OpenAI gpt-5-nano default) + PostgreSQL + Redis + Supervisor
+- Provider strategy: Gemini→Orchestrator, Claude→Agents, OpenAI gpt-5-nano→fallback
 
 ### Fase 2: Qualidade, Segurança e UI
 - QA Auditor com Claude + Security Specialist + Performance Analyst
@@ -108,10 +115,11 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 - Filament v5 Dashboard + Circuit breakers + Git branching por task
 - Laravel MCP servers para integração com agentes externos
 
-### Fase 3: IA Avançada
+### Fase 3: IA Avançada + Redes Sociais
 - RAG Vetorial via pgvector nativo no PostgreSQL + Compressão de contexto (Ollama)
 - Laravel Boost (guidelines, skills, documentation API)
 - Multi-provider failover via `Lab` enum + Auto-alimentação de conhecimento
+- SocialTool + `social_accounts` — publicação automática em 8 plataformas
 
 ---
 
@@ -119,7 +127,7 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 
 - **Ubuntu 24.04 LTS** — 2 vCPUs, 8 GB RAM
 - **IP:** 10.1.1.86 (Supreme)
-- **Consumo total estimado:** ~3.3 GB RAM com todos os componentes rodando
+- **Consumo total estimado:** ~3.4 GB RAM com todos os componentes rodando
 
 ---
 

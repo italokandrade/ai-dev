@@ -1,6 +1,6 @@
 # Catálogo de Ferramentas Consolidadas (The Tool Layer)
 
-O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema possui **9 ferramentas atômicas** que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA + Security. A IA gera apenas os **parâmetros e dados brutos** — as ferramentas executam os comandos no servidor de forma controlada, com logs, timeouts e restrições de segurança.
+O AI-Dev adota o **Padrão de Injeção de Comandos (Command-Injection Pattern)**. O ecossistema possui **10 ferramentas atômicas** que cobrem 100% das necessidades de um desenvolvedor Fullstack TALL + DBA + Security + Social Media. A IA gera apenas os **parâmetros e dados brutos** — as ferramentas executam os comandos no servidor de forma controlada, com logs, timeouts e restrições de segurança.
 
 **Por que 9 ferramentas e não 18+?** Modelos de linguagem consomem tokens processando a lista de ferramentas disponíveis. Com 18+ ferramentas de nomes parecidos (FileArchitectTool vs FileSystemNavigatorTool vs FileSurgeryTool), a IA gasta mais tempo "decidindo" qual usar e comete mais erros na seleção. Com 9 ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a decisão é rápida e precisa.
 
@@ -1048,9 +1048,139 @@ pip install sqlmap
 
 ---
 
-## 9. MetaTool — Auto-Evolução e Logging de Impossibilidades
+## 9. SocialTool — Publicação em Redes Sociais
 
-**Classe:** `App\Tools\MetaTool`
+**Classe:** `App\Ai\Tools\SocialTool`
+**Pacote:** `hamzahassanm/laravel-social-auto-post:^2.2`
+**Responsabilidade:** Publicar conteúdo automaticamente em 8 plataformas de redes sociais. As credenciais de cada plataforma são lidas da tabela `social_accounts` do projeto ativo, injetadas em runtime.
+
+**Instalação do pacote:**
+```bash
+composer require hamzahassanm/laravel-social-auto-post:^2.2
+php artisan vendor:publish --provider="HamzaHassanM\LaravelSocialAutoPost\SocialAutoPostServiceProvider"
+```
+
+### Ações Disponíveis
+
+| Ação | Descrição | Exemplo de Uso |
+|---|---|---|
+| `share` | Publicar em plataformas específicas | Post de lançamento no LinkedIn + Twitter |
+| `share_to_all` | Publicar em todas as plataformas configuradas | Anúncio de deploy em todas as redes |
+| `upload_video` | Fazer upload e publicar vídeo | Demo de feature no YouTube + TikTok |
+| `share_carousel` | Publicar carrossel de imagens | Portfolio de screenshots no Instagram |
+| `get_analytics` | Buscar métricas da última publicação | Verificar engajamento pós-post |
+
+### Plataformas Suportadas
+
+| Plataforma | Enum | Tipos de Conteúdo |
+|---|---|---|
+| Facebook | `facebook` | Texto, imagens, vídeos, stories, páginas |
+| Instagram | `instagram` | Fotos, Reels, Stories, Carrossel |
+| Twitter/X | `twitter` | Tweets, imagens, vídeos |
+| LinkedIn | `linkedin` | Posts, artigos, Company pages |
+| TikTok | `tiktok` | Vídeos curtos |
+| YouTube | `youtube` | Upload de vídeos, playlists |
+| Pinterest | `pinterest` | Pins com imagens, boards |
+| Telegram | `telegram` | Mensagens, arquivos, fotos, canais |
+
+### JSON Schema de Entrada
+
+```json
+{
+  "type": "object",
+  "required": ["action", "message"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["share", "share_to_all", "upload_video", "share_carousel", "get_analytics"],
+      "description": "Qual ação executar."
+    },
+    "platforms": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["facebook", "instagram", "twitter", "linkedin", "tiktok", "youtube", "pinterest", "telegram"]},
+      "description": "Plataformas alvo. Se omitido, publica em todas as configuradas no projeto."
+    },
+    "message": {
+      "type": "string",
+      "description": "Texto do post/legenda. Suporta emojis e hashtags.",
+      "examples": ["🚀 Nova feature lançada! #Laravel #AIdev", "Deploy realizado com sucesso em produção."]
+    },
+    "url": {
+      "type": "string",
+      "description": "URL a ser incluída no post (opcional).",
+      "examples": ["https://meusite.com/blog/nova-feature"]
+    },
+    "media_path": {
+      "type": "string",
+      "description": "Caminho absoluto para imagem ou vídeo a ser publicado.",
+      "examples": ["/var/www/html/projetos/portal/storage/app/screenshots/deploy.png"]
+    }
+  }
+}
+```
+
+### Exemplos de Chamada pelo Agente
+
+```json
+// Publicar lançamento de feature no LinkedIn e Twitter
+{
+  "action": "share",
+  "platforms": ["linkedin", "twitter"],
+  "message": "🚀 Nova feature: autenticação social implementada! #Laravel13 #AIdev",
+  "url": "https://github.com/usuario/projeto/releases/v2.1.0"
+}
+
+// Publicar deploy em todas as redes configuradas
+{
+  "action": "share_to_all",
+  "message": "✅ Deploy v2.1.0 concluído com sucesso! Sistema 100% operacional."
+}
+
+// Upload de demo no YouTube
+{
+  "action": "upload_video",
+  "platforms": ["youtube"],
+  "message": "Demo: AI-Dev gerando um Resource Filament completo em 30 segundos",
+  "media_path": "/var/www/html/projetos/ai-dev/storage/videos/demo-resource.mp4"
+}
+```
+
+### JSON Schema de Saída
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": {"type": "boolean"},
+    "published": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Plataformas onde a publicação foi bem-sucedida"
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "platform": {"type": "string"},
+          "error": {"type": "string"}
+        }
+      },
+      "description": "Plataformas onde a publicação falhou, com motivo"
+    },
+    "post_ids": {
+      "type": "object",
+      "description": "IDs dos posts criados por plataforma (para analytics futuros)"
+    }
+  }
+}
+```
+
+---
+
+## 10. MetaTool — Auto-Evolução e Logging de Impossibilidades
+
+**Classe:** `App\Ai\Tools\MetaTool`
 **Responsabilidade:** Permitir que o sistema evolua criando novas ferramentas permanentes para usos recorrentes não mapeados, e registrar situações onde o agente não conseguiu resolver o problema (para análise humana posterior).
 
 ### Ações Disponíveis
@@ -1159,15 +1289,15 @@ pip install sqlmap
 │  │             │  │           │  │ full_audit    │                   │
 │  └─────────────┘  └───────────┘  └───────────────┘                   │
 │                                                                       │
-│  ┌──────────┐  ┌──────────────┐                                      │
-│  │ DocsTool │  │ MetaTool     │                                      │
-│  │          │  │              │                                      │
-│  │ create   │  │ create_tool  │                                      │
-│  │ update   │  │ log_impossi  │                                      │
-│  │ todos    │  │ request_human│                                      │
-│  └──────────┘  └──────────────┘                                      │
+│  ┌──────────┐  ┌──────────────────────────────────────┐  ┌────────┐ │
+│  │ DocsTool │  │ SocialTool                           │  │ Meta   │ │
+│  │          │  │                                      │  │ Tool   │ │
+│  │ create   │  │ facebook instagram twitter linkedin  │  │ create │ │
+│  │ update   │  │ tiktok youtube pinterest telegram    │  │ log    │ │
+│  │ todos    │  │ share / share_to_all / upload_video  │  │        │ │
+│  └──────────┘  └──────────────────────────────────────┘  └────────┘ │
 │                                                                       │
-│  9 Ferramentas Atômicas | Todo input validado contra JSON Schema     │
+│  10 Ferramentas Atômicas | Todo input validado contra JSON Schema    │
 │  Auditoria: Todo call logado em tool_calls_log                       │
 │  Sandbox: Apenas /var/www/html/projetos/ acessível                   │
 └──────────────────────────────────────────────────────────────────────┘
