@@ -49,5 +49,85 @@ class ProjectSpecification extends Model
             'approved_at' => now(),
             'approved_by' => $user->id,
         ]);
+
+        $this->createModulesAndSubmodules();
+    }
+
+    private function createModulesAndSubmodules(): void
+    {
+        $aiSpec = $this->ai_specification;
+
+        if (empty($aiSpec['modules'])) {
+            return;
+        }
+
+        $moduleIdMap = [];
+
+        foreach ($aiSpec['modules'] as $moduleData) {
+            $priorityEnum = match ($moduleData['priority'] ?? 'normal') {
+                'high' => \App\Enums\Priority::High,
+                'medium' => \App\Enums\Priority::Medium,
+                default => \App\Enums\Priority::Normal,
+            };
+
+            $parentModule = ProjectModule::create([
+                'project_id'         => $this->project_id,
+                'name'               => $moduleData['name'],
+                'description'        => $moduleData['description'],
+                'status'             => \App\Enums\ModuleStatus::Planned,
+                'priority'           => $priorityEnum,
+                'dependencies'       => null,
+            ]);
+
+            $moduleIdMap[$moduleData['name']] = $parentModule->id;
+
+            // Cria submódulos se existirem
+            if (!empty($moduleData['submodules'])) {
+                foreach ($moduleData['submodules'] as $submoduleData) {
+                    $subPriorityEnum = match ($submoduleData['priority'] ?? 'normal') {
+                        'high' => \App\Enums\Priority::High,
+                        'medium' => \App\Enums\Priority::Medium,
+                        default => \App\Enums\Priority::Normal,
+                    };
+
+                    $subModule = ProjectModule::create([
+                        'project_id'         => $this->project_id,
+                        'parent_id'          => $parentModule->id,
+                        'name'               => $submoduleData['name'],
+                        'description'        => $submoduleData['description'],
+                        'status'             => \App\Enums\ModuleStatus::Planned,
+                        'priority'           => $subPriorityEnum,
+                        'dependencies'       => null,
+                    ]);
+
+                    $moduleIdMap[$submoduleData['name']] = $subModule->id;
+                }
+            }
+        }
+
+        // Resolver dependências para todos os módulos (pais e filhos)
+        $resolveDependencies = function ($items) use (&$resolveDependencies, $moduleIdMap) {
+            foreach ($items as $itemData) {
+                if (!empty($itemData['dependencies'])) {
+                    $depIds = collect($itemData['dependencies'])
+                        ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
+                        ->filter()
+                        ->values()
+                        ->all();
+
+                    if (!empty($depIds) && isset($moduleIdMap[$itemData['name']])) {
+                        ProjectModule::where('id', $moduleIdMap[$itemData['name']])
+                            ->update(['dependencies' => $depIds]);
+                    }
+                }
+
+                // Chamar recursivamente para os submódulos
+                if (!empty($itemData['submodules'])) {
+                    $resolveDependencies($itemData['submodules']);
+                }
+            }
+        };
+
+        $resolveDependencies($aiSpec['modules']);
     }
 }

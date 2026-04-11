@@ -129,6 +129,21 @@ PROMPT;
             '_prompt'                   => $prompt,
         ];
     }
+}
+ind CSS v4',
+                'admin'    => 'Filament v5',
+                'database' => 'PostgreSQL 16',
+                'extras'   => [],
+            ],
+            'non_functional_requirements' => [],
+            'modules'                   => [],
+            'estimated_modules'         => 0,
+            'estimated_complexity'      => 'moderate',
+            '_status'                   => 'ai_generation_failed',
+            '_error'                    => $error,
+            '_prompt'                   => $prompt,
+        ];
+    }
 
     private function createModulesFromSpec(Project $project, array $aiSpec): void
     {

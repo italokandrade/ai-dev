@@ -20,14 +20,13 @@ especificação técnica estruturada em JSON. Você deve:
 
 1. Reescrever a descrição em linguagem técnica clara
 2. Decompor o sistema em módulos independentes e coesos
-3. Definir critérios de aceite mensuráveis para cada módulo
+3. É MANDATÓRIO criar SUBMÓDULOS. Não crie módulos gigantes. Divida grandes funcionalidades em pequenos submódulos (ex: "Mensageria" -> "WhatsApp", "Telegram", "Email"). Isso facilita a execução para os agentes da IA.
 4. Respeitar a stack: Laravel 13 + TALL + Filament v5 + PostgreSQL 16
 
 REGRAS DE OUTPUT:
 - Retorne APENAS o JSON, sem markdown, sem explicações adicionais
-- Módulos devem ser granulares e ter ao menos 3 critérios de aceite
 - A ordem deve respeitar dependências (Auth sempre primeiro se necessário)
-- Estime com realismo o número de tasks por módulo
+- Módulos e submódulos devem ter descrições diretas e únicas
 INSTRUCTIONS;
     }
 }
