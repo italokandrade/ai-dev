@@ -17,8 +17,6 @@ class ProjectTest extends TestCase
         $project = Project::create([
             'name' => 'test-project',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
 
         $this->assertInstanceOf(Project::class, $project);
@@ -31,8 +29,6 @@ class ProjectTest extends TestCase
         $project = Project::create([
             'name' => 'test-modules-rel',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
 
         ProjectModule::create([
@@ -51,8 +47,6 @@ class ProjectTest extends TestCase
         $project = Project::create([
             'name' => 'test-spec-rel',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
 
         ProjectSpecification::create([
@@ -70,8 +64,6 @@ class ProjectTest extends TestCase
         $project = Project::create([
             'name' => 'test-progress',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
 
         ProjectModule::create([

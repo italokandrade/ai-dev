@@ -232,11 +232,6 @@ class ProjectResource extends Resource
                     ->counts('tasks')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('default_provider')
-                    ->label('Provider')
-                    ->badge()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Criado em')
                     ->dateTime('d/m/Y H:i')

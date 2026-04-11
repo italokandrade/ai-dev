@@ -19,8 +19,6 @@ class ProjectModuleTest extends TestCase
         return Project::create([
             'name' => 'test-module-project',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
     }
 

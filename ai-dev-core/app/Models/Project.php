@@ -20,8 +20,6 @@ class Project extends Model
         'local_path',
         'gemini_session_id',
         'claude_session_id',
-        'default_provider',
-        'default_model',
         'status',
     ];
 
@@ -29,7 +27,6 @@ class Project extends Model
     {
         return [
             'status' => ProjectStatus::class,
-            'default_provider' => AgentProvider::class,
         ];
     }
 

@@ -51,10 +51,6 @@ class ProjectRoadmapWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('tasks_count')
                     ->label('Tasks'),
 
-                Tables\Columns\TextColumn::make('default_provider')
-                    ->label('Provider')
-                    ->badge(),
-
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Criado em')
                     ->date('d/m/Y')

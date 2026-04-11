@@ -18,8 +18,6 @@ class TaskTest extends TestCase
         return Project::create([
             'name' => 'test-task-project',
             'status' => 'active',
-            'default_provider' => 'anthropic',
-            'default_model' => 'claude-sonnet-4-6',
         ]);
     }
 
