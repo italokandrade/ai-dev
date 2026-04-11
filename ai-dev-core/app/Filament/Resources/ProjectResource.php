@@ -213,9 +213,12 @@ class ProjectResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('modules_count')
-                    ->label('Módulos')
-                    ->counts('modules')
-                    ->sortable(),
+                    ->label('Módulos / Submódulos')
+                    ->getStateUsing(function (Project $record) {
+                        $parentCount = $record->modules()->whereNull('parent_id')->count();
+                        $subCount = $record->modules()->whereNotNull('parent_id')->count();
+                        return "{$parentCount} / {$subCount}";
+                    }),
 
                 Tables\Columns\TextColumn::make('overall_progress')
                     ->label('Progresso')
@@ -225,11 +228,6 @@ class ProjectResource extends Resource
                         $record->overallProgress() >= 40 => 'info',
                         default => 'gray',
                     }),
-
-                Tables\Columns\TextColumn::make('tasks_count')
-                    ->label('Tasks')
-                    ->counts('tasks')
-                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Criado em')
