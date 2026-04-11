@@ -46,4 +46,7 @@ Este documento define a arquitetura dos módulos e submódulos fundamentais que 
 
 ---
 **Regra de Implementação (AI-Dev):**
-Ao iniciar um novo projeto, a IA deve ser instruída a pré-carregar automaticamente esses módulos na Especificação Técnica, marcando a maioria como "Dependencies" (Dependências) para os módulos específicos de negócio.
+Estes módulos **NÃO serão desenvolvidos ou reescritos pela Inteligência Artificial a cada projeto**. Eles formam um "Core Master" pré-fabricado (arquivos e dumps SQL).
+Durante o scaffolding via `instalar_projeto.sh`, todo o código-fonte e o banco de dados base destes módulos serão injetados fisicamente no novo sistema. Assim, o painel administrativo do cliente nascerá 100% estruturado em segurança, auditoria e gestão.
+
+A IA atuará apenas integrando e marcando esses módulos preexistentes como "Dependencies" (Dependências) para os módulos específicos de negócio que ela de fato irá codificar.
