@@ -5,13 +5,16 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ProjectQuotationResource\Pages;
 use App\Models\Project;
 use App\Models\ProjectQuotation;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Schema;
 use Filament\Infolists;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 
@@ -19,7 +22,7 @@ class ProjectQuotationResource extends Resource
 {
     protected static ?string $model = ProjectQuotation::class;
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-calculator';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-calculator';
 
     protected static ?string $navigationLabel = 'Orçamentos';
 
@@ -29,188 +32,95 @@ class ProjectQuotationResource extends Resource
 
     protected static ?int $navigationSort = 5;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Configuracao';
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuracao';
 
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->schema([
-                Section::make('Dados do Cliente')
+                Section::make('Dados do orçamento')
+                    ->description('Informe apenas o cliente e o projeto vinculado. Os demais parâmetros serão preenchidos pela automação.')
                     ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                Forms\Components\TextInput::make('client_name')
-                                    ->label('Nome do Cliente')
-                                    ->required()
-                                    ->maxLength(255),
-
-                                Forms\Components\TextInput::make('project_name')
-                                    ->label('Nome do Projeto')
-                                    ->required()
-                                    ->maxLength(255),
-                            ]),
+                        Forms\Components\TextInput::make('client_name')
+                            ->label('Nome do Cliente')
+                            ->required()
+                            ->maxLength(255)
+                            ->columnSpanFull(),
 
                         Forms\Components\Select::make('project_id')
-                            ->label('Projeto Vinculado (opcional)')
+                            ->label('Projeto Vinculado')
                             ->relationship('project', 'name')
                             ->searchable()
                             ->preload()
-                            ->placeholder('Nenhum — orçamento independente'),
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                if (! $state) {
+                                    $set('project_name', null);
+                                    $set('project_description', null);
 
-                        Forms\Components\Textarea::make('project_description')
-                            ->label('Descrição do Projeto')
-                            ->placeholder('Descreva brevemente o que o projeto precisa fazer')
-                            ->rows(3)
+                                    return;
+                                }
+
+                                $project = Project::find($state);
+
+                                if ($project) {
+                                    $set('project_name', $project->name);
+                                    $set('project_description', $project->currentSpecification?->ai_specification['objective'] ?? null);
+                                }
+                            })
                             ->columnSpanFull(),
 
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options(ProjectQuotation::STATUS_LABELS)
-                            ->default('draft')
-                            ->required(),
-                    ]),
-
-                Section::make('Parâmetros de Complexidade e Urgência')
-                    ->description('Estes parâmetros definem os multiplicadores de custo e o tamanho da equipe necessária.')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                Forms\Components\Select::make('complexity_level')
-                                    ->label('Nível de Complexidade')
-                                    ->options(ProjectQuotation::COMPLEXITY_LABELS)
-                                    ->default(2)
-                                    ->required()
-                                    ->helperText('Impacta o multiplicador de custo total.'),
-
-                                Forms\Components\Select::make('urgency_level')
-                                    ->label('Urgência de Entrega')
-                                    ->options(ProjectQuotation::URGENCY_LABELS)
-                                    ->default(1)
-                                    ->required()
-                                    ->helperText('Urgência aumenta o time necessário e o custo.'),
-                            ]),
-
-                        Forms\Components\TextInput::make('delivery_days')
-                            ->label('Prazo de Entrega (dias)')
-                            ->numeric()
-                            ->minValue(1)
-                            ->placeholder('Ex: 90'),
-                    ]),
-
-                Section::make('Áreas e Horas Estimadas')
-                    ->description('Selecione as áreas envolvidas e estime as horas de trabalho para um profissional sênior.')
-                    ->schema([
-                        Forms\Components\CheckboxList::make('required_areas')
-                            ->label('Áreas do Projeto')
-                            ->options([
-                                'backend'  => 'Backend',
-                                'frontend' => 'Frontend',
-                                'mobile'   => 'Mobile',
-                                'database' => 'Banco de Dados',
-                                'devops'   => 'DevOps / Infraestrutura',
-                                'design'   => 'Design / UX',
-                                'testing'  => 'QA / Testes',
-                                'security' => 'Segurança',
-                                'pm'       => 'Gerência de Projeto (PM)',
-                            ])
-                            ->columns(3)
-                            ->columnSpanFull(),
-
-                        Grid::make(3)
-                            ->schema([
-                                Forms\Components\TextInput::make('backend_hours')
-                                    ->label('Horas Backend')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('frontend_hours')
-                                    ->label('Horas Frontend')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('mobile_hours')
-                                    ->label('Horas Mobile')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('database_hours')
-                                    ->label('Horas Banco de Dados')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('devops_hours')
-                                    ->label('Horas DevOps')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('design_hours')
-                                    ->label('Horas Design')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('testing_hours')
-                                    ->label('Horas QA')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('security_hours')
-                                    ->label('Horas Segurança')
-                                    ->numeric()->minValue(0)->default(0),
-
-                                Forms\Components\TextInput::make('pm_hours')
-                                    ->label('Horas PM')
-                                    ->numeric()->minValue(0)->default(0),
-                            ]),
-                    ]),
-
-                Section::make('Taxas Horárias (R$/h)')
-                    ->description('Valores padrão baseados no mercado brasileiro (profissional sênior CLT). Ajuste conforme necessário.')
-                    ->schema([
-                        Grid::make(3)
-                            ->schema([
-                                Forms\Components\TextInput::make('hourly_rate_backend')
-                                    ->label('Backend (R$/h)')
-                                    ->numeric()->step(0.01)->default(120.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_frontend')
-                                    ->label('Frontend (R$/h)')
-                                    ->numeric()->step(0.01)->default(110.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_mobile')
-                                    ->label('Mobile (R$/h)')
-                                    ->numeric()->step(0.01)->default(130.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_database')
-                                    ->label('Banco de Dados (R$/h)')
-                                    ->numeric()->step(0.01)->default(115.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_devops')
-                                    ->label('DevOps (R$/h)')
-                                    ->numeric()->step(0.01)->default(125.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_design')
-                                    ->label('Design (R$/h)')
-                                    ->numeric()->step(0.01)->default(100.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_testing')
-                                    ->label('QA (R$/h)')
-                                    ->numeric()->step(0.01)->default(90.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_security')
-                                    ->label('Segurança (R$/h)')
-                                    ->numeric()->step(0.01)->default(140.00),
-
-                                Forms\Components\TextInput::make('hourly_rate_pm')
-                                    ->label('PM (R$/h)')
-                                    ->numeric()->step(0.01)->default(130.00),
-                            ]),
+                        Forms\Components\Hidden::make('project_name'),
+                        Forms\Components\Hidden::make('project_description'),
+                        Forms\Components\Hidden::make('status')
+                            ->default('draft'),
+                        Forms\Components\Hidden::make('complexity_level')
+                            ->default(2),
+                        Forms\Components\Hidden::make('urgency_level')
+                            ->default(1),
+                        Forms\Components\Hidden::make('delivery_days'),
+                        Forms\Components\Hidden::make('required_areas')
+                            ->default([]),
+                        Forms\Components\Hidden::make('backend_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('frontend_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('mobile_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('database_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('devops_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('design_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('testing_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('security_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('pm_hours')
+                            ->default(0),
+                        Forms\Components\Hidden::make('hourly_rate_backend')
+                            ->default(120.00),
+                        Forms\Components\Hidden::make('hourly_rate_frontend')
+                            ->default(110.00),
+                        Forms\Components\Hidden::make('hourly_rate_mobile')
+                            ->default(130.00),
+                        Forms\Components\Hidden::make('hourly_rate_database')
+                            ->default(115.00),
+                        Forms\Components\Hidden::make('hourly_rate_devops')
+                            ->default(125.00),
+                        Forms\Components\Hidden::make('hourly_rate_design')
+                            ->default(100.00),
+                        Forms\Components\Hidden::make('hourly_rate_testing')
+                            ->default(90.00),
+                        Forms\Components\Hidden::make('hourly_rate_security')
+                            ->default(140.00),
+                        Forms\Components\Hidden::make('hourly_rate_pm')
+                            ->default(130.00),
+                        Forms\Components\Hidden::make('notes'),
                     ])
-                    ->collapsible()
-                    ->collapsed(),
-
-                Section::make('Observações')
-                    ->schema([
-                        Forms\Components\Textarea::make('notes')
-                            ->label('Notas Adicionais')
-                            ->placeholder('Observações internas, condições especiais, etc.')
-                            ->rows(3)
-                            ->columnSpanFull(),
-                    ])
-                    ->collapsible()
-                    ->collapsed(),
+                    ->columns(2),
             ]);
     }
 
@@ -234,10 +144,10 @@ class ProjectQuotationResource extends Resource
                     ->badge()
                     ->color(fn (string $state) => match ($state) {
                         'approved', 'completed' => 'success',
-                        'in_progress'           => 'info',
-                        'sent'                  => 'warning',
-                        'rejected'              => 'danger',
-                        default                 => 'gray',
+                        'in_progress' => 'info',
+                        'sent' => 'warning',
+                        'rejected' => 'danger',
+                        default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state) => ProjectQuotation::STATUS_LABELS[$state] ?? $state)
                     ->sortable(),
@@ -297,10 +207,10 @@ class ProjectQuotationResource extends Resource
                     ->options(ProjectQuotation::URGENCY_LABELS),
             ])
             ->actions([
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
+                ViewAction::make(),
+                EditAction::make(),
 
-                \Filament\Actions\Action::make('recalculate')
+                Action::make('recalculate')
                     ->label('Calcular')
                     ->icon('heroicon-o-calculator')
                     ->color('info')
@@ -310,7 +220,7 @@ class ProjectQuotationResource extends Resource
 
                         Notification::make()
                             ->title('Orçamento recalculado')
-                            ->body("Custo humano: R$ " . number_format($record->total_human_cost, 2, ',', '.') . " | AI-Dev: R$ " . number_format($record->ai_dev_price, 2, ',', '.'))
+                            ->body('Custo humano: R$ '.number_format($record->total_human_cost, 2, ',', '.').' | AI-Dev: R$ '.number_format($record->ai_dev_price, 2, ',', '.'))
                             ->success()
                             ->send();
                     }),
@@ -338,10 +248,10 @@ class ProjectQuotationResource extends Resource
                                     ->formatStateUsing(fn (string $state) => ProjectQuotation::STATUS_LABELS[$state] ?? $state)
                                     ->color(fn (string $state) => match ($state) {
                                         'approved', 'completed' => 'success',
-                                        'in_progress'           => 'info',
-                                        'sent'                  => 'warning',
-                                        'rejected'              => 'danger',
-                                        default                 => 'gray',
+                                        'in_progress' => 'info',
+                                        'sent' => 'warning',
+                                        'rejected' => 'danger',
+                                        default => 'gray',
                                     }),
                             ]),
 
@@ -502,10 +412,10 @@ class ProjectQuotationResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListProjectQuotations::route('/'),
+            'index' => Pages\ListProjectQuotations::route('/'),
             'create' => Pages\CreateProjectQuotation::route('/create'),
-            'view'   => Pages\ViewProjectQuotation::route('/{record}'),
-            'edit'   => Pages\EditProjectQuotation::route('/{record}/edit'),
+            'view' => Pages\ViewProjectQuotation::route('/{record}'),
+            'edit' => Pages\EditProjectQuotation::route('/{record}/edit'),
         ];
     }
 }
