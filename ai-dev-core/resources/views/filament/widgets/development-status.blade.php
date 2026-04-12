@@ -21,7 +21,10 @@
         <div class="rounded-xl border border-warning-300 bg-warning-50 px-5 py-3 dark:border-warning-700 dark:bg-warning-950">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <x-heroicon-o-pause-circle class="h-5 w-5 text-warning-500" />
+                    <x-filament::icon
+                        icon="heroicon-o-pause-circle"
+                        class="h-5 w-5 text-warning-500"
+                    />
                     <span class="text-sm font-semibold text-warning-700 dark:text-warning-300">
                         Desenvolvimento PAUSADO — Agentes não executarão nenhuma task até ser liberado.
                     </span>
