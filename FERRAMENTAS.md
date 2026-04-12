@@ -1052,68 +1052,441 @@ pip install sqlmap
 
 **Classe:** `App\Ai\Tools\SocialTool`
 **Pacote:** `hamzahassanm/laravel-social-auto-post:^2.2`
-**Responsabilidade:** Publicar conteúdo automaticamente em 8 plataformas de redes sociais. As credenciais de cada plataforma são lidas da tabela `social_accounts` do projeto ativo, injetadas em runtime.
+**Versão mínima:** PHP 8.2 + Laravel 13
+**Responsabilidade:** Publicar conteúdo automaticamente em 8 plataformas de redes sociais. As credenciais de cada plataforma são lidas da tabela `social_accounts` do projeto ativo e injetadas em runtime no config do pacote antes de cada chamada.
 
-**Instalação do pacote:**
+---
+
+### Instalação e Configuração
+
 ```bash
+# 1. Instalar o pacote
 composer require hamzahassanm/laravel-social-auto-post:^2.2
-php artisan vendor:publish --provider="HamzaHassanM\LaravelSocialAutoPost\SocialAutoPostServiceProvider"
+
+# 2. Publicar o arquivo de configuração
+php artisan vendor:publish --provider="HamzaHassanM\LaravelSocialAutoPost\SocialShareServiceProvider" --tag=autopost
+# Gera: config/autopost.php
 ```
 
-### Ações Disponíveis
+**Facades registradas automaticamente** (sem `use` adicional necessário):
+```php
+use SocialMedia;   // Manager unificado — acesso a todas as plataformas
+use FaceBook;      // Facade direta do Facebook
+use Twitter;       // Facade direta do Twitter/X
+use LinkedIn;      // Facade direta do LinkedIn
+use Instagram;     // Facade direta do Instagram
+use TikTok;        // Facade direta do TikTok
+use YouTube;       // Facade direta do YouTube
+use Pinterest;     // Facade direta do Pinterest
+use Telegram;      // Facade direta do Telegram
+```
 
-| Ação | Descrição | Exemplo de Uso |
-|---|---|---|
-| `share` | Publicar em plataformas específicas | Post de lançamento no LinkedIn + Twitter |
-| `share_to_all` | Publicar em todas as plataformas configuradas | Anúncio de deploy em todas as redes |
-| `upload_video` | Fazer upload e publicar vídeo | Demo de feature no YouTube + TikTok |
-| `share_carousel` | Publicar carrossel de imagens | Portfolio de screenshots no Instagram |
-| `get_analytics` | Buscar métricas da última publicação | Verificar engajamento pós-post |
+**Estrutura do `config/autopost.php`** (variáveis de ambiente necessárias):
+```php
+return [
+    'facebook' => [
+        'access_token' => env('FACEBOOK_ACCESS_TOKEN'),  // Token de acesso da página
+        'page_id'      => env('FACEBOOK_PAGE_ID'),       // ID numérico da Fan Page
+    ],
+    'twitter' => [
+        'bearer_token'        => env('TWITTER_BEARER_TOKEN'),
+        'api_key'             => env('TWITTER_API_KEY'),
+        'api_secret'          => env('TWITTER_API_SECRET'),
+        'access_token'        => env('TWITTER_ACCESS_TOKEN'),
+        'access_token_secret' => env('TWITTER_ACCESS_TOKEN_SECRET'),
+    ],
+    'linkedin' => [
+        'access_token'      => env('LINKEDIN_ACCESS_TOKEN'),
+        'person_urn'        => env('LINKEDIN_PERSON_URN'),        // urn:li:person:XXXXX
+        'organization_urn'  => env('LINKEDIN_ORGANIZATION_URN'),  // urn:li:organization:XXXXX (opcional)
+    ],
+    'instagram' => [
+        'access_token' => env('INSTAGRAM_ACCESS_TOKEN'),
+        'account_id'   => env('INSTAGRAM_ACCOUNT_ID'),   // ID da conta Business/Creator
+    ],
+    'tiktok' => [
+        'access_token'  => env('TIKTOK_ACCESS_TOKEN'),
+        'client_key'    => env('TIKTOK_CLIENT_KEY'),
+        'client_secret' => env('TIKTOK_CLIENT_SECRET'),
+    ],
+    'youtube' => [
+        'api_key'      => env('YOUTUBE_API_KEY'),
+        'access_token' => env('YOUTUBE_ACCESS_TOKEN'),
+        'channel_id'   => env('YOUTUBE_CHANNEL_ID'),
+    ],
+    'pinterest' => [
+        'access_token' => env('PINTEREST_ACCESS_TOKEN'),
+        'board_id'     => env('PINTEREST_BOARD_ID'),  // ID do board padrão para pins
+    ],
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),  // Token do BotFather
+        'chat_id'   => env('TELEGRAM_CHAT_ID'),    // ID do canal/grupo/usuário
+    ],
+];
+```
 
-### Plataformas Suportadas
+**Como o SocialTool injeta credenciais em runtime** (para suporte multi-projeto):
+```php
+// Em SocialTool::handle() — antes de qualquer chamada ao pacote
+$credentials = SocialAccount::where('project_id', $project->id)
+    ->where('platform', $platform)
+    ->where('is_active', true)
+    ->first();
 
-| Plataforma | Enum | Tipos de Conteúdo |
-|---|---|---|
-| Facebook | `facebook` | Texto, imagens, vídeos, stories, páginas |
-| Instagram | `instagram` | Fotos, Reels, Stories, Carrossel |
-| Twitter/X | `twitter` | Tweets, imagens, vídeos |
-| LinkedIn | `linkedin` | Posts, artigos, Company pages |
-| TikTok | `tiktok` | Vídeos curtos |
-| YouTube | `youtube` | Upload de vídeos, playlists |
-| Pinterest | `pinterest` | Pins com imagens, boards |
-| Telegram | `telegram` | Mensagens, arquivos, fotos, canais |
+// Sobrescreve o config em runtime com as credenciais do projeto ativo
+config(['autopost.' . $platform => $credentials->credentials]);
 
-### JSON Schema de Entrada
+// Agora chama o pacote normalmente — ele lerá os valores sobrescritos
+```
+
+---
+
+### API do SocialMediaManager (Facade `SocialMedia`)
+
+O `SocialMediaManager` é o ponto de entrada unificado. Permite postar em múltiplas plataformas com uma única chamada.
+
+#### Métodos de Publicação Multi-Plataforma
+
+```php
+// Publicar texto + URL em plataformas específicas
+SocialMedia::share(array $platforms, string $caption, string $url): array
+
+// Publicar imagem em plataformas específicas
+SocialMedia::shareImage(array $platforms, string $caption, string $image_url): array
+
+// Publicar vídeo em plataformas específicas
+SocialMedia::shareVideo(array $platforms, string $caption, string $video_url): array
+
+// Publicar em TODAS as 8 plataformas configuradas
+SocialMedia::shareToAll(string $caption, string $url): array
+SocialMedia::shareImageToAll(string $caption, string $image_url): array
+SocialMedia::shareVideoToAll(string $caption, string $video_url): array
+```
+
+#### Acessores de Plataforma Individual
+
+```php
+// Acesso direto ao service de uma plataforma específica
+SocialMedia::facebook()    // → FacebookService
+SocialMedia::twitter()     // → TwitterService
+SocialMedia::linkedin()    // → LinkedInService
+SocialMedia::instagram()   // → InstagramService
+SocialMedia::tiktok()      // → TikTokService
+SocialMedia::youtube()     // → YouTubeService
+SocialMedia::pinterest()   // → PinterestService
+SocialMedia::telegram()    // → TelegramService
+
+// Ou via string dinâmica
+SocialMedia::platform('facebook')  // → FacebookService
+```
+
+#### Utilitários
+
+```php
+SocialMedia::getAvailablePlatforms(): array          // ['facebook','twitter','linkedin',...]
+SocialMedia::isPlatformAvailable(string $p): bool    // Verifica suporte
+SocialMedia::getPlatformService(string $p): ?string  // Retorna nome da classe do service
+```
+
+---
+
+### API por Plataforma (Métodos Completos)
+
+#### Facebook (`FaceBook::`)
+
+```php
+FaceBook::share(string $caption, string $url): array
+FaceBook::shareImage(string $caption, string $image_url): array
+FaceBook::shareVideo(string $caption, string $video_url): array
+// Nota: vídeos usam upload chunked/resumable para arquivos grandes
+FaceBook::getPageInsights(array $metrics = [], array $additionalParams = []): array
+// metrics ex: ['page_impressions', 'page_engaged_users', 'page_views_total']
+FaceBook::getPageInfo(): array
+```
+
+**Credenciais necessárias:** `FACEBOOK_ACCESS_TOKEN` (token de página, não de usuário) + `FACEBOOK_PAGE_ID`
+
+---
+
+#### Instagram (`Instagram::`)
+
+```php
+Instagram::shareImage(string $caption, string $image_url): array
+// image_url DEVE ser URL pública acessível (não caminho local)
+Instagram::shareVideo(string $caption, string $video_url): array
+Instagram::shareCarousel(string $caption, array $image_urls): array
+// image_urls: array de 2-10 URLs públicas de imagens
+Instagram::shareStory(string $caption, string $url): array
+Instagram::share(string $caption, string $url): array  // Cria story com texto e URL
+Instagram::getAccountInfo(): array
+Instagram::getRecentMedia(int $limit = 25): array      // máximo 25
+```
+
+**Credenciais necessárias:** `INSTAGRAM_ACCESS_TOKEN` (token de conta Business/Creator Graph API) + `INSTAGRAM_ACCOUNT_ID`
+
+**Restrição importante:** Instagram não aceita caminhos locais — a mídia precisa estar em URL pública. O SocialTool deve garantir que o arquivo foi previamente uploaded para storage público (`/storage/app/public/`) e a URL pública gerada.
+
+---
+
+#### Twitter/X (`Twitter::`)
+
+```php
+Twitter::share(string $caption, string $url): array
+Twitter::shareImage(string $caption, string $image_url): array
+Twitter::shareVideo(string $caption, string $video_url): array
+Twitter::getTimeline(int $limit = 10): array  // máximo 100
+Twitter::getUserInfo(): array
+```
+
+**Credenciais necessárias:** `TWITTER_BEARER_TOKEN` + `TWITTER_API_KEY` + `TWITTER_API_SECRET` + `TWITTER_ACCESS_TOKEN` + `TWITTER_ACCESS_TOKEN_SECRET` (requer app com permissão Read+Write na Twitter Developer Portal)
+
+**Restrição importante:** Twitter tem limite de 280 caracteres por tweet. O SocialTool deve truncar `$caption` se necessário.
+
+---
+
+#### LinkedIn (`LinkedIn::`)
+
+```php
+LinkedIn::share(string $caption, string $url): array          // Post no perfil pessoal
+LinkedIn::shareImage(string $caption, string $image_url): array
+LinkedIn::shareVideo(string $caption, string $video_url): array
+LinkedIn::shareToCompanyPage(string $caption, string $url): array  // Post na Company Page
+LinkedIn::getUserInfo(): array
+```
+
+**Credenciais necessárias:** `LINKEDIN_ACCESS_TOKEN` (OAuth 2.0 com escopo `w_member_social`) + `LINKEDIN_PERSON_URN` (formato `urn:li:person:XXXXX`) + opcional `LINKEDIN_ORGANIZATION_URN` para Company Page
+
+---
+
+#### TikTok (`TikTok::`)
+
+```php
+TikTok::shareVideo(string $caption, string $video_url): array
+// Upload em 3 etapas: initialize → upload → publish (gerenciado internamente)
+TikTok::share(string $caption, string $url): array
+// Cria vídeo com text overlay a partir da URL
+TikTok::shareImage(string $caption, string $image_url): array
+// Converte imagem para formato de vídeo e publica
+TikTok::getUserInfo(): array
+TikTok::getUserVideos(int $max_count = 20): array  // máximo 20
+```
+
+**Credenciais necessárias:** `TIKTOK_ACCESS_TOKEN` + `TIKTOK_CLIENT_KEY` + `TIKTOK_CLIENT_SECRET` (requer TikTok for Developers com permissão `video.upload`)
+
+---
+
+#### YouTube (`YouTube::`)
+
+```php
+YouTube::shareVideo(string $caption, string $video_url): array
+YouTube::share(string $caption, string $url): array
+YouTube::shareImage(string $caption, string $image_url): array
+YouTube::createCommunityPost(string $text, string $url, string $type = 'text'): array
+// type: 'text' | 'image' | 'video'
+YouTube::getChannelInfo(): array
+YouTube::getChannelVideos(int $maxResults = 25): array
+YouTube::getVideoAnalytics(string $videoId): array
+```
+
+**Credenciais necessárias:** `YOUTUBE_API_KEY` + `YOUTUBE_ACCESS_TOKEN` (OAuth 2.0 com escopo `youtube.upload`) + `YOUTUBE_CHANNEL_ID`
+
+---
+
+#### Pinterest (`Pinterest::`)
+
+```php
+Pinterest::shareImage(string $caption, string $image_url): array   // Pin de imagem no board padrão
+Pinterest::shareVideo(string $caption, string $video_url): array   // Pin de vídeo
+Pinterest::share(string $caption, string $url): array
+Pinterest::createPin(string $note, string $mediaUrl, string $mediaType = 'image'): array
+// mediaType: 'image' | 'video'
+Pinterest::createBoard(string $name, string $description = '', string $privacy = 'PUBLIC'): array
+// privacy: 'PUBLIC' | 'PROTECTED' | 'SECRET'
+Pinterest::getBoards(int $pageSize = 25): array
+Pinterest::getBoardPins(string $boardId, int $pageSize = 25): array
+Pinterest::getUserInfo(): array
+Pinterest::getPinAnalytics(string $pinId): array
+Pinterest::searchPins(string $query, int $pageSize = 25): array
+```
+
+**Credenciais necessárias:** `PINTEREST_ACCESS_TOKEN` (OAuth 2.0 com escopo `boards:read`, `boards:write`, `pins:read`, `pins:write`) + `PINTEREST_BOARD_ID`
+
+---
+
+#### Telegram (`Telegram::`)
+
+```php
+Telegram::share(string $caption, string $url): array
+Telegram::shareImage(string $caption, string $image_url): array
+Telegram::shareVideo(string $caption, string $video_url): array
+Telegram::shareDocument(string $caption, string $document_url): array  // PDFs, ZIPs, etc.
+Telegram::getUpdates(): array  // Busca mensagens recebidas pelo bot
+```
+
+**Credenciais necessárias:** `TELEGRAM_BOT_TOKEN` (obtido via @BotFather) + `TELEGRAM_CHAT_ID` (ID do canal, grupo ou usuário — prefixar canais com `-100`)
+
+---
+
+### Tratamento de Erros
+
+O pacote retorna arrays com chave `error_count` e lança `SocialMediaException` em falhas críticas:
+
+```php
+use HamzaHassanM\LaravelSocialAutoPost\Exceptions\SocialMediaException;
+
+try {
+    $result = SocialMedia::share(['facebook', 'twitter', 'linkedin'], $caption, $url);
+
+    // Resultado multi-plataforma:
+    // $result['success_count'] → int
+    // $result['error_count']   → int
+    // $result['results']       → array por plataforma
+    // $result['errors']        → array com erros por plataforma
+
+    if ($result['error_count'] > 0) {
+        foreach ($result['errors'] as $platform => $error) {
+            Log::warning("SocialTool falhou em {$platform}: {$error}");
+        }
+    }
+
+} catch (SocialMediaException $e) {
+    // Erro crítico (credenciais inválidas, timeout, etc.)
+    Log::error("SocialTool erro crítico: " . $e->getMessage());
+}
+```
+
+**Recursos internos do pacote:**
+- Retry automático com exponential backoff em falhas de rede
+- Validação de inputs antes de chamar a API
+- Logging integrado de todas as chamadas
+- Rate limiting respeitado por plataforma
+
+---
+
+### Tabela `social_accounts` (Credenciais por Projeto)
+
+As credenciais são armazenadas criptografadas por projeto para suporte multi-tenant:
+
+```php
+// Migration: 2026_04_11_112650_create_social_accounts_table.php
+Schema::create('social_accounts', function (Blueprint $table) {
+    $table->uuid('id')->primary();
+    $table->foreignUuid('project_id')->constrained()->cascadeOnDelete();
+    $table->enum('platform', ['facebook','instagram','twitter','linkedin','tiktok','youtube','pinterest','telegram']);
+    $table->json('credentials');      // criptografado via Model $casts
+    $table->boolean('is_active')->default(true);
+    $table->timestamp('token_expires_at')->nullable();
+    $table->timestamps();
+    $table->unique(['project_id', 'platform']);
+});
+```
+
+```php
+// Model: App\Models\SocialAccount
+protected $casts = [
+    'credentials'      => 'encrypted:array',  // criptografia nativa Laravel
+    'token_expires_at' => 'datetime',
+];
+```
+
+**Estrutura de `credentials` por plataforma:**
+```json
+// facebook
+{"access_token": "EAAx...", "page_id": "123456789"}
+
+// twitter
+{"bearer_token": "AAA...", "api_key": "xxx", "api_secret": "xxx", "access_token": "xxx", "access_token_secret": "xxx"}
+
+// linkedin
+{"access_token": "AQV...", "person_urn": "urn:li:person:XXXXX", "organization_urn": "urn:li:organization:XXXXX"}
+
+// instagram
+{"access_token": "EAAx...", "account_id": "17841400000000000"}
+
+// tiktok
+{"access_token": "act.xxx", "client_key": "xxx", "client_secret": "xxx"}
+
+// youtube
+{"api_key": "AIza...", "access_token": "ya29...", "channel_id": "UCxxx"}
+
+// pinterest
+{"access_token": "pina_xxx", "board_id": "12345678901234"}
+
+// telegram
+{"bot_token": "123456:ABCxxx", "chat_id": "-1001234567890"}
+```
+
+---
+
+### JSON Schema de Entrada da SocialTool
 
 ```json
 {
   "type": "object",
-  "required": ["action", "message"],
+  "required": ["action"],
   "properties": {
     "action": {
       "type": "string",
-      "enum": ["share", "share_to_all", "upload_video", "share_carousel", "get_analytics"],
-      "description": "Qual ação executar."
+      "enum": ["share", "share_image", "share_video", "share_to_all", "share_carousel", "share_document", "create_community_post", "create_pin", "create_board", "get_analytics", "get_account_info", "get_recent_media"],
+      "description": "Ação a executar."
     },
     "platforms": {
       "type": "array",
-      "items": {"type": "string", "enum": ["facebook", "instagram", "twitter", "linkedin", "tiktok", "youtube", "pinterest", "telegram"]},
-      "description": "Plataformas alvo. Se omitido, publica em todas as configuradas no projeto."
+      "items": {
+        "type": "string",
+        "enum": ["facebook", "instagram", "twitter", "linkedin", "tiktok", "youtube", "pinterest", "telegram"]
+      },
+      "description": "Plataformas alvo. Omitir para publicar em todas as configuradas no projeto (share_to_all)."
     },
-    "message": {
+    "caption": {
       "type": "string",
-      "description": "Texto do post/legenda. Suporta emojis e hashtags.",
-      "examples": ["🚀 Nova feature lançada! #Laravel #AIdev", "Deploy realizado com sucesso em produção."]
+      "description": "Texto do post/legenda. Suporta emojis e hashtags. Twitter: máximo 280 chars.",
+      "examples": [
+        "Nova feature lançada! #Laravel13 #AIdev",
+        "Deploy v2.1.0 concluído com sucesso."
+      ]
     },
     "url": {
       "type": "string",
-      "description": "URL a ser incluída no post (opcional).",
+      "description": "URL pública a incluir no post. Obrigatório para share/share_to_all.",
       "examples": ["https://meusite.com/blog/nova-feature"]
     },
-    "media_path": {
+    "media_url": {
       "type": "string",
-      "description": "Caminho absoluto para imagem ou vídeo a ser publicado.",
-      "examples": ["/var/www/html/projetos/portal/storage/app/screenshots/deploy.png"]
+      "description": "URL pública da mídia (imagem ou vídeo). DEVE ser acessível publicamente — não use caminhos locais. Para Instagram/TikTok/YouTube, obrigatório.",
+      "examples": [
+        "https://meusite.com/storage/screenshots/deploy.png",
+        "https://meusite.com/storage/videos/demo.mp4"
+      ]
+    },
+    "image_urls": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 2,
+      "maxItems": 10,
+      "description": "Para share_carousel (Instagram): array de 2-10 URLs públicas de imagens."
+    },
+    "platform_id": {
+      "type": "string",
+      "description": "Para get_analytics: ID do post/pin/vídeo retornado pelo post anterior."
+    },
+    "board_id": {
+      "type": "string",
+      "description": "Para create_pin ou get_board_pins no Pinterest."
+    },
+    "board_name": {
+      "type": "string",
+      "description": "Para create_board no Pinterest."
+    },
+    "privacy": {
+      "type": "string",
+      "enum": ["PUBLIC", "PROTECTED", "SECRET"],
+      "description": "Para create_board no Pinterest. Default: PUBLIC."
+    },
+    "community_post_type": {
+      "type": "string",
+      "enum": ["text", "image", "video"],
+      "description": "Para create_community_post no YouTube. Default: text."
     }
   }
 }
@@ -1122,26 +1495,81 @@ php artisan vendor:publish --provider="HamzaHassanM\LaravelSocialAutoPost\Social
 ### Exemplos de Chamada pelo Agente
 
 ```json
-// Publicar lançamento de feature no LinkedIn e Twitter
+// Anunciar lançamento de feature no LinkedIn e Twitter
 {
   "action": "share",
   "platforms": ["linkedin", "twitter"],
-  "message": "🚀 Nova feature: autenticação social implementada! #Laravel13 #AIdev",
+  "caption": "Nova feature: autenticação social implementada! #Laravel13 #AIdev",
   "url": "https://github.com/usuario/projeto/releases/v2.1.0"
 }
 
-// Publicar deploy em todas as redes configuradas
+// Publicar screenshot de deploy em todas as redes
 {
-  "action": "share_to_all",
-  "message": "✅ Deploy v2.1.0 concluído com sucesso! Sistema 100% operacional."
+  "action": "share_image",
+  "platforms": ["facebook", "instagram", "linkedin"],
+  "caption": "Deploy v2.1.0 concluído! Sistema 100% operacional.",
+  "media_url": "https://meusite.com/storage/screenshots/deploy-success.png"
 }
 
-// Upload de demo no YouTube
+// Publicar em TODAS as 8 plataformas configuradas
 {
-  "action": "upload_video",
-  "platforms": ["youtube"],
-  "message": "Demo: AI-Dev gerando um Resource Filament completo em 30 segundos",
-  "media_path": "/var/www/html/projetos/ai-dev/storage/videos/demo-resource.mp4"
+  "action": "share_to_all",
+  "caption": "AI-Dev está em produção! Desenvolvemos um sistema completo em 4 horas.",
+  "url": "https://andradeitalo.ai"
+}
+
+// Carrossel de screenshots no Instagram
+{
+  "action": "share_carousel",
+  "platforms": ["instagram"],
+  "caption": "Antes e depois do refactor. Confira os resultados!",
+  "image_urls": [
+    "https://meusite.com/storage/before.png",
+    "https://meusite.com/storage/after.png",
+    "https://meusite.com/storage/metrics.png"
+  ]
+}
+
+// Upload de demo no YouTube e TikTok
+{
+  "action": "share_video",
+  "platforms": ["youtube", "tiktok"],
+  "caption": "AI-Dev gerando um Resource Filament completo em 30 segundos",
+  "media_url": "https://meusite.com/storage/videos/demo-resource.mp4"
+}
+
+// Enviar PDF de relatório no Telegram
+{
+  "action": "share_document",
+  "platforms": ["telegram"],
+  "caption": "Relatório de auditoria de segurança — Sprint 12",
+  "media_url": "https://meusite.com/storage/reports/security-audit-sprint12.pdf"
+}
+
+// Criar pin no Pinterest
+{
+  "action": "create_pin",
+  "platforms": ["pinterest"],
+  "caption": "Dashboard Filament v5 com dark mode e animações Anime.js",
+  "media_url": "https://meusite.com/storage/portfolio/dashboard.png",
+  "url": "https://andradeitalo.ai/portfolio"
+}
+
+// Buscar métricas de analytics do Facebook
+{
+  "action": "get_analytics",
+  "platforms": ["facebook"],
+  "platform_id": "123456789_987654321"
+}
+
+// Post na Company Page do LinkedIn
+// Use SocialMedia::linkedin()->shareToCompanyPage() diretamente no SocialTool
+{
+  "action": "share",
+  "platforms": ["linkedin"],
+  "caption": "Nossa empresa acabou de lançar o AI-Dev, sistema de desenvolvimento autônomo.",
+  "url": "https://andradeitalo.ai",
+  "target": "company_page"
 }
 ```
 
@@ -1151,30 +1579,49 @@ php artisan vendor:publish --provider="HamzaHassanM\LaravelSocialAutoPost\Social
 {
   "type": "object",
   "properties": {
-    "success": {"type": "boolean"},
-    "published": {
-      "type": "array",
-      "items": {"type": "string"},
-      "description": "Plataformas onde a publicação foi bem-sucedida"
-    },
-    "failed": {
-      "type": "array",
-      "items": {
+    "success": {"type": "boolean", "description": "true se pelo menos uma plataforma teve sucesso"},
+    "success_count": {"type": "integer", "description": "Número de plataformas onde publicou com sucesso"},
+    "error_count": {"type": "integer", "description": "Número de plataformas onde falhou"},
+    "results": {
+      "type": "object",
+      "description": "Resultado por plataforma",
+      "additionalProperties": {
         "type": "object",
         "properties": {
-          "platform": {"type": "string"},
-          "error": {"type": "string"}
+          "success": {"type": "boolean"},
+          "post_id": {"type": "string", "description": "ID do post criado (usar em get_analytics)"},
+          "url": {"type": "string", "description": "URL pública do post criado (quando disponível)"},
+          "error": {"type": "string", "description": "Mensagem de erro se falhou"}
         }
-      },
-      "description": "Plataformas onde a publicação falhou, com motivo"
-    },
-    "post_ids": {
-      "type": "object",
-      "description": "IDs dos posts criados por plataforma (para analytics futuros)"
+      }
     }
   }
 }
 ```
+
+**Exemplo de saída real:**
+```json
+{
+  "success": true,
+  "success_count": 2,
+  "error_count": 1,
+  "results": {
+    "facebook": {"success": true, "post_id": "123456789_987654321"},
+    "linkedin": {"success": true, "post_id": "urn:li:share:7123456789"},
+    "twitter": {"success": false, "error": "Rate limit exceeded. Try again in 15 minutes."}
+  }
+}
+```
+
+### Boas Práticas para o Agente
+
+1. **Mídia sempre em URL pública** — Nunca passe caminhos locais (`/var/www/...`). Use `Storage::url()` para gerar a URL pública antes de chamar o SocialTool.
+2. **Twitter: limite de 280 chars** — Truncar `caption` se necessário antes de chamar.
+3. **Instagram: conta Business/Creator** — Contas pessoais não têm acesso à Graph API. Se `shareImage()` falhar com 403, o projeto não tem conta Business configurada.
+4. **TikTok: só vídeos nativos** — `shareVideo()` é o método principal. `shareImage()` converte a imagem para vídeo internamente.
+5. **Tokens expirados** — Verificar `social_accounts.token_expires_at` antes de publicar. Se expirado, notificar humano via MetaTool em vez de tentar publicar e falhar.
+6. **Falha parcial é normal** — A publicação multi-plataforma pode ter `error_count > 0` e ainda ser considerada sucesso parcial. Logar as falhas mas não abortar a task.
+7. **`share_to_all` vs `share`** — Usar `share_to_all` apenas quando o projeto tiver TODAS as 8 plataformas configuradas. Verificar `social_accounts` antes para evitar erros de credenciais faltando.
 
 ---
 
