@@ -6,6 +6,7 @@ use App\Ai\Agents\SpecialistAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
+use App\Models\SystemSetting;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,6 +31,12 @@ class SubagentJob implements ShouldQueue
 
     public function handle(): void
     {
+        if (! SystemSetting::isDevelopmentEnabled()) {
+            Log::info("SubagentJob: Development is globally disabled. Skipping subtask {$this->subtask->id}.");
+
+            return;
+        }
+
         Log::info("SubagentJob: Processing subtask {$this->subtask->id} — {$this->subtask->title}");
 
         $this->subtask->transitionTo(SubtaskStatus::Running, $this->subtask->assigned_agent);

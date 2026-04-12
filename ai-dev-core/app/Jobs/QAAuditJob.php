@@ -6,6 +6,7 @@ use App\Ai\Agents\QAAuditorAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
+use App\Models\SystemSetting;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,6 +31,12 @@ class QAAuditJob implements ShouldQueue
 
     public function handle(): void
     {
+        if (! SystemSetting::isDevelopmentEnabled()) {
+            Log::info("QAAuditJob: Development is globally disabled. Skipping subtask {$this->subtask->id}.");
+
+            return;
+        }
+
         Log::info("QAAuditJob: Auditing subtask {$this->subtask->id} — {$this->subtask->title}");
 
         $prompt = $this->buildPrompt();

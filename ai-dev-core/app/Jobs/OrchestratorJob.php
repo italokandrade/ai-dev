@@ -6,6 +6,7 @@ use App\Ai\Agents\OrchestratorAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
+use App\Models\SystemSetting;
 use App\Models\Task;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,6 +31,12 @@ class OrchestratorJob implements ShouldQueue
 
     public function handle(): void
     {
+        if (! SystemSetting::isDevelopmentEnabled()) {
+            Log::info("OrchestratorJob: Development is globally disabled. Skipping task {$this->task->id}.");
+
+            return;
+        }
+
         Log::info("OrchestratorJob: Processing task {$this->task->id} — {$this->task->title}");
 
         // Transition: pending → in_progress
