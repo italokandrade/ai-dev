@@ -29,7 +29,7 @@ class TaskResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Tasks';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function form(Schema $schema): Schema
     {
@@ -220,7 +220,9 @@ class TaskResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            TaskResource\RelationManagers\SubtasksRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

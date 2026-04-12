@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources;
 
-use App\Enums\AgentProvider;
 use App\Enums\ModuleStatus;
 use App\Enums\ProjectStatus;
 use App\Filament\Resources\ProjectResource\Pages;
@@ -58,20 +57,11 @@ class ProjectResource extends Resource
                             ->placeholder('usuario/repositorio')
                             ->maxLength(255),
 
-                        Grid::make(2)
-                            ->schema([
-                                Forms\Components\Select::make('default_provider')
-                                    ->label('Provider Padrão')
-                                    ->options(AgentProvider::class)
-                                    ->default('gemini')
-                                    ->required(),
-
-                                Forms\Components\TextInput::make('default_model')
-                                    ->label('Modelo Padrão')
-                                    ->default('gemini-3.1-flash-lite-preview')
-                                    ->required()
-                                    ->maxLength(100),
-                            ]),
+                        Forms\Components\TextInput::make('local_path')
+                            ->label('Caminho Local no Servidor')
+                            ->placeholder('/var/www/html/projetos/nome-do-projeto')
+                            ->helperText('Caminho absoluto onde o projeto será criado/está localizado.')
+                            ->maxLength(500),
 
                         Forms\Components\Select::make('status')
                             ->label('Status')
@@ -251,13 +241,15 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
+                // Coluna esquerda — dados do projeto e roadmap
                 \Filament\Schemas\Components\Group::make([
                     Section::make('Visão Geral')
                         ->schema([
                             Grid::make(3)
                                 ->schema([
                                     Infolists\Components\TextEntry::make('name')
-                                        ->label('Projeto'),
+                                        ->label('Projeto')
+                                        ->weight('bold'),
 
                                     Infolists\Components\TextEntry::make('status')
                                         ->label('Status')
@@ -265,26 +257,41 @@ class ProjectResource extends Resource
 
                                     Infolists\Components\TextEntry::make('overall_progress')
                                         ->label('Progresso Geral')
-                                        ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%'),
+                                        ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%')
+                                        ->color(fn (Project $record) => match(true) {
+                                            $record->overallProgress() >= 80 => 'success',
+                                            $record->overallProgress() >= 40 => 'warning',
+                                            default => 'gray',
+                                        }),
                                 ]),
 
-                            Infolists\Components\TextEntry::make('local_path')
-                                ->label('Caminho Local'),
+                            Grid::make(2)
+                                ->schema([
+                                    Infolists\Components\TextEntry::make('local_path')
+                                        ->label('Caminho Local')
+                                        ->placeholder('Não configurado')
+                                        ->copyable(),
 
-                            Infolists\Components\TextEntry::make('github_repo')
-                                ->label('Repositório GitHub')
-                                ->placeholder('Não configurado'),
+                                    Infolists\Components\TextEntry::make('github_repo')
+                                        ->label('Repositório GitHub')
+                                        ->placeholder('Não configurado')
+                                        ->url(fn ($state) => $state ? "https://github.com/{$state}" : null)
+                                        ->openUrlInNewTab(),
+                                ]),
                         ]),
 
-                    Section::make('Roadmap de Módulos')
+                    Section::make('Estrutura do Projeto (Módulos e Submódulos)')
+                        ->description('Hierarquia: Módulos (agrupadores) → Submódulos (executáveis) → Tasks')
                         ->schema([
-                            Infolists\Components\RepeatableEntry::make('modules')
+                            Infolists\Components\RepeatableEntry::make('rootModules')
+                                ->label('')
                                 ->schema([
                                     Grid::make(4)
                                         ->schema([
                                             Infolists\Components\TextEntry::make('name')
                                                 ->label('Módulo')
-                                                ->weight('bold'),
+                                                ->weight('bold')
+                                                ->icon('heroicon-o-folder'),
 
                                             Infolists\Components\TextEntry::make('status')
                                                 ->label('Status')
@@ -292,32 +299,73 @@ class ProjectResource extends Resource
 
                                             Infolists\Components\TextEntry::make('progress_percentage')
                                                 ->label('Progresso')
-                                                ->formatStateUsing(fn ($state) => $state . '%'),
+                                                ->formatStateUsing(fn ($state) => $state . '%')
+                                                ->color(fn ($state) => match(true) {
+                                                    $state >= 80 => 'success',
+                                                    $state >= 40 => 'warning',
+                                                    default => 'gray',
+                                                }),
 
-                                            Infolists\Components\TextEntry::make('tasks_count')
-                                                ->label('Tasks')
-                                                ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count()),
+                                            Infolists\Components\TextEntry::make('children_count')
+                                                ->label('Submódulos')
+                                                ->getStateUsing(fn (ProjectModule $record) => $record->children()->count() . ' submódulos'),
                                         ]),
 
-                                    Infolists\Components\TextEntry::make('description')
-                                        ->label('')
-                                        ->color('gray'),
+                                    // Submódulos do módulo
+                                    Infolists\Components\RepeatableEntry::make('children')
+                                        ->label('Submódulos')
+                                        ->schema([
+                                            Grid::make(4)
+                                                ->schema([
+                                                    Infolists\Components\TextEntry::make('name')
+                                                        ->label('Submódulo')
+                                                        ->icon('heroicon-o-document-text'),
+
+                                                    Infolists\Components\TextEntry::make('status')
+                                                        ->label('')
+                                                        ->badge(),
+
+                                                    Infolists\Components\TextEntry::make('progress_percentage')
+                                                        ->label('% Concluído')
+                                                        ->formatStateUsing(fn ($state) => $state . '%'),
+
+                                                    Infolists\Components\TextEntry::make('tasks_count')
+                                                        ->label('Tasks')
+                                                        ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count() . ' tasks'),
+                                                ]),
+                                        ])
+                                        ->columnSpanFull(),
                                 ])
                                 ->columnSpanFull(),
                         ])
                         ->collapsible(),
                 ])->columnSpan(['default' => 1, 'xl' => 1]),
 
+                // Coluna direita — especificação da IA
                 \Filament\Schemas\Components\Group::make([
-                    Section::make('Especificação Técnica')
+                    Section::make('Especificação Técnica (gerada pela IA)')
                         ->schema([
+                            Infolists\Components\TextEntry::make('currentSpecification.approved_at')
+                                ->label('Status da Especificação')
+                                ->getStateUsing(fn (Project $record) => match(true) {
+                                    $record->currentSpecification === null => 'Nenhuma especificação gerada',
+                                    $record->currentSpecification->isApproved() => '✅ Aprovada em ' . $record->currentSpecification->approved_at->format('d/m/Y H:i'),
+                                    default => '⏳ Aguardando aprovação (v' . $record->currentSpecification->version . ')',
+                                })
+                                ->color(fn (Project $record) => match(true) {
+                                    $record->currentSpecification?->isApproved() => 'success',
+                                    $record->currentSpecification !== null => 'warning',
+                                    default => 'gray',
+                                })
+                                ->columnSpanFull(),
+
                             Infolists\Components\TextEntry::make('currentSpecification.user_description')
-                                ->label('Descrição do Usuário')
-                                ->markdown()
+                                ->label('Descrição Original')
+                                ->placeholder('—')
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
-                                ->label('Objetivo (gerado pela IA)')
+                                ->label('Objetivo (IA)')
                                 ->placeholder('Aguardando geração')
                                 ->columnSpanFull(),
 
@@ -325,12 +373,14 @@ class ProjectResource extends Resource
                                 ->label('Funcionalidades Principais')
                                 ->listWithLineBreaks()
                                 ->bulleted()
+                                ->placeholder('—')
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
                                 ->label('Requisitos Não-Funcionais')
                                 ->listWithLineBreaks()
                                 ->bulleted()
+                                ->placeholder('—')
                                 ->columnSpanFull(),
                         ])
                         ->collapsible(),

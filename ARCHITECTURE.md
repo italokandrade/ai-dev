@@ -63,32 +63,29 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `id` | UUID / PK | Identificador único do projeto |
-| `name` | String(255) | Nome legível do projeto (ex: "Portal ItaloAndrade") |
-| `github_repo` | String(255) | URL do repositório GitHub (ex: `italokandrade/portal`) |
-| `local_path` | String(500) | Caminho absoluto no servidor (ex: `/var/www/html/projetos/portal`) |
-| `gemini_session_id` | String / Nullable | UUID da conversa persistida no Proxy Gemini — permite contexto infinito por projeto |
-| `claude_session_id` | String / Nullable | UUID da conversa persistida na Anthropic — idem |
-| `default_provider` | Enum: `gemini`, `claude`, `ollama` | Qual motor de IA usar por padrão para este projeto |
-| `default_model` | String(100) | Modelo padrão (ex: `gemini-3.1-flash-lite-preview`, `claude-sonnet-4-6`) |
+| `name` | String(255) | Nome legível do projeto (único) |
+| `github_repo` | String(255) / Nullable | URL do repositório GitHub (ex: `italokandrade/portal`) |
+| `local_path` | String(500) / Nullable | Caminho absoluto no servidor (ex: `/var/www/html/projetos/portal`) |
+| `gemini_session_id` | String / Nullable | UUID da conversa persistida no Proxy Gemini — contexto infinito por projeto |
+| `claude_session_id` | String / Nullable | UUID da conversa persistida no Proxy Claude — idem |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
 
-**Por que `default_provider` e `default_model` na tabela `projects`?** Porque projetos diferentes podem ter necessidades diferentes. Um projeto simples pode usar apenas Gemini Flash (barato e rápido), enquanto um projeto crítico pode exigir Claude Opus para planejamento mais cuidadoso. Isso é configurável por projeto, sem mexer em código.
-
 ---
 
 **`tasks`** — Cada tarefa de desenvolvimento solicitada (via UI, API ou Sentinela).
-Uma task é sempre acompanhada de um PRD completo (ver `PRD_SCHEMA.md`).
+Uma task é sempre acompanhada de um PRD completo e está sempre vinculada a um módulo/submódulo específico do projeto.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `id` | UUID / PK | Identificador único da tarefa |
 | `project_id` | FK → `projects.id` | A qual projeto pertence |
+| `module_id` | FK → `project_modules.id` / Nullable | Submódulo ao qual a task pertence (null = task avulsa) |
 | `title` | String(500) | Título legível da tarefa (ex: "Criar Resource de Usuários") |
 | `prd_payload` | JSON | O PRD completo em formato JSON estruturado (ver `PRD_SCHEMA.md`) |
 | `status` | Enum (ver abaixo) | Estado atual na máquina de estados |
-| `priority` | Int (1-100) | Prioridade de execução. 100 = máxima (reservado para Sentinela) |
+| `priority` | Enum: `low`, `normal`, `high`, `critical` | Prioridade de execução |
 | `assigned_agent_id` | FK → `agents_config.id` / Nullable | Qual agente está responsável (preenchido pelo Orchestrator) |
 | `git_branch` | String(100) / Nullable | Nome do branch Git criado para isolar esta task (ex: `task/a1b2c3d4`) |
 | `commit_hash` | String(40) / Nullable | Hash do commit final da task (último commit após todas subtasks aprovadas). Permite rollback completo |
@@ -218,7 +215,116 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 
 ---
 
-**`context_library`** — Padrões Estritos de código (a "Bíblia TALL").
+**`project_specifications`** — Especificação técnica gerada pela IA a partir da descrição informal do usuário.
+O fluxo: usuário descreve o sistema em linguagem natural → SpecificationAgent gera JSON estruturado → humano aprova → módulos/submódulos criados automaticamente.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID / PK | Identificador único |
+| `project_id` | FK → `projects.id` | Projeto associado |
+| `user_description` | Text | Descrição informal do sistema enviada pelo usuário |
+| `ai_specification` | JSON | Especificação estruturada gerada pela IA (módulos, submódulos, features, stack) |
+| `version` | Int (default: 1) | Versão da especificação (incrementa a cada refinamento) |
+| `approved_at` | Timestamp / Nullable | Quando foi aprovada — dispara criação automática de módulos/submódulos |
+| `approved_by` | FK → `users.id` / Nullable | Quem aprovou |
+| `created_at` | Timestamp | Data de criação |
+| `updated_at` | Timestamp | Última modificação |
+
+**Estrutura do `ai_specification` JSON:**
+```json
+{
+  "system_name": "Portal ItaloAndrade",
+  "objective": "...",
+  "target_audience": "...",
+  "core_features": ["..."],
+  "technical_stack": {"backend": "Laravel 13", "frontend": "Livewire 4 + Alpine.js v3", "admin": "Filament v5", "database": "PostgreSQL 16"},
+  "non_functional_requirements": ["..."],
+  "modules": [
+    {
+      "name": "Autenticação",
+      "description": "...",
+      "priority": "high",
+      "submodules": [
+        {"name": "Login/Logout", "description": "...", "priority": "high"},
+        {"name": "Recuperação de senha", "description": "...", "priority": "normal"}
+      ]
+    }
+  ],
+  "estimated_modules": 5,
+  "estimated_complexity": "medium"
+}
+```
+
+**Ao aprovar:** `ProjectSpecification::approve($user)` chama `createModulesAndSubmodules()` que percorre o JSON e cria automaticamente todos os registros em `project_modules` (módulos com `parent_id = null`) e seus submódulos (com `parent_id = modulo_pai.id`).
+
+---
+
+**`project_modules`** — Módulos e submódulos do projeto (estrutura hierárquica).
+A estrutura é: **Projeto → Módulos → Submódulos → Tasks**. Cada submódulo recebe tasks da automação.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID / PK | Identificador único |
+| `project_id` | FK → `projects.id` | Projeto associado |
+| `parent_id` | FK → `project_modules.id` / Nullable | Módulo pai (null = módulo raiz; preenchido = submódulo) |
+| `name` | String(255) | Nome do módulo/submódulo |
+| `description` | Text | Descrição do que este módulo abrange |
+| `status` | Enum: `planned`, `in_progress`, `testing`, `completed`, `revision` | Estado atual |
+| `priority` | Enum: `low`, `normal`, `high`, `critical` | Prioridade de desenvolvimento |
+| `dependencies` | JSON / Nullable | Array de UUIDs de módulos que devem ser concluídos antes deste |
+| `progress_percentage` | TinyInt (0-100) | % calculado automaticamente com base nas tasks concluídas |
+| `started_at` | Timestamp / Nullable | Quando o desenvolvimento começou |
+| `completed_at` | Timestamp / Nullable | Quando foi concluído |
+| `created_at` | Timestamp | Data de criação |
+| `updated_at` | Timestamp | Última modificação |
+
+**Hierarquia e lógica:**
+- `parent_id = null` → módulo raiz (agrupador, ex: "Autenticação", "Dashboard", "CRUD Produtos")
+- `parent_id = uuid` → submódulo (unidade executável, ex: "Login/Logout", "Recuperação de senha")
+- Tasks são sempre vinculadas a **submódulos**, nunca a módulos raiz
+- `recalculateProgress()` conta tasks completadas / total tasks do submódulo
+- `dependenciesMet()` verifica se todos os módulos dependência estão com status `completed`
+
+---
+
+**`project_quotations`** — Orçamentos e análise de ROI por projeto.
+Compara o custo de desenvolvimento humano vs. AI-Dev para demonstrar o valor da automação.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID / PK | Identificador único |
+| `project_id` | FK → `projects.id` / Nullable | Projeto associado (opcional) |
+| `client_name` | String(255) | Nome do cliente |
+| `project_name` | String(255) | Nome do projeto cotado |
+| `project_description` | Text | Descrição breve do escopo |
+| `complexity_level` | TinyInt (1-4) | 1=Simples, 2=Médio, 3=Complexo, 4=Enterprise |
+| `required_areas` | JSON | Checklist de áreas: backend, frontend, mobile, database, devops, design, testing, security, pm |
+| `*_hours` | Int | Horas estimadas por área (backend_hours, frontend_hours, etc.) |
+| `urgency_level` | TinyInt (1-4) | 1=Normal, 2=Moderado, 3=Urgente, 4=Crítico |
+| `delivery_days` | Int | Prazo em dias |
+| `hourly_rate_*` | Decimal(8,2) | Taxa horária em BRL por área (defaults: backend R$120, frontend R$110, etc.) |
+| `urgency_multiplier` | Decimal(4,2) | Multiplicador de urgência (1.00 a 2.00) |
+| `complexity_multiplier` | Decimal(4,2) | Multiplicador de complexidade (0.80 a 1.80) |
+| `team_size` | Int | Tamanho de equipe calculado pela urgência |
+| `total_human_hours` | Decimal(10,2) | Total de horas (sem multiplicadores) |
+| `total_human_cost` | Decimal(12,2) | Custo humano total em BRL |
+| `ai_dev_cost` | Decimal(12,2) | Custo real do AI-Dev (tokens USD×5.80 + infra) |
+| `ai_dev_price` | Decimal(12,2) | Preço sugerido do AI-Dev (15% do custo humano, mínimo R$500) |
+| `savings_amount` | Decimal(12,2) | Economia em BRL |
+| `savings_percentage` | Decimal(12,2) | % de economia |
+| `actual_token_cost_usd` | Decimal(10,6) | Custo real de tokens (pós-execução) |
+| `actual_infra_cost` | Decimal(10,2) | Custo real de infra (pós-execução) |
+| `status` | Enum: `draft`, `sent`, `approved`, `rejected`, `in_progress`, `completed` | Estado do orçamento |
+| `notes` | Text / Nullable | Observações internas |
+| `sent_at` | Timestamp / Nullable | Quando foi enviado ao cliente |
+| `approved_at` | Timestamp / Nullable | Quando foi aprovado |
+| `created_at` | Timestamp | Data de criação |
+
+**Método `recalculate()`:** Recalcula automaticamente todos os campos derivados (total_human_hours, total_human_cost, ai_dev_price, savings_amount, savings_percentage) baseado nas horas e taxas preenchidas.
+
+---
+
+**`context_library`** *(Fase 3 — não implementado ainda)* — Padrões estritos de código (a "Bíblia TALL").
 Cada registro é um exemplo de código perfeito que os agentes DEVEM seguir ao gerar código. Funciona como um "few-shot" fixo que não depende do RAG vetorial.
 
 | Coluna | Tipo | Descrição |
@@ -266,7 +372,7 @@ Cada vez que uma task ou subtask muda de estado (ex: `pending` → `in_progress`
 
 ---
 
-**`agent_executions`** — Log detalhado de cada chamada LLM feita por qualquer agente.
+**`agent_executions`** *(Fase 2 — não implementado ainda)* — Log detalhado de cada chamada LLM feita por qualquer agente.
 Essencial para controle de custo, debugging e otimização.
 
 | Coluna | Tipo | Descrição |
@@ -292,7 +398,7 @@ Essencial para controle de custo, debugging e otimização.
 
 ---
 
-**`tool_calls_log`** — Registro de cada ferramenta executada pelos agentes.
+**`tool_calls_log`** *(Fase 2 — não implementado ainda)* — Registro de cada ferramenta executada pelos agentes.
 A camada de segurança e auditoria — permite investigar exatamente quais comandos foram rodados, quais arquivos foram alterados, e por quem.
 
 | Coluna | Tipo | Descrição |
@@ -311,7 +417,7 @@ A camada de segurança e auditoria — permite investigar exatamente quais coman
 
 ---
 
-**`problems_solutions`** — Base de conhecimento auto-alimentada.
+**`problems_solutions`** *(Fase 3 — não implementado ainda)* — Base de conhecimento auto-alimentada (RAG vetorial).
 Toda vez que o Sentinela detecta um erro e os agentes resolvem, a dupla (problema + solução) é gravada aqui automaticamente. Na próxima vez que um erro similar surgir, o RAG vetorial injeta essa solução como few-shot no prompt.
 
 | Coluna | Tipo | Descrição |
@@ -380,7 +486,7 @@ Cada projeto pode publicar em múltiplas redes sociais via o pacote `hamzahassan
 
 ---
 
-**`webhooks_config`** — Configuração de webhooks de entrada para integração com GitHub, CI/CD, etc.
+**`webhooks_config`** *(Fase 2 — não implementado ainda)* — Configuração de webhooks de entrada para integração com GitHub, CI/CD, etc.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -400,18 +506,24 @@ Cada projeto pode publicar em múltiplas redes sociais via o pacote `hamzahassan
 ### 2.2. Relacionamento Visual entre Tabelas (ERD Simplificado)
 
 ```text
-projects ──┬── 1:N ── tasks ──┬── 1:N ── subtasks ──── N:1 ── agents_config
-            │                   │                                    │
-            │                   ├── 1:N ── task_transitions          │
-            │                   │                                    │
-            │                   └── 1:N ── agent_executions ─── 1:N ── tool_calls_log
+projects ──┬── 1:N ── project_specifications (IA gera → humano aprova → cria módulos)
             │
-            ├── 1:N ── problems_solutions
+            ├── 1:N ── project_modules ──┬── 1:N ── project_modules (submódulos, parent_id)
+            │          (módulos raiz)    └── 1:N ── tasks
+            │
+            ├── 1:N ── tasks ──┬── 1:N ── subtasks ──── N:1 ── agents_config
+            │   (tasks avulsas) ├── 1:N ── task_transitions
+            │                  └── N:1 ── project_modules (module_id)
+            │
+            ├── 1:N ── project_quotations (orçamentos e ROI)
             ├── 1:N ── agent_conversations (SDK — RemembersConversations)
-            ├── 1:N ── social_accounts
-            └── 1:N ── webhooks_config
+            ├── 1:N ── social_accounts ⚙️ (Fase 1 — migration criada)
+            ├── 1:N ── agent_executions 🔜 (Fase 2 — pendente)
+            │          └── 1:N ── tool_calls_log 🔜 (Fase 2 — pendente)
+            ├── 1:N ── problems_solutions 🔜 (Fase 3 — RAG vetorial)
+            └── 1:N ── webhooks_config 🔜 (Fase 2 — pendente)
 
-context_library (standalone — padrões globais, não vinculados a projeto)
+context_library 🔜 (Fase 3 — standalone, padrões globais de código TALL)
 ```
 
 ---
@@ -1638,3 +1750,128 @@ Isso garante que:
 1. A IA mantém contexto entre chamadas (memória da conversa persistida no PostgreSQL)
 2. Cada projeto tem seu próprio contexto isolado
 3. O contexto da IA complementa a memória vetorial do AI-Dev (dupla camada de memória)
+
+---
+
+## 17. Laravel Boost + MCP: Padrão Obrigatório de Desenvolvimento
+
+### 17.1. O que é o Boost e por que elimina desperdício de tokens
+
+O **Laravel Boost** (`laravel/boost`) é um servidor MCP nativo do Laravel que já tem **toda a documentação do stack TALL mapeada e integrada** — Filament v5, Livewire 4, Alpine.js v3, Laravel 13, Tailwind v4.
+
+O ponto central: **o agente não precisa conhecer o framework**. Ele não carrega a documentação no contexto, não tenta adivinhar a API, não acumula exemplos em memória. Quando precisa implementar algo, envia uma ação ao Boost via MCP e recebe de volta o código pronto, correto e alinhado com a versão exata do stack instalado.
+
+```
+Agente recebe Sub-PRD
+      ↓
+Envia ação ao Boost via MCP: "criar Resource Filament v5 para entidade X"
+      ↓
+Boost retorna: código completo + padrões obrigatórios + exemplos do projeto
+      ↓
+Agente implementa o que recebeu — sem improvisação, sem alucinação de API
+```
+
+**Impacto direto:** Menos retries, menos tokens por task, menos rejeições do QA Auditor. O Boost age como um copiloto que sempre conhece a versão certa do framework — algo que o LLM, por si só, não tem garantia de ter.
+
+### 17.2. Dois Contextos de Uso
+
+#### Agentes Autônomos (Fluxo AI-Dev)
+
+O Specialist Agent não precisa de contexto sobre Filament ou Livewire no seu prompt. O Boost fornece isso sob demanda via MCP, mantendo o contexto do agente focado no problema de negócio:
+
+```
+❌ Sem Boost — agente carrega docs no contexto:
+"Você é um especialista em Filament v5. A API de Forms usa Schema $schema...
+ A API de Tables usa Table $table... O infolist usa RepeatableEntry... [+2000 tokens de doc]
+ Agora crie um Resource para Produto."
+→ Contexto inflado, API possivelmente desatualizada, mais erros
+
+✅ Com Boost via MCP — agente só recebe o problema:
+"Crie um Resource Filament para a entidade Produto com campos: nome, preço, estoque."
+→ Agente chama Boost MCP → recebe código completo e correto → implementa
+→ Contexto limpo, zero tokens gastos com documentação
+```
+
+O `SearchTool` (ferramenta #5) inclui a ação `boost_query` para que o agente invoque o Boost sem sair do loop de execução de tools.
+
+#### Desenvolvimento Manual com Claude Code
+
+Ao desenvolver funcionalidades do AI-Dev (este sistema) ou dos projetos gerenciados, Claude Code deve estar conectado ao Boost MCP Server. Em vez de gerar código do zero, Claude consulta o Boost e recebe o código correto para a versão instalada:
+
+```json
+// .claude/mcp.json — configuração do Boost MCP para este projeto
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "php",
+      "args": ["artisan", "mcp:serve"],
+      "cwd": "/var/www/html/projetos/ai-dev/ai-dev-core"
+    }
+  }
+}
+```
+
+Com isso ativo, basta descrever o que precisa — "crie um Resource Filament para SocialAccount com CRUD" — e o Boost retorna o scaffold completo já adaptado ao Filament v5 e aos padrões do projeto.
+
+### 17.3. O Boost Resolve, Não Só Documenta
+
+Esta é a distinção crítica: o Boost não é uma biblioteca de referência que o agente lê. É um **resolvedor ativo**. Quando recebe uma ação, retorna a implementação completa. O agente não interpreta docs — executa o que o Boost entregou.
+
+| Capacidade | Comportamento |
+|---|---|
+| **Gerar scaffold** | Recebe "Resource para Produto" → retorna arquivo PHP completo e correto |
+| **Aplicar guidelines do projeto** | Já inclui as regras definidas (padrões do AI-Dev) no código gerado |
+| **Versão correta** | Usa a API da versão instalada (`composer.json`), não de versões antigas |
+| **Consistência entre tasks** | Task 1 e Task 20 geram código no mesmo padrão — sem divergência de estilo |
+| **Zero contexto de framework no agente** | O prompt do agente fala de negócio, não de sintaxe do framework |
+
+### 17.4. Registrar Padrões do Projeto como Guidelines no Boost
+
+Todo padrão adotado no AI-Dev **DEVE** ser registrado no Boost como Guideline — não apenas documentado em Markdown. Isso garante que o Boost injete as regras do projeto automaticamente em todo código que gerar, sem que o agente precise conhecê-las:
+
+```php
+// app/Boost/Guidelines/AiDevFilamentGuideline.php
+use Laravel\Boost\Contracts\Guideline;
+
+class AiDevFilamentGuideline implements Guideline
+{
+    public function title(): string
+    {
+        return 'AI-Dev: Padrões Filament v5';
+    }
+
+    public function content(): string
+    {
+        return <<<'MD'
+        - form() e infolist() recebem `Schema $schema` — nunca `Form $form`
+        - Infolists usam `Group::make()` com `columnSpan` para layout 2 colunas
+        - ViewRecord pages: EditAction primeiro, depois ações de negócio customizadas
+        - Toda TextEntry com dado nullable DEVE ter `->placeholder('—')`
+        - Resources usam UUID: `HasUuids` no Model, `foreignUuid()` nas migrations
+        - Nunca usar `->bulkActions([])` sem array vazio explícito
+        MD;
+    }
+}
+```
+
+Quando o Boost gera um Resource qualquer para o AI-Dev, ele **automaticamente** aplica estas regras — o agente não precisa conhecê-las.
+
+### 17.5. Fluxo de Implementação de uma Task com Boost
+
+```
+Task recebida pelo Specialist Agent
+      ↓
+1. Lê o Sub-PRD (objetivo, entidade, campos, critérios de aceite)
+      ↓
+2. Chama SearchTool.boost_query("scaffold Resource Filament para [entidade] com campos [X,Y,Z]")
+      ↓
+3. Boost retorna: Resource.php + Pages/ + Migration + Model (scaffolds completos)
+      ↓
+4. Agente ajusta apenas a lógica de negócio específica (regras do Sub-PRD)
+      ↓
+5. Roda TestTool → QA Auditor valida → GitTool commit
+```
+
+O agente gasta tokens **apenas nas partes únicas** do Sub-PRD — a lógica de negócio específica. O framework boilerplate vem pronto do Boost.
+
+> **Estado atual:** O sistema de gerenciamento (este Filament app) já está operacional. Todo desenvolvimento futuro — autônomo ou manual — deve seguir este fluxo. Conecte o Claude Code ao Boost MCP antes de qualquer sessão de desenvolvimento neste projeto.

@@ -15,6 +15,8 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 
 class ProjectModuleResource extends Resource
 {
@@ -28,7 +30,7 @@ class ProjectModuleResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Módulos';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema
     {
@@ -166,14 +168,24 @@ class ProjectModuleResource extends Resource
                     ->relationship('project', 'name'),
             ])
             ->actions([
-                \Filament\Actions\EditAction::make(),
+                Action::make('entrar')
+                    ->label(fn (ProjectModule $record) => (string) $record->children()->count())
+                    ->icon('heroicon-m-folder-open')
+                    ->action(fn (ProjectModule $record, Pages\ListProjectModules $livewire) => $livewire->setActiveModule($record->id))
+                    ->color('info')
+                    ->link()
+                    ->visible(fn (ProjectModule $record) => $record->children()->exists()),
+                \Filament\Actions\ViewAction::make()->label(''),
+                EditAction::make()->label(''),
             ])
             ->bulkActions([]);
     }
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            ProjectModuleResource\RelationManagers\TasksRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
@@ -181,6 +193,7 @@ class ProjectModuleResource extends Resource
         return [
             'index' => Pages\ListProjectModules::route('/'),
             'create' => Pages\CreateProjectModule::route('/create'),
+            'view' => Pages\ViewProjectModule::route('/{record}'),
             'edit' => Pages\EditProjectModule::route('/{record}/edit'),
         ];
     }

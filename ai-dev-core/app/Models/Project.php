@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\AgentProvider;
 use App\Enums\ProjectStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +37,14 @@ class Project extends Model
     public function modules(): HasMany
     {
         return $this->hasMany(ProjectModule::class);
+    }
+
+    public function rootModules(): HasMany
+    {
+        return $this->hasMany(ProjectModule::class)
+            ->whereNull('parent_id')
+            ->with(['children.tasks'])
+            ->orderBy('created_at');
     }
 
     public function specifications(): HasMany

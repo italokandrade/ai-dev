@@ -63,23 +63,33 @@ A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados 
 
 ## 🗄️ Modelagem do Banco de Dados
 
-O AI-Dev utiliza **13 tabelas** no PostgreSQL para controle total do estado:
+A estrutura hierárquica do AI-Dev é: **Projeto → Módulos → Submódulos → Tasks → Subtasks**. Cada nível é subdividido ao máximo para que a automação processe unidades pequenas e precisas.
+
+**Tabelas implementadas (Fase 1 — operacionais):**
 
 | Tabela | Propósito |
 |---|---|
 | `projects` | Cadastro de projetos/aplicações gerenciados |
-| `tasks` | Tarefas de desenvolvimento com PRD em JSON |
-| `subtasks` | Decomposição granular feita pelo Orchestrator |
+| `project_specifications` | Especificação técnica gerada pela IA; aprovação auto-cria módulos/submódulos |
+| `project_modules` | Módulos e submódulos (hierárquico via parent_id): Projeto → Módulos → Submódulos |
+| `project_quotations` | Orçamentos com comparativo de custo humano vs. AI-Dev e cálculo de ROI |
+| `tasks` | Tarefas vinculadas a submódulos, com PRD em JSON |
+| `subtasks` | Decomposição granular feita pelo Orchestrator (sub-PRDs por especialista) |
 | `agents_config` | Configuração dinâmica de cada agente (modelo, temperatura, prompt) |
-| `context_library` | Padrões de código TALL obrigatórios (few-shot fixo) |
 | `task_transitions` | Log de auditoria de toda mudança de estado |
-| `agent_executions` | Log de cada chamada LLM (tokens, custo, latência) |
-| `tool_calls_log` | Registro de cada ferramenta executada (segurança) |
-| `problems_solutions` | Base de conhecimento auto-alimentada (RAG vetorial via pgvector) |
 | `agent_conversations` | Conversas persistidas automaticamente pelo Laravel AI SDK |
 | `agent_conversation_messages` | Mensagens das conversas (gerenciado pelo SDK) |
 | `social_accounts` | Credenciais de redes sociais por projeto (criptografadas) |
-| `webhooks_config` | Configuração de webhooks de entrada (GitHub, CI/CD) |
+
+**Tabelas planejadas (Fase 2/3 — pendentes):**
+
+| Tabela | Fase | Propósito |
+|---|---|---|
+| `agent_executions` | Fase 2 | Log de cada chamada LLM (tokens, custo, latência) |
+| `tool_calls_log` | Fase 2 | Registro de cada ferramenta executada (auditoria de segurança) |
+| `webhooks_config` | Fase 2 | Configuração de webhooks de entrada (GitHub, CI/CD) |
+| `context_library` | Fase 3 | Padrões de código TALL obrigatórios (few-shot fixo) |
+| `problems_solutions` | Fase 3 | Base de conhecimento auto-alimentada (RAG vetorial via pgvector) |
 
 ---
 
@@ -121,6 +131,25 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 - Laravel Boost (guidelines, skills, documentation API)
 - Multi-provider failover via `Lab` enum + Auto-alimentação de conhecimento
 - SocialTool + `social_accounts` — publicação automática em 8 plataformas
+
+---
+
+## ⚡ Padrão de Desenvolvimento: Boost via MCP (Obrigatório)
+
+**O Boost resolve — não apenas documenta.** O Laravel Boost tem toda a documentação do stack TALL mapeada e integrada. Quando recebe uma ação via MCP, retorna o código completo e correto para a versão instalada. **O agente não precisa conhecer Filament, Livewire ou Laravel** — ele descreve o problema de negócio, o Boost entrega o scaffold.
+
+```
+Agente recebe Sub-PRD → envia ação ao Boost via MCP → recebe código pronto → implementa
+```
+
+| Contexto | Como usar |
+|---|---|
+| **Agentes autônomos** | `SearchTool.boost_query` — o agente chama antes de qualquer implementação TALL |
+| **Desenvolvimento manual** | `php artisan mcp:serve` — conectar Claude Code ao Boost antes de codar |
+
+**Benefício real:** Zero tokens gastos com documentação de framework no contexto do agente. Cada token vai para a lógica de negócio, não para boilerplate.
+
+Veja a seção **17. Laravel Boost + MCP** em `ARCHITECTURE.md` para o fluxo completo e como registrar padrões do projeto como Guidelines.
 
 ---
 
