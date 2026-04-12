@@ -2,13 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Ai\Agents\SpecialistAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
-use App\Models\AgentConfig;
 use App\Models\Subtask;
-use App\Services\LLMGateway;
-use App\Services\PromptFactory;
-use App\Tools\ToolRouter;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,110 +22,112 @@ class SubagentJob implements ShouldQueue
 
     public int $timeout = 600;
 
-    private const MAX_TOOL_ROUNDS = 20;
-
     public function __construct(
         public Subtask $subtask,
     ) {
-        $this->queue = 'subagent';
+        $this->queue = 'agents';
     }
 
-    public function handle(LLMGateway $gateway, PromptFactory $promptFactory, ToolRouter $toolRouter): void
+    public function handle(): void
     {
-        Log::info("SubagentJob: Processing subtask {$this->subtask->id} - {$this->subtask->title}");
+        Log::info("SubagentJob: Processing subtask {$this->subtask->id} — {$this->subtask->title}");
 
-        $agent = AgentConfig::find($this->subtask->assigned_agent);
-        if (! $agent || ! $agent->is_active) {
-            $this->failSubtask("Agent '{$this->subtask->assigned_agent}' not found or inactive");
-            return;
-        }
-
-        // Transition: pending → running
-        $this->subtask->transitionTo(SubtaskStatus::Running, $agent->id);
+        $this->subtask->transitionTo(SubtaskStatus::Running, $this->subtask->assigned_agent);
         $this->subtask->update(['started_at' => now()]);
 
         $project = $this->subtask->task->project;
-        $systemPrompt = $promptFactory->buildSystemPrompt($agent, $project);
-        $userMessage = $promptFactory->buildSubagentMessage($this->subtask);
+        $workDir = $project->local_path;
 
-        $executionLog = [];
-        $filesModified = [];
-        $currentMessage = $userMessage;
+        if (! $workDir || ! is_dir($workDir)) {
+            $this->failSubtask("Project directory not found: {$workDir}");
 
-        // Agentic loop: LLM → Tool calls → Results → LLM → ... until done
-        for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
-            $response = $gateway->chat(
-                agent: $agent,
-                userMessage: $currentMessage,
-                systemPrompt: $round === 0 ? $systemPrompt : null,
-                project: $project,
-                taskId: $this->subtask->task_id,
-                subtaskId: $this->subtask->id,
-            );
-
-            if (! $response->success) {
-                $this->failSubtask("LLM error (round {$round}): {$response->error}");
-                return;
-            }
-
-            $executionLog[] = "--- Round {$round} ---";
-            $executionLog[] = $response->content;
-
-            // If no tool calls, the agent is done
-            if (! $response->hasToolCalls()) {
-                break;
-            }
-
-            // Execute tool calls and build results message
-            $toolResults = [];
-            foreach ($response->toolCalls as $toolCall) {
-                $result = $toolRouter->dispatch($toolCall);
-                $toolResults[] = [
-                    'tool' => $toolCall['tool_name'] ?? 'unknown',
-                    'action' => $toolCall['parameters']['action'] ?? $toolCall['params']['action'] ?? 'unknown',
-                    'result' => $result->toArray(),
-                ];
-
-                $executionLog[] = "[Tool] {$toolCall['tool_name']}: " . ($result->success ? 'OK' : 'FAIL');
-
-                // Track modified files
-                if ($result->success && in_array($toolCall['tool_name'] ?? '', ['FileTool', 'GitTool'])) {
-                    $path = $toolCall['parameters']['path'] ?? $toolCall['params']['path'] ?? null;
-                    if ($path) {
-                        $filesModified[] = $path;
-                    }
-                }
-            }
-
-            // Build next message with tool results
-            $resultsJson = json_encode($toolResults, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            $currentMessage = "Resultados das ferramentas:\n\n```json\n{$resultsJson}\n```\n\nContinue com as próximas ações ou finalize a tarefa.";
+            return;
         }
 
-        // Capture git diff for QA
-        $workDir = $project->local_path;
+        $prompt = $this->buildPrompt($workDir);
+
+        try {
+            $agent = new SpecialistAgent($workDir);
+            $response = $agent->prompt($prompt);
+
+            $resultLog = (string) $response;
+        } catch (\Throwable $e) {
+            Log::error("SubagentJob: Failed for subtask {$this->subtask->id}", ['error' => $e->getMessage()]);
+            $this->failSubtask("Agent error: {$e->getMessage()}");
+
+            return;
+        }
+
+        // Capture git diff for QA audit
         $diff = '';
-        if ($workDir && is_dir("{$workDir}/.git")) {
-            $diffResult = Process::path($workDir)->timeout(30)->run('git diff');
+        if (is_dir("{$workDir}/.git")) {
+            $diffResult = Process::path($workDir)->timeout(30)->run('git diff HEAD~1 HEAD');
             $diff = $diffResult->output();
         }
 
         $this->subtask->update([
-            'result_log' => mb_substr(implode("\n", $executionLog), 0, 65000),
+            'result_log' => mb_substr($resultLog, 0, 65000),
             'result_diff' => mb_substr($diff, 0, 65000),
-            'files_modified' => array_unique($filesModified),
+            'completed_at' => now(),
         ]);
 
-        // Transition: running → qa_audit
-        $this->subtask->transitionTo(SubtaskStatus::QaAudit, $agent->id);
+        $this->subtask->transitionTo(SubtaskStatus::QaAudit, $this->subtask->assigned_agent);
 
-        // Dispatch QA audit
         QAAuditJob::dispatch($this->subtask);
+
+        Log::info("SubagentJob: Completed subtask {$this->subtask->id}, dispatched QAAuditJob");
+    }
+
+    private function buildPrompt(string $workDir): string
+    {
+        $subPrd = $this->subtask->sub_prd_payload ?? [];
+        $objective = $subPrd['objective'] ?? 'Não definido';
+        $criteria = $this->listItems($subPrd['acceptance_criteria'] ?? []);
+        $constraints = $this->listItems($subPrd['constraints'] ?? []);
+        $context = $subPrd['context'] ?? 'Nenhum contexto adicional';
+        $files = $this->listItems($subPrd['files'] ?? []);
+
+        return <<<PROMPT
+## Sub-PRD a implementar
+
+**Subtask ID:** {$this->subtask->id}
+**Título:** {$this->subtask->title}
+**Agente:** {$this->subtask->assigned_agent}
+**Diretório do projeto:** {$workDir}
+
+**Objetivo:**
+{$objective}
+
+**Critérios de Aceite:**
+{$criteria}
+
+**Restrições:**
+{$constraints}
+
+**Contexto Técnico:**
+{$context}
+
+**Arquivos envolvidos:**
+{$files}
+
+---
+
+Implemente o Sub-PRD acima seguindo o fluxo de trabalho das suas instruções.
+PROMPT;
+    }
+
+    private function listItems(array $items): string
+    {
+        if (empty($items)) {
+            return '- (nenhum)';
+        }
+
+        return implode("\n", array_map(fn ($item) => "- {$item}", $items));
     }
 
     private function failSubtask(string $reason): void
     {
-        Log::error("SubagentJob: Subtask {$this->subtask->id} failed - {$reason}");
+        Log::error("SubagentJob: Subtask {$this->subtask->id} failed — {$reason}");
 
         $this->subtask->update([
             'result_log' => $reason,
@@ -137,7 +136,6 @@ class SubagentJob implements ShouldQueue
 
         $this->subtask->transitionTo(SubtaskStatus::Error, $this->subtask->assigned_agent, ['reason' => $reason]);
 
-        // Check if parent task should be retried
         $this->checkParentTaskStatus();
     }
 
@@ -147,7 +145,9 @@ class SubagentJob implements ShouldQueue
         $allSubtasks = $task->subtasks;
 
         $hasErrors = $allSubtasks->where('status', SubtaskStatus::Error)->isNotEmpty();
-        $allDone = $allSubtasks->every(fn ($s) => in_array($s->status, [SubtaskStatus::Success, SubtaskStatus::Error]));
+        $allDone = $allSubtasks->every(
+            fn ($s) => in_array($s->status, [SubtaskStatus::Success, SubtaskStatus::Error])
+        );
 
         if ($hasErrors && $allDone) {
             if ($task->canRetry()) {

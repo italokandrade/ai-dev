@@ -2,13 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Ai\Agents\OrchestratorAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
-use App\Models\AgentConfig;
 use App\Models\Subtask;
 use App\Models\Task;
-use App\Services\LLMGateway;
-use App\Services\PromptFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,45 +28,36 @@ class OrchestratorJob implements ShouldQueue
         $this->queue = 'orchestrator';
     }
 
-    public function handle(LLMGateway $gateway, PromptFactory $promptFactory): void
+    public function handle(): void
     {
-        Log::info("OrchestratorJob: Processing task {$this->task->id} - {$this->task->title}");
-
-        $agent = AgentConfig::find('orchestrator');
-        if (! $agent || ! $agent->is_active) {
-            $this->failTask('Orchestrator agent not found or inactive');
-            return;
-        }
+        Log::info("OrchestratorJob: Processing task {$this->task->id} — {$this->task->title}");
 
         // Transition: pending → in_progress
         $this->task->transitionTo(TaskStatus::InProgress, 'orchestrator');
-        $this->task->update(['started_at' => now(), 'assigned_agent_id' => $agent->id]);
+        $this->task->update(['started_at' => now()]);
 
-        $project = $this->task->project;
-        $systemPrompt = $promptFactory->buildSystemPrompt($agent, $project);
-        $userMessage = $promptFactory->buildOrchestratorMessage($this->task);
+        $prompt = $this->buildPrompt();
 
-        $response = $gateway->chat(
-            agent: $agent,
-            userMessage: $userMessage,
-            systemPrompt: $systemPrompt,
-            project: $project,
-            taskId: $this->task->id,
-        );
+        try {
+            $response = OrchestratorAgent::make()->prompt($prompt);
+            $raw = trim((string) $response);
 
-        if (! $response->success) {
-            $this->failTask("LLM error: {$response->error}");
+            // Strip markdown fences if present
+            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
+            $raw = preg_replace('/\s*```$/', '', $raw);
+
+            $subPrds = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+            if (! is_array($subPrds) || empty($subPrds)) {
+                throw new \RuntimeException('Orchestrator returned empty or invalid Sub-PRD array.');
+            }
+        } catch (\Throwable $e) {
+            Log::error("OrchestratorJob: Failed for task {$this->task->id}", ['error' => $e->getMessage()]);
+            $this->failTask("AI generation failed: {$e->getMessage()}");
+
             return;
         }
 
-        // Parse Sub-PRDs from response
-        $subPrds = $this->parseSubPrds($response->content);
-        if (empty($subPrds)) {
-            $this->failTask('Orchestrator returned no valid Sub-PRDs. Response: ' . mb_substr($response->content, 0, 500));
-            return;
-        }
-
-        // Create subtasks
         $order = 1;
         foreach ($subPrds as $subPrd) {
             Subtask::create([
@@ -79,36 +68,54 @@ class OrchestratorJob implements ShouldQueue
                 'assigned_agent' => $subPrd['assigned_agent'] ?? 'backend-specialist',
                 'dependencies' => $subPrd['dependencies'] ?? null,
                 'execution_order' => $subPrd['execution_order'] ?? $order,
-                'file_locks' => $subPrd['file_locks'] ?? $subPrd['files'] ?? null,
+                'file_locks' => $subPrd['files'] ?? null,
             ]);
             $order++;
         }
 
-        Log::info("OrchestratorJob: Created {$order} subtasks for task {$this->task->id}");
+        Log::info('OrchestratorJob: Created '.count($subPrds)." subtasks for task {$this->task->id}");
 
-        // Dispatch the first ready subtask(s)
         $this->dispatchReadySubtasks();
     }
 
-    private function parseSubPrds(string $content): array
+    private function buildPrompt(): string
     {
-        // Try to extract JSON array from the response
-        if (preg_match('/```json\s*(\[.+?\])\s*```/s', $content, $matches)) {
-            $decoded = json_decode($matches[1], true);
-            if (is_array($decoded)) {
-                return $decoded;
-            }
+        $prd = $this->task->prd_payload ?? [];
+        $project = $this->task->project;
+        $objective = $prd['objective'] ?? 'Não definido';
+        $criteria = $this->listItems($prd['acceptance_criteria'] ?? []);
+        $constraints = $this->listItems($prd['constraints'] ?? []);
+        $knowledge = $this->listItems($prd['knowledge_areas'] ?? []);
+
+        return <<<PROMPT
+## Task PRD
+
+**Projeto:** {$project->name}
+**Task:** {$this->task->title}
+**Objetivo:** {$objective}
+
+**Critérios de Aceite:**
+{$criteria}
+
+**Restrições Técnicas:**
+{$constraints}
+
+**Áreas de Conhecimento:**
+{$knowledge}
+
+---
+
+Decompona este PRD em Sub-PRDs atômicos conforme as instruções do sistema.
+PROMPT;
+    }
+
+    private function listItems(array $items): string
+    {
+        if (empty($items)) {
+            return '- (nenhum)';
         }
 
-        // Try raw JSON array
-        if (preg_match('/\[.*\]/s', $content, $matches)) {
-            $decoded = json_decode($matches[0], true);
-            if (is_array($decoded)) {
-                return $decoded;
-            }
-        }
-
-        return [];
+        return implode("\n", array_map(fn ($item) => "- {$item}", $items));
     }
 
     private function dispatchReadySubtasks(): void
@@ -127,8 +134,6 @@ class OrchestratorJob implements ShouldQueue
 
     private function failTask(string $reason): void
     {
-        Log::error("OrchestratorJob: Task {$this->task->id} failed - {$reason}");
-
         $this->task->update(['error_log' => $reason]);
 
         if ($this->task->canRetry()) {

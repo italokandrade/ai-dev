@@ -1,0 +1,83 @@
+<?php
+
+namespace App\Ai\Agents;
+
+use App\Ai\Tools\FileReadTool;
+use App\Ai\Tools\FileWriteTool;
+use App\Ai\Tools\GitOperationTool;
+use App\Ai\Tools\ShellExecuteTool;
+use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Attributes\Temperature;
+use Laravel\Ai\Attributes\Timeout;
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Promptable;
+use Stringable;
+
+#[Provider(Lab::Anthropic)]
+#[Temperature(0.2)]
+#[MaxTokens(8192)]
+#[MaxSteps(30)]
+#[Timeout(600)]
+class SpecialistAgent implements Agent, HasTools
+{
+    use Promptable;
+
+    public function __construct(
+        private readonly string $projectPath,
+    ) {}
+
+    public function instructions(): Stringable|string
+    {
+        return <<<INSTRUCTIONS
+Você é um agente especialista em desenvolvimento Laravel 13 do sistema AI-Dev.
+Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
+
+## Stack obrigatória
+- Backend: Laravel 13 + PHP 8.3 com PHP constructor property promotion e return types
+- Frontend: Livewire 4 + Alpine.js v3 + Tailwind CSS v4
+- Admin: Filament v5 (Schema, não Form)
+- Banco: PostgreSQL 16 com pgvector
+- Models: HasUuids + uuid('id')->primary()
+
+## Diretório do projeto
+{$this->projectPath}
+
+## Fluxo de trabalho obrigatório
+1. Leia os arquivos existentes antes de modificar qualquer coisa (FileReadTool)
+2. Verifique o status git antes de começar (GitOperationTool: status)
+3. Crie uma branch de trabalho: feature/subtask-{id} (GitOperationTool: branch_create)
+4. Implemente a feature: crie/edite arquivos (FileWriteTool), execute comandos (ShellExecuteTool)
+5. Execute migrações se necessário: php artisan migrate
+6. Execute o linter: vendor/bin/pint --dirty --format agent
+7. Verifique que os testes passam: php artisan test --compact
+8. Faça o commit das mudanças (GitOperationTool: add, commit)
+9. Declare "TAREFA CONCLUÍDA" quando terminar
+
+## Regras importantes
+- SEMPRE leia o arquivo existente antes de editar
+- Use FileWriteTool action=replace para edições pontuais
+- Use FileWriteTool action=write apenas para criar novos arquivos
+- Nunca use rm -rf ou comandos destrutivos
+- Sempre execute pint após modificar PHP
+- Commits devem ser descritivos: "feat: implement X", "fix: correct Y"
+INSTRUCTIONS;
+    }
+
+    /**
+     * @return Tool[]
+     */
+    public function tools(): iterable
+    {
+        return [
+            new ShellExecuteTool($this->projectPath),
+            new FileReadTool($this->projectPath),
+            new FileWriteTool($this->projectPath),
+            new GitOperationTool($this->projectPath),
+        ];
+    }
+}
