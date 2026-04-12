@@ -2,21 +2,25 @@
 
 namespace App\Filament\Resources;
 
-use App\Enums\ModuleStatus;
+use App\Ai\Agents\RefineDescriptionAgent;
 use App\Enums\ProjectStatus;
 use App\Filament\Resources\ProjectResource\Pages;
-use App\Jobs\GenerateProjectSpecificationJob;
-use App\Jobs\ScaffoldProjectJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
-use App\Models\ProjectSpecification;
+use App\Models\ProjectQuotation;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Schema;
 use Filament\Infolists;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Str;
@@ -25,7 +29,7 @@ class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-folder';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-folder';
 
     protected static ?string $navigationLabel = 'Projetos';
 
@@ -82,7 +86,7 @@ class ProjectResource extends Resource
                             ->required()
                             ->columnSpanFull()
                             ->hintAction(
-                                \Filament\Actions\Action::make('refineWithAi')
+                                Action::make('refineWithAi')
                                     ->label('Refinar com IA')
                                     ->icon('heroicon-o-sparkles')
                                     ->color('primary')
@@ -101,9 +105,9 @@ class ProjectResource extends Resource
                                             ->placeholder('Ex: Adicione um módulo de chat, ou mude o tom para mais formal...')
                                             ->helperText('Digite suas alterações e clique no botão circular ao lado para atualizar.')
                                             ->suffixAction(
-                                                \Filament\Actions\Action::make('applyRefinement')
+                                                Action::make('applyRefinement')
                                                     ->icon('heroicon-o-arrow-path')
-                                                    ->action(function (\Filament\Schemas\Components\Utilities\Set $set, \Filament\Schemas\Components\Utilities\Get $get) {
+                                                    ->action(function (Set $set, Get $get) {
                                                         $query = $get('refinement_query');
                                                         $currentText = $get('suggested_description');
 
@@ -112,19 +116,20 @@ class ProjectResource extends Resource
                                                                 ->title('Informe o que deseja alterar')
                                                                 ->warning()
                                                                 ->send();
+
                                                             return;
                                                         }
 
                                                         try {
-                                                            $refined = \App\Ai\Agents\RefineDescriptionAgent::make()
-                                                                ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n" . 
-                                                                        $currentText . 
-                                                                        "\n\nInstrução de modificação do usuário:\n" . 
+                                                            $refined = RefineDescriptionAgent::make()
+                                                                ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n".
+                                                                        $currentText.
+                                                                        "\n\nInstrução de modificação do usuário:\n".
                                                                         $query);
-                                                            
+
                                                             $set('suggested_description', (string) $refined);
                                                             $set('refinement_query', ''); // Limpa o campo de entrada
-                                                            
+
                                                             Notification::make()
                                                                 ->title('Sugestão atualizada')
                                                                 ->success()
@@ -139,17 +144,17 @@ class ProjectResource extends Resource
                                                     })
                                             ),
                                     ])
-                                    ->mountUsing(function (\Filament\Schemas\Schema $form, Forms\Components\Textarea $component) {
+                                    ->mountUsing(function (Schema $form, Forms\Components\Textarea $component) {
                                         $state = $component->getState();
-                                        
+
                                         if (blank($state)) {
                                             return;
                                         }
 
                                         try {
-                                            $refined = \App\Ai\Agents\RefineDescriptionAgent::make()
-                                                ->prompt("Refine a seguinte descrição de projeto: \n\n" . $state);
-                                            
+                                            $refined = RefineDescriptionAgent::make()
+                                                ->prompt("Refine a seguinte descrição de projeto: \n\n".$state);
+
                                             $form->fill([
                                                 'suggested_description' => (string) $refined,
                                             ]);
@@ -163,7 +168,7 @@ class ProjectResource extends Resource
                                     })
                                     ->action(function (array $data, Forms\Components\Textarea $component) {
                                         $component->state($data['suggested_description']);
-                                        
+
                                         Notification::make()
                                             ->title('Descrição atualizada')
                                             ->success()
@@ -207,12 +212,13 @@ class ProjectResource extends Resource
                     ->getStateUsing(function (Project $record) {
                         $parentCount = $record->modules()->whereNull('parent_id')->count();
                         $subCount = $record->modules()->whereNotNull('parent_id')->count();
+
                         return "{$parentCount} / {$subCount}";
                     }),
 
                 Tables\Columns\TextColumn::make('overall_progress')
                     ->label('Progresso')
-                    ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%')
+                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%')
                     ->color(fn (Project $record) => match (true) {
                         $record->overallProgress() >= 80 => 'success',
                         $record->overallProgress() >= 40 => 'info',
@@ -231,8 +237,8 @@ class ProjectResource extends Resource
                     ->options(ProjectStatus::class),
             ])
             ->actions([
-                \Filament\Actions\ViewAction::make(),
-                \Filament\Actions\EditAction::make(),
+                ViewAction::make(),
+                EditAction::make(),
             ])
             ->bulkActions([]);
     }
@@ -242,7 +248,7 @@ class ProjectResource extends Resource
         return $schema
             ->schema([
                 // Coluna esquerda — dados do projeto e roadmap
-                \Filament\Schemas\Components\Group::make([
+                Group::make([
                     Section::make('Visão Geral')
                         ->schema([
                             Grid::make(3)
@@ -257,8 +263,8 @@ class ProjectResource extends Resource
 
                                     Infolists\Components\TextEntry::make('overall_progress')
                                         ->label('Progresso Geral')
-                                        ->getStateUsing(fn (Project $record) => $record->overallProgress() . '%')
-                                        ->color(fn (Project $record) => match(true) {
+                                        ->getStateUsing(fn (Project $record) => $record->overallProgress().'%')
+                                        ->color(fn (Project $record) => match (true) {
                                             $record->overallProgress() >= 80 => 'success',
                                             $record->overallProgress() >= 40 => 'warning',
                                             default => 'gray',
@@ -299,8 +305,8 @@ class ProjectResource extends Resource
 
                                             Infolists\Components\TextEntry::make('progress_percentage')
                                                 ->label('Progresso')
-                                                ->formatStateUsing(fn ($state) => $state . '%')
-                                                ->color(fn ($state) => match(true) {
+                                                ->formatStateUsing(fn ($state) => $state.'%')
+                                                ->color(fn ($state) => match (true) {
                                                     $state >= 80 => 'success',
                                                     $state >= 40 => 'warning',
                                                     default => 'gray',
@@ -308,7 +314,7 @@ class ProjectResource extends Resource
 
                                             Infolists\Components\TextEntry::make('children_count')
                                                 ->label('Submódulos')
-                                                ->getStateUsing(fn (ProjectModule $record) => $record->children()->count() . ' submódulos'),
+                                                ->getStateUsing(fn (ProjectModule $record) => $record->children()->count().' submódulos'),
                                         ]),
 
                                     // Submódulos do módulo
@@ -327,11 +333,11 @@ class ProjectResource extends Resource
 
                                                     Infolists\Components\TextEntry::make('progress_percentage')
                                                         ->label('% Concluído')
-                                                        ->formatStateUsing(fn ($state) => $state . '%'),
+                                                        ->formatStateUsing(fn ($state) => $state.'%'),
 
                                                     Infolists\Components\TextEntry::make('tasks_count')
                                                         ->label('Tasks')
-                                                        ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count() . ' tasks'),
+                                                        ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count().' tasks'),
                                                 ]),
                                         ])
                                         ->columnSpanFull(),
@@ -342,17 +348,17 @@ class ProjectResource extends Resource
                 ])->columnSpan(['default' => 1, 'xl' => 1]),
 
                 // Coluna direita — especificação da IA
-                \Filament\Schemas\Components\Group::make([
+                Group::make([
                     Section::make('Especificação Técnica (gerada pela IA)')
                         ->schema([
                             Infolists\Components\TextEntry::make('currentSpecification.approved_at')
                                 ->label('Status da Especificação')
-                                ->getStateUsing(fn (Project $record) => match(true) {
+                                ->getStateUsing(fn (Project $record) => match (true) {
                                     $record->currentSpecification === null => 'Nenhuma especificação gerada',
-                                    $record->currentSpecification->isApproved() => '✅ Aprovada em ' . $record->currentSpecification->approved_at->format('d/m/Y H:i'),
-                                    default => '⏳ Aguardando aprovação (v' . $record->currentSpecification->version . ')',
+                                    $record->currentSpecification->isApproved() => '✅ Aprovada em '.$record->currentSpecification->approved_at->format('d/m/Y H:i'),
+                                    default => '⏳ Aguardando aprovação (v'.$record->currentSpecification->version.')',
                                 })
-                                ->color(fn (Project $record) => match(true) {
+                                ->color(fn (Project $record) => match (true) {
                                     $record->currentSpecification?->isApproved() => 'success',
                                     $record->currentSpecification !== null => 'warning',
                                     default => 'gray',
@@ -383,6 +389,56 @@ class ProjectResource extends Resource
                                 ->placeholder('—')
                                 ->columnSpanFull(),
                         ])
+                        ->collapsible(),
+
+                    Section::make('Orçamento (gerado pela IA)')
+                        ->schema([
+                            Infolists\Components\TextEntry::make('activeQuotation.status')
+                                ->label('Status')
+                                ->getStateUsing(fn (Project $record) => match (true) {
+                                    $record->activeQuotation === null => 'Aguardando geração',
+                                    default => ProjectQuotation::STATUS_LABELS[$record->activeQuotation->status] ?? $record->activeQuotation->status,
+                                })
+                                ->badge()
+                                ->color(fn (Project $record) => match ($record->activeQuotation?->status) {
+                                    'approved', 'completed' => 'success',
+                                    'sent', 'in_progress' => 'info',
+                                    'draft' => 'warning',
+                                    'rejected' => 'danger',
+                                    default => 'gray',
+                                }),
+
+                            Infolists\Components\TextEntry::make('activeQuotation.total_human_hours')
+                                ->label('Horas Humanas')
+                                ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                    ? number_format((float) $record->activeQuotation->total_human_hours, 0, ',', '.').'h'
+                                    : '—')
+                                ->placeholder('—'),
+
+                            Infolists\Components\TextEntry::make('activeQuotation.total_human_cost')
+                                ->label('Custo Humano')
+                                ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                    ? 'R$ '.number_format((float) $record->activeQuotation->total_human_cost, 2, ',', '.')
+                                    : '—')
+                                ->placeholder('—'),
+
+                            Infolists\Components\TextEntry::make('activeQuotation.ai_dev_price')
+                                ->label('Preço AI-Dev')
+                                ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                    ? 'R$ '.number_format((float) $record->activeQuotation->ai_dev_price, 2, ',', '.')
+                                    : '—')
+                                ->placeholder('—')
+                                ->color('success'),
+
+                            Infolists\Components\TextEntry::make('activeQuotation.savings_percentage')
+                                ->label('Economia')
+                                ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                    ? number_format((float) $record->activeQuotation->savings_percentage, 1, ',', '.').'%'
+                                    : '—')
+                                ->placeholder('—')
+                                ->color('success'),
+                        ])
+                        ->columns(2)
                         ->collapsible(),
                 ])->columnSpan(['default' => 1, 'xl' => 1]),
             ])

@@ -34,6 +34,7 @@ class ViewProjectSpecification extends ViewRecord
                             ->title('Esta especificação já foi aprovada.')
                             ->warning()
                             ->send();
+
                         return;
                     }
 
@@ -43,6 +44,7 @@ class ViewProjectSpecification extends ViewRecord
                             ->body('Aguarde a conclusão do processamento e recarregue a página.')
                             ->warning()
                             ->send();
+
                         return;
                     }
 
@@ -50,7 +52,7 @@ class ViewProjectSpecification extends ViewRecord
 
                     Notification::make()
                         ->title('Especificação aprovada!')
-                        ->body('Os módulos e submódulos foram criados no projeto com sucesso.')
+                        ->body('Módulos e submódulos criados. As tasks e o orçamento serão gerados automaticamente pela IA em instantes.')
                         ->success()
                         ->send();
 
@@ -75,6 +77,7 @@ class ViewProjectSpecification extends ViewRecord
                             ->title('Não é possível regenerar uma especificação já aprovada.')
                             ->warning()
                             ->send();
+
                         return;
                     }
 

@@ -7,6 +7,7 @@ use Filament\Support\Contracts\HasLabel;
 enum TaskSource: string implements HasLabel
 {
     case Manual = 'manual';
+    case Specification = 'specification';
     case Webhook = 'webhook';
     case Sentinel = 'sentinel';
     case CiCd = 'ci_cd';
@@ -15,6 +16,7 @@ enum TaskSource: string implements HasLabel
     {
         return match ($this) {
             self::Manual => 'Manual (UI)',
+            self::Specification => 'Especificação IA',
             self::Webhook => 'Webhook',
             self::Sentinel => 'Sentinela',
             self::CiCd => 'CI/CD',

@@ -40,9 +40,9 @@ class ViewProject extends ViewRecord
                         ->max('version') ?? 0;
 
                     $spec = ProjectSpecification::create([
-                        'project_id'       => $this->record->id,
+                        'project_id' => $this->record->id,
                         'user_description' => $data['user_description'],
-                        'version'          => $lastVersion + 1,
+                        'version' => $lastVersion + 1,
                     ]);
 
                     GenerateProjectSpecificationJob::dispatch($spec);
@@ -71,7 +71,7 @@ class ViewProject extends ViewRecord
 
                         Notification::make()
                             ->title('Especificação aprovada!')
-                            ->body('Módulos e submódulos foram criados. O projeto está pronto para receber tasks.')
+                            ->body('Módulos e submódulos criados. As tasks e o orçamento serão gerados automaticamente pela IA em instantes.')
                             ->success()
                             ->send();
 
@@ -79,6 +79,15 @@ class ViewProject extends ViewRecord
                     }
                 })
                 ->visible(fn () => $this->record->currentSpecification && ! $this->record->currentSpecification->isApproved()),
+
+            // Ver orçamento gerado
+            Actions\Action::make('view_quotation')
+                ->label('Ver Orçamento')
+                ->icon('heroicon-o-calculator')
+                ->color('gray')
+                ->url(fn () => route('filament.admin.resources.project-quotations.view', $this->record->activeQuotation))
+                ->openUrlInNewTab(false)
+                ->visible(fn () => $this->record->activeQuotation !== null),
         ];
     }
 }
