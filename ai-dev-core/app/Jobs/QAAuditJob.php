@@ -2,12 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Ai\Agents\QAAuditorAgent;
 use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
-use App\Models\AgentConfig;
 use App\Models\Subtask;
-use App\Services\LLMGateway;
-use App\Services\PromptFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,77 +28,68 @@ class QAAuditJob implements ShouldQueue
         $this->queue = 'qa';
     }
 
-    public function handle(LLMGateway $gateway, PromptFactory $promptFactory): void
+    public function handle(): void
     {
-        Log::info("QAAuditJob: Auditing subtask {$this->subtask->id} - {$this->subtask->title}");
+        Log::info("QAAuditJob: Auditing subtask {$this->subtask->id} — {$this->subtask->title}");
 
-        $agent = AgentConfig::find('qa-auditor');
-        if (! $agent || ! $agent->is_active) {
-            // If QA agent is not available, auto-approve
-            Log::warning("QAAuditJob: QA agent not available, auto-approving subtask {$this->subtask->id}");
+        $prompt = $this->buildPrompt();
+
+        try {
+            $response = QAAuditorAgent::make()->prompt($prompt);
+            $raw = trim((string) $response);
+
+            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
+            $raw = preg_replace('/\s*```$/', '', $raw);
+
+            $auditResult = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Throwable $e) {
+            Log::warning("QAAuditJob: Failed to get/parse audit response, auto-approving. Error: {$e->getMessage()}");
             $this->approveSubtask();
+
             return;
         }
 
-        $project = $this->subtask->task->project;
-        $systemPrompt = $promptFactory->buildSystemPrompt($agent, $project);
-        $userMessage = $promptFactory->buildQAAuditMessage($this->subtask);
-
-        $response = $gateway->chat(
-            agent: $agent,
-            userMessage: $userMessage,
-            systemPrompt: $systemPrompt,
-            project: $project,
-            taskId: $this->subtask->task_id,
-            subtaskId: $this->subtask->id,
-        );
-
-        if (! $response->success) {
-            Log::error("QAAuditJob: LLM error - {$response->error}, auto-approving");
-            $this->approveSubtask();
-            return;
-        }
-
-        // Parse QA audit result
-        $auditResult = $this->parseAuditResult($response->content);
-
-        if ($auditResult['approved']) {
+        if ($auditResult['approved'] ?? false) {
             $this->approveSubtask($auditResult);
         } else {
             $this->rejectSubtask($auditResult);
         }
     }
 
-    private function parseAuditResult(string $content): array
+    private function buildPrompt(): string
     {
-        // Try to extract JSON from response
-        if (preg_match('/```json\s*(\{.+?\})\s*```/s', $content, $matches)) {
-            $decoded = json_decode($matches[1], true);
-            if (is_array($decoded) && isset($decoded['approved'])) {
-                return $decoded;
-            }
-        }
+        $subPrd = $this->subtask->sub_prd_payload ?? [];
+        $objective = $subPrd['objective'] ?? 'Não definido';
+        $criteria = implode("\n", array_map(fn ($c) => "- {$c}", $subPrd['acceptance_criteria'] ?? []));
+        $resultLog = mb_substr($this->subtask->result_log ?? '', 0, 10000);
+        $diff = mb_substr($this->subtask->result_diff ?? '', 0, 20000);
 
-        // Try raw JSON
-        if (preg_match('/\{.*"approved".*\}/s', $content, $matches)) {
-            $decoded = json_decode($matches[0], true);
-            if (is_array($decoded) && isset($decoded['approved'])) {
-                return $decoded;
-            }
-        }
+        return <<<PROMPT
+## Sub-PRD Auditado
 
-        // Fallback: check for approval keywords
-        $lower = strtolower($content);
-        $approved = str_contains($lower, '"approved": true')
-            || str_contains($lower, '"approved":true')
-            || str_contains($lower, 'aprovado')
-            || str_contains($lower, 'approved');
+**Título:** {$this->subtask->title}
+**Agente:** {$this->subtask->assigned_agent}
 
-        return [
-            'approved' => $approved,
-            'overall_quality' => $approved ? 'good' : 'poor',
-            'raw_response' => mb_substr($content, 0, 5000),
-        ];
+**Objetivo do Sub-PRD:**
+{$objective}
+
+**Critérios de Aceite:**
+{$criteria}
+
+---
+
+## Log de Execução do Agente (últimas 10.000 chars):
+{$resultLog}
+
+---
+
+## Git Diff (mudanças realizadas):
+{$diff}
+
+---
+
+Avalie se o Sub-PRD foi implementado corretamente e retorne o JSON de auditoria conforme suas instruções.
+PROMPT;
     }
 
     private function approveSubtask(?array $auditResult = null): void
@@ -139,10 +128,11 @@ class QAAuditJob implements ShouldQueue
             $subtaskTitle = addslashes($this->subtask->title);
             $message = "ai-dev: {$subtaskTitle} [subtask:{$this->subtask->id}]";
             $commitResult = Process::path($workDir)->timeout(30)
-                ->run("git commit -m " . escapeshellarg($message) . " --allow-empty");
+                ->run('git commit -m '.escapeshellarg($message).' --allow-empty');
 
             if (! $commitResult->successful()) {
                 Log::warning("QAAuditJob: git commit failed for subtask {$this->subtask->id}: {$commitResult->errorOutput()}");
+
                 return null;
             }
 
@@ -151,9 +141,11 @@ class QAAuditJob implements ShouldQueue
             $hash = trim($hashResult->output());
 
             Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
+
             return $hash ?: null;
         } catch (\Throwable $e) {
             Log::error("QAAuditJob: git error for subtask {$this->subtask->id}: {$e->getMessage()}");
+
             return null;
         }
     }
