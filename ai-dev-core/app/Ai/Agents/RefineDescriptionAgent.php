@@ -2,30 +2,28 @@
 
 namespace App\Ai\Agents;
 
+use App\Services\SystemContextService;
+use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Temperature;
+use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
+use Stringable;
 
+#[Temperature(0.7)]
+#[MaxTokens(2048)]
+#[Timeout(60)]
 class RefineDescriptionAgent implements Agent
 {
     use Promptable;
 
-    public function provider(): string
+    public function instructions(): Stringable|string
     {
-        return 'openai';
-    }
-
-    public function model(): string
-    {
-        return env('OPENAI_MODEL', 'gpt-5-nano');
-    }
-
-    public function instructions(): string
-    {
-        $dynamicContext = \App\Services\SystemContextService::getFullContext();
+        $dynamicContext = SystemContextService::getFullContext();
 
         return <<<INSTRUCTIONS
 Você é um consultor técnico sênior especializado no ecossistema atual do servidor.
-Sua tarefa é receber uma descrição informal de um sistema e reescrevê-la como uma 
+Sua tarefa é receber uma descrição informal de um sistema e reescrevê-la como uma
 proposta de valor técnica e funcional de alta qualidade.
 
 {$dynamicContext}
@@ -39,9 +37,9 @@ REGRAS PARA O REFINAMENTO:
 6. O texto final deve ser em Português do Brasil.
 
 SAÍDA:
-- Retorne APENAS o texto refinado. 
+- Retorne APENAS o texto refinado.
 - Não adicione introduções como "Aqui está sua descrição..." ou explicações.
-- Não use Markdown (como negrito ou listas) se o texto original for apenas parágrafos, 
+- Não use Markdown (como negrito ou listas) se o texto original for apenas parágrafos,
   a menos que melhore significativamente a legibilidade.
 INSTRUCTIONS;
     }
