@@ -17,9 +17,14 @@ class SystemSetting extends Model
 
     public static function get(string $key, mixed $default = null): mixed
     {
-        return Cache::remember("setting:{$key}", 60, function () use ($key, $default) {
-            return static::where('key', $key)->value('value') ?? $default;
-        });
+        try {
+            return Cache::remember("setting:{$key}", 60, function () use ($key, $default) {
+                return static::where('key', $key)->value('value') ?? $default;
+            });
+        } catch (\Throwable) {
+            // Table may not exist yet (before migrations run)
+            return $default;
+        }
     }
 
     public static function set(string $key, mixed $value): void
