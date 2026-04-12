@@ -10,6 +10,7 @@ use Filament\Infolists;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -22,7 +23,7 @@ class ViewTask extends ViewRecord
         return $schema
             ->schema([
                 // Coluna esquerda: visão geral + PRD
-                \Filament\Schemas\Components\Group::make([
+                Group::make([
                     Section::make('Visão Geral')
                         ->schema([
                             Infolists\Components\TextEntry::make('title')
@@ -88,7 +89,7 @@ class ViewTask extends ViewRecord
                 ])->columnSpan(['default' => 1, 'xl' => 1]),
 
                 // Coluna direita: execução + histórico
-                \Filament\Schemas\Components\Group::make([
+                Group::make([
                     Section::make('Execução')
                         ->schema([
                             Infolists\Components\TextEntry::make('assigned_agent_id')
@@ -149,6 +150,58 @@ class ViewTask extends ViewRecord
                         ])
                         ->collapsible(),
 
+                    Section::make('Subtasks')
+                        ->schema([
+                            Infolists\Components\RepeatableEntry::make('subtasks')
+                                ->label('')
+                                ->schema([
+                                    Grid::make(4)
+                                        ->schema([
+                                            Infolists\Components\TextEntry::make('execution_order')
+                                                ->label('#')
+                                                ->alignCenter(),
+
+                                            Infolists\Components\TextEntry::make('title')
+                                                ->label('Título')
+                                                ->columnSpan(2),
+
+                                            Infolists\Components\TextEntry::make('status')
+                                                ->label('Status')
+                                                ->badge(),
+                                        ]),
+
+                                    Grid::make(3)
+                                        ->schema([
+                                            Infolists\Components\TextEntry::make('assigned_agent')
+                                                ->label('Agente')
+                                                ->placeholder('—'),
+
+                                            Infolists\Components\TextEntry::make('commit_hash')
+                                                ->label('Commit')
+                                                ->placeholder('—')
+                                                ->copyable(),
+
+                                            Infolists\Components\TextEntry::make('started_at')
+                                                ->label('Iniciada')
+                                                ->dateTime('d/m/Y H:i')
+                                                ->placeholder('—'),
+                                        ]),
+
+                                    Infolists\Components\TextEntry::make('result_log')
+                                        ->label('Log de Resultado')
+                                        ->placeholder('Sem log.')
+                                        ->columnSpanFull(),
+
+                                    Infolists\Components\TextEntry::make('qa_feedback')
+                                        ->label('Feedback QA')
+                                        ->placeholder('Sem feedback.')
+                                        ->columnSpanFull(),
+                                ])
+                                ->placeholder('Nenhuma subtask gerada ainda.')
+                                ->columnSpanFull(),
+                        ])
+                        ->collapsible(),
+
                     Section::make('Log de Erros')
                         ->schema([
                             Infolists\Components\TextEntry::make('error_log')
@@ -188,6 +241,7 @@ class ViewTask extends ViewRecord
                             ->body('Esta task ainda não foi concluída ou está em processamento.')
                             ->warning()
                             ->send();
+
                         return;
                     }
 
