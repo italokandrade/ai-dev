@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\TaskResource\RelationManagers;
 
-use App\Enums\SubtaskStatus;
 use App\Models\Subtask;
 use Filament\Infolists;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -75,7 +74,6 @@ class SubtasksRelationManager extends RelationManager
                     ->label('')
                     ->icon('heroicon-o-eye')
                     ->modalHeading(fn (Subtask $record) => "Sub-PRD #{$record->execution_order}: {$record->title}")
-                    ->modalContent(fn (Subtask $record) => view('filament.subtask-detail', ['subtask' => $record]))
                     ->infolist(fn (Schema $schema, Subtask $record): Schema => $schema->schema([
                         Section::make('Identificação')
                             ->schema([
