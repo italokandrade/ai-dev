@@ -515,4 +515,51 @@ Com tudo instalado e rodando simultaneamente:
 
 ---
 
-**Nota Final:** Cada componente é instalado APENAS quando sua fase correspondente chegar. Isso evita complexidade desnecessária no início e garante que o sistema funcione em cada etapa incremental.
+## 7. Sincronização de Conhecimento (Docs Oficiais)
+
+Para garantir que os agentes e as IAs utilizem sempre a "fonte da verdade" mais atualizada da TALL Stack, o servidor possui scripts de sincronização automática.
+
+### 7.1. Sincronia GitHub → Local
+O script `baixar_docs_tall.py` espelha as documentações oficiais dos repositórios GitHub para o diretório local.
+
+- **Caminho Local:** `/var/www/html/projetos/ai-dev/docs_tecnicos/`
+- **Execução:**
+  ```bash
+  python3 /var/www/html/projetos/ai-dev/baixar_docs_tall.py
+  ```
+- **Comportamento:** Espelhamento incremental (baixa novos, atualiza modificados e deleta arquivos removidos no remoto via `git clean`).
+
+### 7.2. Sincronia Local → OpenAI Storage
+O script `sync_openai_storage.py` envia os arquivos Markdown locais para um Vector Store na OpenAI, permitindo que Assistants tenham conhecimento técnico profundo.
+
+- **Vector Store:** `TALL_STACK_SUPREME_DOCS`
+- **Execução:**
+  ```bash
+  python3 /var/www/html/projetos/ai-dev/sync_openai_storage.py
+  ```
+- **Requisito:** `OPENAI_API_KEY` configurada no `.env` do Core.
+
+---
+
+## 8. Monitoramento e Manutenção
+
+### 8.1. Logs de IA e Proxies
+- **Gemini Proxy:** `/var/www/html/projetos/ai-dev/storage/logs/gemini-proxy.log` (ou log direto do script)
+- **Claude Proxy:** `/var/www/html/projetos/ai-dev/storage/logs/claude-proxy.log`
+- **Laravel AI:** `storage/logs/laravel.log` (procurar por `FailoverProvider`)
+
+### 8.2. Reinício de Serviços
+Após qualquer mudança em `config/ai.php` ou nos Proxies:
+```bash
+# Reiniciar Horizon e Workers
+php artisan horizon:terminate
+
+# Limpar caches
+php artisan config:clear
+php artisan cache:clear
+```
+
+---
+
+**Nota Final:** O sistema opera em modo de isolamento total. Endpoints oficiais da Google e Anthropic são substituídos pelos proxies locais (8001/8002). O OpenAI (gpt-5-nano) atua como fallback final.
+
