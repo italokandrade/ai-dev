@@ -2,6 +2,17 @@
 
 O AI-Dev (AndradeItalo.ai) foi projetado para ser **à prova de falhas (fault-tolerant)** e **extremamente veloz**. Esta documentação mapeia a infraestrutura atualmente disponível no servidor Supreme (10.1.1.86) e define os componentes exatos que precisarão ser instalados para garantir o cumprimento desses requisitos.
 
+## 0. Escopo da Infraestrutura — ai-dev-core + N Projetos Alvo
+
+Esta documentação cobre a infraestrutura **do servidor** — que hospeda **duas classes de aplicações Laravel** coexistindo:
+
+- **1 ai-dev-core (Master)** — em `/var/www/html/projetos/ai-dev/ai-dev-core`. Dono dos workers de agentes de desenvolvimento, do banco `ai_dev_core`, do Admin Panel que orquestra as tasks, e do Boost MCP usado pelo Claude Code na manutenção do próprio ai-dev-core.
+- **N Projetos Alvo** — em `/var/www/html/projetos/<nome>/`. Cada um tem seu próprio banco, seu próprio Redis prefix (se aplicável), seu próprio Boost MCP instalado, seu próprio repositório Git, e pode ter seus próprios workers para jobs de negócio do projeto.
+
+Componentes como **PHP, PostgreSQL, Redis, Node, Composer, Supervisor** são compartilhados pelo SO — uma única instância serve ambas as camadas. Componentes de **aplicação** (Boost MCP, bancos, workers, `.env`) são **por aplicação** — o ai-dev-core tem os seus e cada Projeto Alvo tem os seus. A tabela canônica dessa separação vive em `README.md → Arquitetura em Duas Camadas`.
+
+**Consequência:** quando este documento diz "instalar X no servidor", o SO recebe uma instância. Quando diz "o ai-dev-core usa Boost", isso é uma instância de Boost; quando diz "o projeto alvo usa Boost", é outra instância, dentro do path do alvo.
+
 ---
 
 ## 1. O que JÁ TEMOS no Servidor (Pronto para Uso)
@@ -16,13 +27,13 @@ A infraestrutura base já é de alto nível e atende perfeitamente ao ecossistem
 | **PHP** | 8.3.30 | Runtime do Laravel 13 — onde roda o AI-Dev Core |
 | **Node.js** | 22.22.2 | Runtime para npm scripts, compilação de assets (Vite/Tailwind) |
 | **Bun** | 1.3.11 | Runtime alternativo para scripts auxiliares e proxies |
-| **Python** | 3.12.3 (venv) | Runtime para proxies (Gemini/Claude) e scripts auxiliares |
+| **Python** | 3.12.3 (venv) | Runtime auxiliar (scripts de operação). Proxies legados Gemini/Claude foram descontinuados na migração para OpenRouter — todas as chamadas LLM agora saem direto do Laravel AI SDK via HTTPS |
 | **Composer** | 2.9.5 | Gerenciador de pacotes PHP |
 | **Laravel** | 13.5.0 | Framework base do AI-Dev Core |
 | **Livewire** | 4.2.4 | Interatividade real-time na Web UI |
 | **Filament** | 5.5.0 | Painel administrativo — Dashboard, Resources, gestão de projetos e tasks |
 | **Laravel AI SDK** | 0.5.0 | Agents, Tools, Embeddings, Vector Stores, Structured Output |
-| **Laravel Boost** | 2.4.4 | MCP server: database-schema, search-docs, browser-logs, tinker |
+| **Laravel Boost** | 2.4.4 | MCP server: database-schema, search-docs, browser-logs, tinker — **instalado em cada aplicação Laravel** (ai-dev-core + cada Projeto Alvo), cada instância reportando o estado da sua própria aplicação |
 | **Laravel Horizon** | 5.45.5 | Dashboard e gestão de filas Redis |
 | **Pest v4** | 4.6.3 | Testes automatizados (PHPUnit v12 como base) |
 | **Tailwind CSS** | v4 | Estilização dos projetos e UI do AI-Dev Core |
@@ -45,6 +56,8 @@ Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e
 
 **O que ele vai monitorar no AI-Dev:**
 
+Todos os workers abaixo rodam o `artisan queue:work` **do ai-dev-core** (portanto, leem/escrevem no banco `ai_dev_core`). Quando um job dispara um agente de desenvolvimento (Orchestrator, Specialist, QAAuditor), o agente carrega `project.local_path` do Projeto Alvo e a partir daí **toda operação de ferramenta** (Shell, File, Git, Boost, DB) é executada dentro daquele path — não dentro do ai-dev-core. O worker continua sendo o mesmo processo; apenas o escopo de execução das tools é o Projeto Alvo.
+
 | Programa | Arquivo de Config | Workers | Fila Redis |
 |---|---|---|---|
 | Orchestrator Worker | `/etc/supervisor/conf.d/aidev-orchestrator.conf` | 1 | `queue:orchestrator` |
@@ -54,8 +67,10 @@ Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e
 | Performance Worker | `/etc/supervisor/conf.d/aidev-performance.conf` | 1 | `queue:performance` |
 | Context Compressor | `/etc/supervisor/conf.d/aidev-compressor.conf` | 1 | `queue:compressor` |
 | Sentinel Watcher | `/etc/supervisor/conf.d/aidev-sentinel.conf` | 1 | `queue:sentinel` |
-| Gemini Proxy | `/etc/supervisor/conf.d/gemini-proxy.conf` | 1 | N/A (porta 8001) |
-| Claude Proxy | `/etc/supervisor/conf.d/claude-proxy.conf` | 1 | N/A (porta 8002) |
+
+> Os proxies Python legados (Gemini Proxy :8001 e Claude Proxy :8002) foram descontinuados. Toda inferência externa hoje sai direto do Laravel AI SDK via HTTPS para o OpenRouter — sem proxy local intermediário. Os entries de Supervisor correspondentes foram removidos do servidor.
+
+> Projetos Alvo que precisem de workers próprios (jobs de negócio — p.ex. envio de e-mail, processamento de pagamento) instalam suas próprias entradas no Supervisor, apontando para `/var/www/html/projetos/<alvo>/artisan queue:work` e usando filas Redis com prefixo próprio para não colidir com as filas do ai-dev-core. Estes workers são completamente separados dos workers de agentes do ai-dev-core.
 
 **Exemplo de config do Supervisor para o Orchestrator Worker:**
 
@@ -106,29 +121,22 @@ O Horizon substituiría o `queue:work` nos configs do Supervisor por `php artisa
 
 ### 2.2. Motores LLM
 
-O sistema agêntico usa dois providers externos para os agents, e dois proxies locais reservados para infraestrutura.
+O sistema agêntico usa **um único provider externo** (OpenRouter, família Anthropic) e **um runtime local** (Ollama, para compressão/embeddings).
 
 #### Providers ativos (agents do AI-Dev Core)
 
-Todo o sistema agêntico usa um único provider externo: **OpenRouter** com família Anthropic.
-
 | Provider | Modelo | Tier | Agents |
 |---|---|---|---|
-| **openrouter** | `anthropic/claude-opus-4-7` | Máxima qualidade | OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
+| **openrouter** | `anthropic/claude-opus-4.7` | Máxima qualidade | OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
 | **openrouter** | `anthropic/claude-sonnet-4-6` | Qualidade + custo | SpecialistAgent, QAAuditorAgent |
 | **openrouter** | `anthropic/claude-haiku-4-5-20251001` | Rápido + barato | DocsAgent |
 | **ollama** (local) | `qwen2.5:0.5b` | Sem custo API | ContextCompressor (Fase 3) |
 
 Configurados em `config/ai.php` e `.env` do AI-Dev Core. Único `.env` necessário: `OPENROUTER_API_KEY`.
 
-#### Proxies locais (infraestrutura reservada)
+#### Proxies locais — descontinuados
 
-| Proxy | Porta | Status | Uso |
-|---|---|---|---|
-| Gemini Proxy (Python Flask) | 8001 | ✅ Operacional | Reservado — não usado pelos agents atualmente |
-| Claude Proxy | 8002 | ✅ Operacional | Reservado — não usado pelos agents atualmente |
-
-Os proxies são mantidos como infraestrutura de fallback para uso futuro em módulos da aplicação. Gerenciados via watchdog (`/root/gemini_watchdog.sh`).
+Os proxies Python (Gemini :8001 e Claude :8002) existiam no modelo antigo de Inferência Dupla, quando cada família de modelo era invocada via CLI local. **Foram descontinuados** na migração para OpenRouter: hoje o Laravel AI SDK fala HTTPS direto com `https://openrouter.ai/api/v1` e todo o roteamento de modelos (Opus 4.7 / Sonnet 4.6 / Haiku 4.5) acontece do lado do OpenRouter. O watchdog `/root/gemini_watchdog.sh` também foi aposentado.
 
 #### Ollama (O Compressor de Memória)
 
@@ -137,7 +145,7 @@ Os proxies são mantidos como infraestrutura de fallback para uso futuro em mód
 **O que é:** Runtime local para modelos de IA. Roda modelos no próprio servidor SEM depender de API externa, SEM custo por token, SEM enviar dados para fora.
 
 **Por que precisamos:** 
-1. **Compressão de contexto:** Quando a sessão de um agente atinge 60% da janela, o Ollama comprime o histórico em um resumo denso. Usar Gemini/Claude para isso seria desperdício de dinheiro e tokens.
+1. **Compressão de contexto:** Quando a sessão de um agente atinge 60% da janela, o Ollama comprime o histórico em um resumo denso. Usar Opus/Sonnet via OpenRouter para isso seria desperdício de dinheiro e tokens.
 2. **Geração de embeddings:** Para o RAG vetorial (busca semântica na tabela `problems_solutions`), precisamos vetorizar textos. O modelo `nomic-embed-text` gera embeddings localmente sem custo.
 
 **Modelos que instalaremos:**
@@ -368,7 +376,7 @@ npm audit --json
 - PostgreSQL 16.13 + Redis 7.0.15
 
 **Providers de IA configurados (`config/ai.php`):**
-- `openrouter` → provider único — família Anthropic: `claude-opus-4-7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs)
+- `openrouter` → provider único — família Anthropic: `claude-opus-4.7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs)
 - `ollama` → ContextCompressor local `qwen2.5:0.5b` (Fase 3, sem custo API)
 
 **Para manutenção:**
@@ -417,7 +425,7 @@ Com tudo instalado e rodando simultaneamente:
 ```bash
 # Apenas o essencial para o ciclo Task → Orchestrator → Subagente → QA → Commit
 1. Projeto Laravel 13 ai-dev-core já existe em /var/www/html/projetos/ai-dev/ai-dev-core/
-2. Configurar ANTHROPIC_API_KEY e GEMINI_API_KEY no .env
+2. Configurar OPENROUTER_API_KEY no .env (provider único — família Anthropic via OpenRouter)
 3. Rodar migrations: php artisan migrate
 4. Configurar Laravel Horizon (já instalado) para workers
 5. Configurar Supervisor para 4 workers (orchestrator, executors, qa, default)
@@ -429,7 +437,7 @@ Com tudo instalado e rodando simultaneamente:
 
 ```bash
 # Adiciona capacidade de auditoria de segurança e performance
-1. Configurar ANTHROPIC_API_KEY no .env (Claude para OrchestratorAgent e QAAuditorAgent)
+1. OPENROUTER_API_KEY já configurada na Fase 1 — sem nova chave nesta fase (mesma chave roteia Opus 4.7 e Sonnet 4.6)
 2. Instalar ferramentas de segurança no servidor:
    sudo apt install nikto -y
    source /root/venv/bin/activate && pip install sqlmap
@@ -458,39 +466,67 @@ Com tudo instalado e rodando simultaneamente:
 
 ## 7. Sincronização de Conhecimento (Docs Oficiais)
 
-Para garantir que os agentes e as IAs utilizem sempre a "fonte da verdade" mais atualizada da TALL Stack, o servidor possui scripts de sincronização automática.
+Para garantir que os agentes, o Claude Code humano e os desenvolvedores sempre consultem a **fonte de verdade** da TALL Stack (e não chutem assinaturas de API), o servidor espelha localmente as docs oficiais dos 6 repositórios que compõem o stack e roda um job diário para mantê-las em dia.
 
-### 7.1. Sincronia GitHub → Local
-O script `baixar_docs_tall.py` espelha as documentações oficiais dos repositórios GitHub para o diretório local.
+> **Regra fundamental:** ao implementar features com Laravel AI SDK, Filament, Livewire, Alpine, Tailwind ou Anime.js, **consulte sempre `docs_tecnicos/` antes de escrever código** — estas docs são a versão exata das bibliotecas instaladas, não o que o modelo "lembra" do treino. Um agente (ou humano) que escreve código contra docs imaginadas introduz incompatibilidades silenciosas.
 
-- **Caminho Local:** `/var/www/html/projetos/ai-dev/docs_tecnicos/`
-- **Execução:**
-  ```bash
-  python3 /var/www/html/projetos/ai-dev/baixar_docs_tall.py
-  ```
-- **Comportamento:** Espelhamento incremental (baixa novos, atualiza modificados e deleta arquivos removidos no remoto via `git clean`).
+### 7.1. Repositórios Espelhados
 
-### 7.2. Sincronia Local → OpenAI Storage
-O script `sync_openai_storage.py` envia os arquivos Markdown locais para um Vector Store na OpenAI, permitindo que Assistants tenham conhecimento técnico profundo.
+Todos os repositórios abaixo são clonados em `/var/www/html/projetos/ai-dev/docs_tecnicos/` e atualizados automaticamente. Alguns são monorepos — nesses casos usamos sparse-checkout para trazer apenas o subdiretório de docs.
 
-- **Vector Store:** `TALL_STACK_SUPREME_DOCS`
-- **Execução:**
-  ```bash
-  python3 /var/www/html/projetos/ai-dev/sync_openai_storage.py
-  ```
-- **Requisito:** `OPENAI_API_KEY` configurada no `.env` do Core.
+| Pasta Local | Upstream | Branch | Modo | Conteúdo |
+|---|---|---|---|---|
+| `laravel13-docs/` | `laravel/docs` | `master` | Repo completo | Laravel Framework, AI SDK, Boost, MCP, Horizon, Pennant |
+| `filament5-docs/` | `filamentphp/filament` | `5.x` | Monorepo — sparse `docs/` | Filament Panels, Forms, Tables, Actions, Schemas |
+| `livewire4-docs/` | `livewire/docs` | `master` | Repo completo | Livewire 4 — componentes, lifecycle, wire actions |
+| `alpine-docs/` | `alpinejs/alpine` | `main` | Monorepo — sparse `packages/docs` | Alpine.js v3 — diretivas, plugins |
+| `tailwind-docs/` | `tailwindlabs/tailwindcss.com` | `master` | Monorepo — sparse `src/pages/docs` | Tailwind CSS v4 — utilitários, config |
+| `animejs-docs/` | `juliangarnier/anime` | `master` | Repo completo | Anime.js v4 — timelines, easings, staggers |
+
+O mapa canônico vive em `DOCS_MAP` dentro de `baixar_docs_tall.py` — alterar essa constante é o único jeito correto de adicionar/remover um repositório do espelhamento.
+
+### 7.2. Scripts e Cronograma
+
+Três arquivos compõem o pipeline de sincronização:
+
+| Arquivo | Função |
+|---|---|
+| `/var/www/html/projetos/ai-dev/baixar_docs_tall.py` | Clona/atualiza os 6 repos (git fetch + reset --hard + clean). Para monorepos, configura sparse-checkout antes. Espelhamento idempotente. |
+| `/var/www/html/projetos/ai-dev/sync_openai_storage.py` | Envia os `.md` atualizados para o Vector Store `TALL_STACK_SUPREME_DOCS` na OpenAI (para Assistants externos). **Não** é consumido pelo Laravel AI SDK do ai-dev-core. |
+| `/var/www/html/projetos/ai-dev/sync_fullstack_docs.sh` | Orquestrador — chama `baixar_docs_tall.py` e depois `sync_openai_storage.py`, redirecionando stdout/stderr para log. |
+
+**Cron (crontab do root):**
+```cron
+0 2 * * *  /var/www/html/projetos/ai-dev/sync_fullstack_docs.sh
+```
+
+- **Timezone do servidor:** `America/Belem` — a sincronização roda às **02:00 de Belém** todos os dias.
+- **Log:** `/var/www/html/projetos/ai-dev/ai-dev-core/storage/logs/sync_docs.log` (append; rotação via logrotate padrão do Laravel).
+- **Execução manual:** `bash /var/www/html/projetos/ai-dev/sync_fullstack_docs.sh` (útil quando há release nova de alguma lib).
+
+### 7.3. Como os Agentes Consomem
+
+- **`DocsAgent`** usa o `BoostTool` para chamar `php artisan search-docs` **no Boost do Projeto Alvo**, que por sua vez indexa `docs_tecnicos/` montado em read-only dentro do container/venv do alvo.
+- **`SpecialistAgent` e `QAAuditorAgent`** consultam o `BoostTool` *antes* de escrever ou auditar código — regra obrigatória declarada em `ai-dev-core/README.md`.
+- **Claude Code humano** (este assistente, quando está editando o ai-dev-core) lê `docs_tecnicos/` diretamente via `Read`/`Grep`. É a primeira parada quando há dúvida sobre assinatura de API.
+
+### 7.4. Requisitos Operacionais
+
+- `git` instalado no servidor (já está — Ubuntu 24.04 base).
+- Python 3.12 + venv em `/root/venv` com `openai>=1.0` (consumido por `sync_openai_storage.py`).
+- `OPENAI_API_KEY` no ambiente do cron — necessária **apenas** para o push OpenAI; o espelhamento local funciona sem ela.
 
 ---
 
 ## 8. Monitoramento e Manutenção
 
-### 8.1. Logs de IA e Proxies
-- **Gemini Proxy:** `/var/www/html/projetos/ai-dev/storage/logs/gemini-proxy.log` (ou log direto do script)
-- **Claude Proxy:** `/var/www/html/projetos/ai-dev/storage/logs/claude-proxy.log`
-- **Laravel AI:** `storage/logs/laravel.log` (procurar por `FailoverProvider`)
+### 8.1. Logs de IA
+- **Laravel AI SDK:** `storage/logs/laravel.log` — chamadas ao OpenRouter, eventos `AgentFailedOver`, falhas de tool call.
+- **Tabela `agent_executions`** (banco do ai-dev-core): registro estruturado de cada chamada — modelo usado, tokens de entrada/saída, custo estimado, cache hit. Fonte primária para auditoria e para os widgets de custo no dashboard.
+- *(Proxies Python Gemini/Claude foram descontinuados — os arquivos `gemini-proxy.log` / `claude-proxy.log` não são mais gerados.)*
 
 ### 8.2. Reinício de Serviços
-Após qualquer mudança em `config/ai.php` ou nos Proxies:
+Após qualquer mudança em `config/ai.php`:
 ```bash
 # Reiniciar Horizon e Workers
 php artisan horizon:terminate

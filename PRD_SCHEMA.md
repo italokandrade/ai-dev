@@ -4,6 +4,8 @@ Este documento define o formato **exato** que todo PRD e Sub-PRD deve seguir no 
 
 O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas ANTES de aceitar a task. Se o JSON for inválido, a task é rejeitada com uma mensagem clara do que falta.
 
+> **Todos os caminhos, tabelas e colunas citados em um PRD referem-se ao Projeto Alvo** — nunca ao ai-dev-core. Exemplos: `context.related_files` aponta para arquivos dentro de `projects.local_path`; `context.related_tables` são tabelas no banco daquele projeto (consultadas pelo `BoostTool` via `database-schema` do Projeto Alvo, não pelo schema do ai-dev-core); `acceptance_criteria` descrevem comportamento a validar no código e banco do alvo. O PRD em si é **armazenado** no banco do ai-dev-core (em `tasks.prd_payload`) — mas **descreve trabalho a ser feito no alvo**. Para a separação canônica entre ai-dev-core e Projeto Alvo, consulte `README.md → Arquitetura em Duas Camadas`.
+
 ---
 
 ## 1. JSON Schema do PRD Principal (Task)
@@ -84,7 +86,7 @@ Este é o formato que preenche o campo `tasks.prd_payload`:
         },
         "reference_urls": {
           "type": "array",
-          "description": "URLs de documentação ou exemplos que o agente deve consultar via SearchTool/Firecrawl.",
+          "description": "URLs de documentação ou exemplos que o agente deve consultar via `DocSearchTool` (Laravel Boost `search-docs`).",
           "items": { "type": "string" },
           "examples": ["https://filamentphp.com/docs/3.x/panels/resources"]
         },
@@ -237,7 +239,7 @@ Quando o Orchestrator quebra o PRD principal, cada subtask recebe um Sub-PRD men
       "description": "Ferramentas que o Orchestrator sugere para esta subtask. O subagente pode usar outras se necessário.",
       "items": {
         "type": "string",
-        "enum": ["ShellTool", "FileTool", "DatabaseTool", "GitTool", "SearchTool", "TestTool", "DocsTool", "MetaTool"]
+        "enum": ["BoostTool", "DocSearchTool", "FileReadTool", "FileWriteTool", "GitOperationTool", "ShellExecuteTool"]
       },
       "default": []
     }
@@ -274,7 +276,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
     "Migration deve ser idempotente — usar Schema::hasColumn()",
     "Enum deve usar backed enum (string) para compatibilidade com PostgreSQL"
   ],
-  "tools_suggested": ["FileTool", "ShellTool", "DatabaseTool"]
+  "tools_suggested": ["BoostTool", "FileWriteTool", "ShellExecuteTool"]
 }
 ```
 
@@ -300,7 +302,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
     "Usar Enum PHP nativa (App\\Enums\\UserRole) — não string mágica",
     "Avatar salvo em storage/app/public/avatars com disk 'public'"
   ],
-  "tools_suggested": ["FileTool", "ShellTool"]
+  "tools_suggested": ["BoostTool", "FileReadTool", "FileWriteTool"]
 }
 ```
 
@@ -334,7 +336,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
     "Não criar rotas manuais — usar auto-routing do Resource",
     "Avatar FileUpload deve usar disk 'public' e directory 'avatars'"
   ],
-  "tools_suggested": ["ShellTool", "FileTool"]
+  "tools_suggested": ["BoostTool", "ShellExecuteTool", "FileWriteTool"]
 }
 ```
 
@@ -364,7 +366,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
     "Usar RefreshDatabase trait",
     "Usar User::factory() para criação de dados"
   ],
-  "tools_suggested": ["FileTool", "ShellTool", "TestTool"]
+  "tools_suggested": ["BoostTool", "FileWriteTool", "ShellExecuteTool"]
 }
 ```
 

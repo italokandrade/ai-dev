@@ -9,6 +9,10 @@
 > PostgreSQL 16 + pgvector, Redis 7, Laravel AI SDK (`laravel/ai`), MCP (`laravel/mcp`),
 > Boost (`laravel/boost`) e Laravel Horizon com 4 supervisors configurados.
 
+## 0. Contexto desta Migração — Apenas o ai-dev-core
+
+Esta migração atualizou **exclusivamente o ai-dev-core** (Master). **Não** tocou em Projetos Alvo. Cada Projeto Alvo é uma aplicação Laravel independente — com seu próprio `composer.lock`, seu próprio `artisan`, seu próprio banco — e sua migração de Laravel é decidida e executada pelos agentes do ai-dev-core em uma task, quando e se fizer sentido para aquele projeto. O ai-dev-core em Laravel 13 **pode orquestrar** Projetos Alvo que ainda estão em Laravel 12, 11 ou versões anteriores, pois o `BoostTool` consulta a versão real do alvo antes de gerar código. A separação canônica entre as duas camadas vive em `README.md → Arquitetura em Duas Camadas`.
+
 ---
 
 ## 1. Analise de Impacto: O que o Laravel 13 nos da "de graca"
@@ -33,7 +37,7 @@ O Laravel 13 introduz o **Laravel AI SDK** como pacote first-party estavel, traz
 | Compressao de contexto (Ollama) | `RemembersConversations` + gestao automatica | **SIMPLIFICAR** | SDK gerencia contexto; manter compressao como otimizacao |
 | JSON custom para tool schemas | `JsonSchema` builder nativo | **ELIMINAR** | Usar `$schema->string()->required()` etc. |
 | `ToolResult` custom | Return `string` do `execute()` / `handle()` | **ELIMINAR** | Tools retornam string diretamente |
-| Proxy Gemini/Claude custom | `config/ai.php` com `url` custom | **MANTER** | Proxies ainda uteis para rate limiting e logging |
+| Proxy Gemini/Claude custom | `config/ai.php` com driver `openai` + base_url OpenRouter | **REMOVIDO** | Proxies Python legados foram descontinuados. Todo o tráfego LLM sai direto do SDK para `https://openrouter.ai/api/v1` — rate limiting e logging ficam no OpenRouter + `agent_executions` |
 | `context_library` (few-shot) | `instructions()` + injecao no prompt | **MANTER** | Padroes TALL continuam sendo injetados via instructions |
 | `task_transitions` (auditoria) | Events do SDK (`AgentPrompted`, etc.) | **COMPLEMENTAR** | Manter tabela + ouvir eventos do SDK |
 | `tool_calls_log` | Events do SDK + middleware | **SIMPLIFICAR** | Usar middleware do SDK para logging |
@@ -87,7 +91,7 @@ O Laravel 13 introduz o **Laravel AI SDK** como pacote first-party estavel, traz
 |                                                                      |
 |  +------------------------------------------------------------------+|
 |  |   AI Providers (via config/ai.php)                                ||
-|  |   Lab::OpenAI (openrouter) | Lab::Ollama        ||
+|  |   'openrouter' (driver openai) | Lab::Ollama (local)              ||
 |  |   (Provider-agnostic, failover automatico)                        ||
 |  +------------------------------------------------------------------+|
 |                                                                      |
@@ -228,7 +232,7 @@ class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools
 
 // Uso:
 $plan = OrchestratorAgent::make(task: $task)
-    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
+    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4.7');
 
 foreach ($plan['subtasks'] as $subtask) {
     Subtask::create($subtask);
@@ -237,46 +241,52 @@ foreach ($plan['subtasks'] as $subtask) {
 
 ### 3.3. LLMGateway → config/ai.php
 
-**Antes (LLMGateway custom):**
+**Antes (LLMGateway custom com múltiplos providers + proxies Python):**
 ```php
 class LLMGateway
 {
     public function send(string $provider, string $prompt): string
     {
         return match($provider) {
-            'gemini' => $this->sendToGemini($prompt),
-            'claude' => $this->sendToClaude($prompt),
+            'gemini' => $this->sendToGemini($prompt),  // proxy :8001
+            'claude' => $this->sendToClaude($prompt),  // proxy :8002
             'ollama' => $this->sendToOllama($prompt),
         };
     }
 }
 ```
 
-**Depois (config/ai.php):**
+**Depois (config/ai.php — OpenRouter como gateway único + Ollama local):**
 ```php
 // config/ai.php
 'providers' => [
-    'anthropic' => [
-        'driver' => 'anthropic',
-        'key' => env('ANTHROPIC_API_KEY'),
-    ],
-    'gemini' => [
-        'driver' => 'gemini',
-        'key' => env('GEMINI_API_KEY'),
+    'openrouter' => [
+        'driver' => 'openai',
+        'key'    => env('OPENROUTER_API_KEY'),
+        'url'    => 'https://openrouter.ai/api/v1',
     ],
     'ollama' => [
         'driver' => 'ollama',
-        'url' => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
+        'key'    => env('OLLAMA_API_KEY', ''),
+        'url'    => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
+    ],
+    'openrouter_chain' => [
+        'driver'    => 'failover',
+        'providers' => ['openrouter', 'openai'],
     ],
 ],
 
-// Uso direto no agent:
+// Uso direto no agent (o atributo #[Provider('openrouter')] já aplica o default):
 $response = OrchestratorAgent::make(task: $task)
-    ->prompt($prd, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
+    ->prompt($prd);
 
-// Failover automatico: se Anthropic falhar, trocar provider
+// Override em runtime (provider como string — openrouter é alias em config/ai.php, NÃO Lab::):
 $response = OrchestratorAgent::make(task: $task)
-    ->prompt($prd, provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6');
+    ->prompt($prd, provider: 'openrouter', model: 'anthropic/claude-opus-4.7');
+
+// Failover em runtime (per ai-sdk.md §Failover — array só no parametro prompt, nunca no atributo):
+$response = OrchestratorAgent::make(task: $task)
+    ->prompt($prd, provider: ['openrouter', 'openrouter_chain']);
 ```
 
 **`LLMGateway` e completamente eliminado.** O SDK gerencia providers, autenticacao e failover.
@@ -373,7 +383,7 @@ use Illuminate\Support\Facades\Concurrency;
 
 // Fase 1: Orchestrator planeja (Prompt Chaining)
 $plan = OrchestratorAgent::make(task: $task)
-    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
+    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4.7');
 
 // Fase 2: Subtasks paralelas (Parallelization)
 $results = Concurrency::run(
@@ -441,7 +451,7 @@ class OrchestratorAgent implements Agent { ... }
 
 | Tabela | Status | Ajuste |
 |---|---|---|
-| `projects` | **Manter** | Remover `gemini_session_id`/`claude_session_id` (SDK gerencia conversas) |
+| `projects` | **Manter** | Substituir `gemini_session_id`/`claude_session_id` por uma única coluna `anthropic_session_id` (SDK gerencia conversas via OpenRouter → família Anthropic) |
 | `tasks` | **Manter** | Sem mudanca |
 | `subtasks` | **Manter** | Sem mudanca |
 | `agents_config` | **Manter** | Adicionar referencia ao Agent class. O `role_description` vira o `instructions()` do Agent |
@@ -569,7 +579,7 @@ return [
 
     // Mapeamento Agente → Provider/Modelo (equivale ao LLMGateway)
     'agent_routing' => [
-        'orchestrator'   => ['provider' => 'openrouter', 'model' => 'anthropic/claude-opus-4-7'],
+        'orchestrator'   => ['provider' => 'openrouter', 'model' => 'anthropic/claude-opus-4.7'],
         'qa_auditor'     => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
         'security'       => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
         'backend'        => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
@@ -631,10 +641,10 @@ return [
 | Risco | Probabilidade | Mitigacao |
 |---|---|---|
 | AI SDK ainda imaturo (v1.0) | Media | Manter fallback para implementacao custom em caso de bugs |
-| Proxy Gemini custom pode conflitar com SDK | Baixa | Testar com `url` custom no config/ai.php |
+| OpenRouter como ponto único de falha externa | Media | Falhas de modelo individual fazem failover dentro da família Anthropic (Opus → Sonnet). Falha total do OpenRouter escala para humano |
 | RemembersConversations pode nao ser flexivel o suficiente | Media | Implementar `Conversational` manualmente se necessario |
 | pgvector performance com muitos embeddings | Baixa | Usar indice IVFFlat, ja temos pgvector 0.6 |
-| Structured output pode nao funcionar com todos providers | Media | Testar com Gemini e Anthropic antes de migrar |
+| Structured output pode nao funcionar para todos os modelos via OpenRouter | Media | Testar antes de migrar; fallback para output livre + parser manual se necessário |
 
 ---
 

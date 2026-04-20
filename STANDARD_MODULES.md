@@ -1,6 +1,8 @@
 # Core Master (Módulos Padrão AndradeItalo.ai)
 
-Este documento define a arquitetura dos módulos e submódulos fundamentais que devem ser incorporados em **todos** os novos sistemas desenvolvidos pela AndradeItalo.ai. Eles formam a base estrutural de Segurança, Auditoria e Manutenção.
+Este documento define a arquitetura dos módulos e submódulos fundamentais que devem ser incorporados em **todos os novos Projetos Alvo** desenvolvidos pela AndradeItalo.ai — ou seja, as aplicações Laravel que o ai-dev-core vai orquestrar. Estes módulos vivem **no codebase do Projeto Alvo** (não no ai-dev-core) e formam a base estrutural de Segurança, Auditoria e Manutenção **daquele** projeto.
+
+> O ai-dev-core, sendo também uma aplicação Laravel, já tem sua própria versão dessas áreas (Filament Shield, Horizon, etc.) provisionada internamente — mas o conteúdo deste documento trata do que é **injetado em cada Projeto Alvo** pelo `instalar_projeto.sh`. Para a separação canônica entre ai-dev-core e Projeto Alvo, consulte `README.md → Arquitetura em Duas Camadas`.
 
 ## 1. Módulo: Segurança & Autenticação (Security Core)
 *Responsável pelo controle de fronteira do sistema.*
@@ -47,6 +49,8 @@ Este documento define a arquitetura dos módulos e submódulos fundamentais que 
 ---
 **Regra de Implementação (AI-Dev):**
 Estes módulos **NÃO serão desenvolvidos ou reescritos pela Inteligência Artificial a cada projeto**. Eles formam um "Core Master" pré-fabricado (arquivos e dumps SQL).
-Durante o scaffolding via `instalar_projeto.sh`, todo o código-fonte e o banco de dados base destes módulos serão injetados fisicamente no novo sistema. Assim, o painel administrativo do cliente nascerá 100% estruturado em segurança, auditoria e gestão.
+Durante o scaffolding via `instalar_projeto.sh`, todo o código-fonte e o banco de dados base destes módulos são injetados fisicamente no novo Projeto Alvo. Assim, o painel administrativo do cliente nascerá 100% estruturado em segurança, auditoria e gestão.
 
-A IA atuará apenas integrando e marcando esses módulos preexistentes como "Dependencies" (Dependências) para os módulos específicos de negócio que ela de fato irá codificar.
+**Além do Core Master, `instalar_projeto.sh` também instala o Laravel AI SDK e o Laravel Boost no Projeto Alvo.** O AI SDK serve às **IAs de interação do próprio projeto** (ex: copiloto do usuário, classificador, sumarizador — definidos depois, na spec de cada alvo). O Boost serve de **fonte de contexto** consumida pelos agentes de desenvolvimento do ai-dev-core via `BoostTool` durante a execução de tasks. **Nenhum agente de desenvolvimento (`Orchestrator`, `Specialist`, `QAAuditor`, `DocsAgent`) é instalado no Projeto Alvo** — esses são exclusivos do ai-dev-core.
+
+A IA de desenvolvimento do ai-dev-core atuará apenas integrando e marcando esses módulos preexistentes como "Dependencies" (Dependências) para os módulos específicos de negócio que ela de fato irá codificar.

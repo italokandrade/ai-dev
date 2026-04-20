@@ -324,12 +324,13 @@ Nenhum dos itens acima justifica uma Tool dedicada: o LLM monta a invocação co
 
 ## Distribuição das Tools por Agent
 
-| Agent | Tools disponíveis |
-|---|---|
-| `SpecialistAgent` | `BoostTool`, `DocSearchTool`, `ShellExecuteTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool` |
-| `QAAuditorAgent` | `BoostTool` *(auditoria sem executar código)* |
-| `DocsAgent` | `BoostTool.search-docs` |
-| `OrchestratorAgent`, `SpecificationAgent`, `QuotationAgent`, `RefineDescriptionAgent` | — *(só planejamento/escrita JSON — não usam tools)* |
+| Agent | Modelo (via OpenRouter) | Tools disponíveis |
+|---|---|---|
+| `OrchestratorAgent`, `SpecificationAgent`, `QuotationAgent`, `RefineDescriptionAgent` | **Opus 4.7** | — *(só planejamento/escrita JSON — não usam tools)* |
+| `SpecialistAgent` (backend, frontend, filament, database, devops, security, performance) | **Sonnet 4.6** | `BoostTool`, `DocSearchTool`, `ShellExecuteTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool` |
+| `QAAuditorAgent` | **Sonnet 4.6** | `BoostTool` *(auditoria sem executar código)* |
+| `DocsAgent` | **Haiku 4.5** | `BoostTool.search-docs` |
+| `ContextCompressor` *(Fase 3)* | **Ollama local** (`qwen2.5:0.5b`) | — *(recebe texto, retorna resumo — sem tool calls)* |
 
 ---
 

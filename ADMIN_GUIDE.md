@@ -1,11 +1,19 @@
 # Guia do Painel Administrativo AI-Dev (Filament v5)
 
-Este documento descreve o funcionamento do ambiente web de gestão do ecossistema AI-Dev, localizado em `/ai-dev-core/public/admin`.
+Este documento descreve o funcionamento do **Admin Panel do ai-dev-core** (Master), localizado em `/ai-dev-core/public/admin`. É daqui que o humano cadastra Projetos Alvo, cria tasks, dispara cotações e acompanha execução dos agentes.
+
+> **Dois Admin Panels coexistem no ecossistema — não confundir:**
+> - **Admin Panel do ai-dev-core** *(este guia)* — gere `projects` (cadastro dos alvos), `tasks`, `subtasks`, `agents_config`, `project_quotations`. É aqui que as IAs de interação do Master (`RefineDescriptionAgent`, `SpecificationAgent`, `QuotationAgent`) falam com o usuário para estruturar o PRD antes da execução.
+> - **Admin Panel de cada Projeto Alvo** *(documentado no repositório de cada alvo, não aqui)* — gere as entidades de negócio daquele projeto (ex: clientes, pedidos, usuários finais) e hospeda as IAs de interação específicas daquele projeto (copiloto do usuário, classificador, etc.). O ai-dev-core **não** opera este painel — ele apenas gera o código dele.
+>
+> Para a tabela canônica de separação entre ai-dev-core e Projeto Alvo, veja `README.md → Arquitetura em Duas Camadas`.
 
 ## 1. Gestão de Projetos (`Projects`)
-O ponto de partida para qualquer automação. Cada projeto representa uma aplicação distinta no servidor.
-- **Provedor e Modelo:** Todo o sistema usa o provider `openrouter` com família Anthropic — `claude-opus-4-7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs). Configurado em `config/ai.php`.
-- **Contexto Persistente:** O sistema armazena IDs de sessão para que a IA mantenha a memória de longo prazo sobre o projeto.
+O ponto de partida para qualquer automação. Cada linha em `projects` representa um **Projeto Alvo** — uma aplicação Laravel externa, com repositório próprio, banco próprio e Boost MCP próprio, que o ai-dev-core vai desenvolver/refatorar/manter.
+
+- **Campos-chave:** `name`, `github_repo`, `local_path` (caminho absoluto no servidor, ex: `/var/www/html/projetos/portal`), `status`. O `local_path` é o **ponto de acoplamento**: todo `FileReadTool`/`FileWriteTool`/`ShellExecuteTool`/`GitOperationTool`/`BoostTool` usado pelos agentes recebe esse path e opera exclusivamente dentro dele.
+- **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core usa o provider `openrouter` com família Anthropic — `claude-opus-4.7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs). Configurado em `config/ai.php` **do ai-dev-core**. Cada Projeto Alvo tem seu próprio `.env` e sua própria `OPENROUTER_API_KEY` para as IAs de interação que rodam dentro dele — independentes deste cadastro.
+- **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
 
 ## 2. Estrutura de Módulos (`Modules`)
 Os módulos permitem decompor um projeto complexo em partes menores e gerenciáveis.
@@ -21,7 +29,7 @@ Os módulos permitem decompor um projeto complexo em partes menores e gerenciáv
 - Isso garante que a base de código onde o novo módulo será construído está estável e testada.
 
 ## 3. Gestão de Tarefas (`Tasks`)
-As tarefas são as unidades de trabalho executadas pelos agentes.
+As tarefas são as unidades de trabalho executadas pelos **agentes de desenvolvimento** do ai-dev-core. Cada task referencia um `project_id` — e todo o trabalho concreto (leitura de código, escrita, testes, commits) acontece no `local_path` daquele Projeto Alvo, **nunca** no filesystem do ai-dev-core.
 
 ### 3.1 Classificação de Prioridade
 A prioridade não é mais um número confuso, mas sim uma classificação semântica:
@@ -43,10 +51,10 @@ Ao criar módulos ou tarefas, você define quais especialistas serão convocados
 - `backend`, `frontend`, `database`, `filament`, `devops`, `testing`, `design`.
 
 ## 6. Inteligência Híbrida e Contexto Dinâmico
-O AI-Dev utiliza um sistema de **Context Awareness** (Ciência de Contexto) em tempo real.
-- **Detecção Automática:** O sistema varre o servidor para detectar a versão do OS, PHP, PostgreSQL e extensões (como `pgvector`).
-- **Sincronização da Stack:** As versões exatas do Laravel, Filament, Tailwind e Anime.js são injetadas no prompt da IA.
-- **Benefício:** A IA nunca sugerirá uma tecnologia ou sintaxe que não seja compatível com a versão física instalada no seu servidor.
+O AI-Dev utiliza um sistema de **Context Awareness** (Ciência de Contexto) em tempo real — lendo sempre do **Projeto Alvo**, não do ai-dev-core.
+- **Detecção via Boost do alvo:** o `BoostTool` (a ser tornado project-path-aware — ver README, Fase 1) executa `php artisan boost:*` dentro do `local_path` do alvo e retorna schema, docs instaladas e estado do código daquele projeto.
+- **Sincronização da Stack:** As versões exatas de Laravel, Filament, Livewire, Tailwind e Anime.js **instaladas no Projeto Alvo** são a fonte de verdade — não as versões do ai-dev-core. Projetos podem divergir em versão de pacote e cada um é tratado pelo seu próprio Boost.
+- **Benefício:** A IA nunca sugerirá sintaxe de Filament v4 para um projeto com Filament v5, nem vice-versa — mesmo que o ai-dev-core esteja em versão diferente.
 
 ## 7. Animações com Anime.js
 O ambiente web e os projetos gerados contam com a biblioteca **Anime.js v4** integrada nativamente.

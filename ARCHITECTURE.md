@@ -801,7 +801,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 4. [PLANEJAMENTO VIA PRD] (Planner: 'ORCHESTRATOR')
    → O OrchestratorJob monta o prompt:
      [System Prompt do Orchestrator] + [Contexto Global] + [PRD Principal da Task]
-   → Envia para o LLM (preferencialmente Claude Sonnet 4-6 por precisão no planejamento).
+   → Envia para o LLM (Claude Opus 4.7 via OpenRouter — modelo de planejamento do sistema).
    → O LLM responde com a lista de Sub-PRDs estruturados em JSON.
    → O OrchestratorJob valida cada Sub-PRD contra o JSON Schema (via PRDValidator).
    → Insere múltiplas Subtasks na tabela `subtasks`, cada uma com:
