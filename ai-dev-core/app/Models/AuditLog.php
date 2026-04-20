@@ -11,11 +11,14 @@ class AuditLog extends Model
 {
     use HasUuids;
 
+    protected $table = 'audit_logs';
+
     protected $guarded = [];
 
     protected $casts = [
-        'old_values' => 'json',
-        'new_values' => 'json',
+        'old_values' => 'array',
+        'new_values' => 'array',
+        'created_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

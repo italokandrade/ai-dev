@@ -9,9 +9,11 @@ use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\TextEntry;
-use Filament\Infolists\Infolist;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
+use Filament\Infolists;
 use Filament\Actions\ViewAction;
+use Illuminate\Support\HtmlString;
 
 class AuditLogResource extends Resource
 {
@@ -46,7 +48,65 @@ class AuditLogResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->schema([]); // Sem formulário de edição
+        return $schema->schema([]);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema
+            ->schema([
+                Section::make('Informações Gerais')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            Infolists\Components\TextEntry::make('created_at')
+                                ->label('Data/Hora')
+                                ->dateTime(),
+                            Infolists\Components\TextEntry::make('user.name')
+                                ->label('Usuário')
+                                ->placeholder('Sistema'),
+                            Infolists\Components\TextEntry::make('action')
+                                ->label('Ação')
+                                ->badge()
+                                ->color(fn (string $state): string => match ($state) {
+                                    'created' => 'success',
+                                    'updated' => 'warning',
+                                    'deleted' => 'danger',
+                                    default => 'gray',
+                                }),
+                        ]),
+                        Grid::make(2)->schema([
+                            Infolists\Components\TextEntry::make('auditable_type')
+                                ->label('Módulo')
+                                ->formatStateUsing(fn ($state) => str_replace('App\\Models\\', '', $state)),
+                            Infolists\Components\TextEntry::make('auditable_id')
+                                ->label('ID do Registro'),
+                        ]),
+                    ]),
+
+                Section::make('Alterações de Dados')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Infolists\Components\TextEntry::make('old_values')
+                                ->label('Dados Anteriores')
+                                ->formatStateUsing(fn ($state) => static::formatAuditData($state))
+                                ->placeholder('Nenhum dado anterior'),
+                            Infolists\Components\TextEntry::make('new_values')
+                                ->label('Novos Dados')
+                                ->formatStateUsing(fn ($state) => static::formatAuditData($state))
+                                ->placeholder('Nenhum dado novo'),
+                        ]),
+                    ]),
+
+                Section::make('Contexto da Rede')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Infolists\Components\TextEntry::make('ip_address')
+                                ->label('Endereço IP'),
+                            Infolists\Components\TextEntry::make('user_agent')
+                                ->label('Navegador/User Agent'),
+                        ]),
+                    ])->collapsible()->collapsed(),
+            ]);
     }
 
     public static function table(Table $table): Table
@@ -98,5 +158,37 @@ class AuditLogResource extends Resource
             'index' => Pages\ListAuditLogs::route('/'),
             'view' => Pages\ViewAuditLog::route('/{record}'),
         ];
+    }
+
+    protected static function formatAuditData(mixed $data): ?HtmlString
+    {
+        if (empty($data)) {
+            return null;
+        }
+
+        // Se vier como string (JSON), decodifica
+        if (is_string($data)) {
+            $data = json_decode($data, true);
+        }
+
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $html = '<div class="space-y-1 font-mono text-xs">';
+        foreach ($data as $key => $value) {
+            if (in_array($key, ['created_at', 'updated_at', 'id'])) continue;
+
+            $displayValue = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string) $value;
+            
+            if (mb_strlen($displayValue) > 50) {
+                $displayValue = mb_substr($displayValue, 0, 50) . '...';
+            }
+
+            $html .= "<div><span class='font-bold text-primary-600'>{$key}:</span> <span class='text-gray-600 dark:text-gray-400'>{$displayValue}</span></div>";
+        }
+        $html .= '</div>';
+
+        return new HtmlString($html);
     }
 }

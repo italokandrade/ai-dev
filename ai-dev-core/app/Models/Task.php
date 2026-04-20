@@ -65,7 +65,8 @@ class Task extends Model implements Conversational
 
     public function transitions(): HasMany
     {
-        return $this->hasMany(TaskTransition::class);
+        return $this->hasMany(TaskTransition::class, 'entity_id')
+            ->where('entity_type', 'task');
     }
 
     public function canTransitionTo(TaskStatus $newStatus): bool
@@ -83,9 +84,10 @@ class Task extends Model implements Conversational
         $this->update(['status' => $newStatus]);
 
         $this->transitions()->create([
-            'from_status' => $oldStatus,
-            'to_status' => $newStatus,
-            'assigned_agent' => $agent,
+            'entity_type' => 'task',
+            'from_status' => $oldStatus->value,
+            'to_status' => $newStatus->value,
+            'triggered_by' => $agent,
             'metadata' => $metadata,
         ]);
     }
