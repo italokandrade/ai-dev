@@ -110,12 +110,16 @@ O sistema agêntico usa dois providers externos para os agents, e dois proxies l
 
 #### Providers ativos (agents do AI-Dev Core)
 
-| Provider | Motor | Agents |
-|---|---|---|
-| **openrouter** | `anthropic/claude-opus-4.7` | OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
-| **openai_dev** | `gpt-5.3-codex` + Vector Store TALL Stack | SpecialistAgent, QAAuditorAgent, DocsAgent |
+Todo o sistema agêntico usa um único provider externo: **OpenRouter** com família Anthropic.
 
-Configurados em `config/ai.php` e `.env` do AI-Dev Core.
+| Provider | Modelo | Tier | Agents |
+|---|---|---|---|
+| **openrouter** | `anthropic/claude-opus-4-7` | Máxima qualidade | OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
+| **openrouter** | `anthropic/claude-sonnet-4-6` | Qualidade + custo | SpecialistAgent, QAAuditorAgent |
+| **openrouter** | `anthropic/claude-haiku-4-5-20251001` | Rápido + barato | DocsAgent |
+| **ollama** (local) | `qwen2.5:0.5b` | Sem custo API | ContextCompressor (Fase 3) |
+
+Configurados em `config/ai.php` e `.env` do AI-Dev Core. Único `.env` necessário: `OPENROUTER_API_KEY`.
 
 #### Proxies locais (infraestrutura reservada)
 
@@ -364,9 +368,8 @@ npm audit --json
 - PostgreSQL 16.13 + Redis 7.0.15
 
 **Providers de IA configurados (`config/ai.php`):**
-- `openrouter` → `anthropic/claude-opus-4.7` (planejamento/raciocínio)
-- `openai_dev` → `gpt-5.3-codex` + Vector Store `vs_69e56d3313ec81918655ee60b66f273e` (código/docs TALL Stack)
-- `openai` → provider padrão para módulos da aplicação
+- `openrouter` → provider único — família Anthropic: `claude-opus-4-7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs)
+- `ollama` → ContextCompressor local `qwen2.5:0.5b` (Fase 3, sem custo API)
 
 **Para manutenção:**
 ```bash
@@ -499,5 +502,5 @@ php artisan cache:clear
 
 ---
 
-**Nota Final:** Os agents autônomos usam `openrouter` (claude-opus-4.7) para planejamento e `openai_dev` (gpt-5.3-codex) para código. Os proxies locais (8001/8002) são infraestrutura reservada para uso futuro. O provider `openai` é o padrão para módulos da aplicação.
+**Nota Final:** Todo o sistema agêntico usa `openrouter` com família Anthropic (Opus 4.7 / Sonnet 4.6 / Haiku 4.5). Único `.env` necessário: `OPENROUTER_API_KEY`. Os proxies locais (8001/8002) são infraestrutura reservada para uso futuro.
 

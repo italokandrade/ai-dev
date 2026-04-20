@@ -37,13 +37,13 @@ Este `README.md` é a única fonte de verdade do projeto. Ferramentas de IA deve
 
 | Agent | Função | Provider | Modelo |
 |---|---|---|---|
-| `OrchestratorAgent` | Decompõe PRD em Sub-PRDs atômicos | openrouter | claude-opus-4.7 |
-| `SpecificationAgent` | Transforma descrição informal em spec técnica JSON | openrouter | claude-opus-4.7 |
-| `QuotationAgent` | Estima horas e custos por área profissional | openrouter | claude-opus-4.7 |
-| `RefineDescriptionAgent` | Refina a descrição do projeto antes da especificação | openrouter | claude-opus-4.7 |
-| `SpecialistAgent` | Lê e escreve código — implementa o Sub-PRD | openai_dev | gpt-5.3-codex |
-| `QAAuditorAgent` | Audita o código entregue e aprova ou rejeita | openai_dev | gpt-5.3-codex |
-| `DocsAgent` | Busca documentação TALL Stack no vector store | openai_dev | gpt-5.3-codex |
+| `OrchestratorAgent` | Decompõe PRD em Sub-PRDs atômicos | openrouter | `anthropic/claude-opus-4-7` |
+| `SpecificationAgent` | Transforma descrição informal em spec técnica JSON | openrouter | `anthropic/claude-opus-4-7` |
+| `QuotationAgent` | Estima horas e custos por área profissional | openrouter | `anthropic/claude-opus-4-7` |
+| `RefineDescriptionAgent` | Refina a descrição do projeto antes da especificação | openrouter | `anthropic/claude-opus-4-7` |
+| `SpecialistAgent` | Lê e escreve código — implementa o Sub-PRD | openrouter | `anthropic/claude-sonnet-4-6` |
+| `QAAuditorAgent` | Audita o código entregue e aprova ou rejeita | openrouter | `anthropic/claude-sonnet-4-6` |
+| `DocsAgent` | Busca documentação TALL Stack via BoostTool | openrouter | `anthropic/claude-haiku-4-5-20251001` |
 
 ### Regra obrigatória — BoostTool antes de escrever código
 
@@ -55,21 +55,22 @@ Este `README.md` é a única fonte de verdade do projeto. Ferramentas de IA deve
 |---|---|
 | `SpecialistAgent` | BoostTool, DocSearchTool, ShellExecuteTool, FileReadTool, FileWriteTool, GitOperationTool |
 | `QAAuditorAgent` | BoostTool |
-| `DocsAgent` | FileSearch (vector store TALL Stack) |
+| `DocsAgent` | BoostTool (search-docs) |
 
 ---
 
 ## Provedores de IA (`config/ai.php`)
 
+Todo o sistema agêntico usa um único provider externo: **OpenRouter** com família Anthropic.
+
 | Provider | Driver | Uso |
 |---|---|---|
-| `openrouter` | openrouter | Agentes de planejamento — `claude-opus-4.7` |
-| `openai_dev` | openai | Agentes de código — `gpt-5.3-codex` + Vector Store TALL Stack |
-| `openai` | openai | Default para módulos da aplicação (não agênticos) |
+| `openrouter` | openai (compatível) | Todos os agentes — família Anthropic (Opus / Sonnet / Haiku) |
+| `ollama` | ollama | ContextCompressor local — `qwen2.5:0.5b` (Fase 3, sem custo API) |
 | `gemini` | anthropic | Proxy local :8001 — infraestrutura, reservado para uso futuro |
 | `claude` | anthropic | Proxy local :8002 — infraestrutura, reservado para uso futuro |
 
-**Vector Store TALL Stack:** `vs_69e56d3313ec81918655ee60b66f273e` — sincronizada diariamente às 02:00 AM com docs oficiais de Laravel, Filament 5, Livewire, Alpine.js, Tailwind CSS e Anime.js.
+**Documentação TALL Stack:** disponível via Laravel Boost MCP (`search-docs`). O `DocsAgent` usa `BoostTool` para consultar as docs sem vector store externo. Para RAG semântico futuro: pgvector nativo + Ollama (Fase 3).
 
 ---
 

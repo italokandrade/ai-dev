@@ -13,8 +13,8 @@ use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Provider('openai_dev')]
-#[Model('gpt-5.3-codex')]
+#[Provider('openrouter')]
+#[Model('anthropic/claude-sonnet-4-6')]
 #[Temperature(0.1)]
 #[MaxTokens(2048)]
 #[Timeout(120)]

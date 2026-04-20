@@ -87,7 +87,7 @@ O Laravel 13 introduz o **Laravel AI SDK** como pacote first-party estavel, traz
 |                                                                      |
 |  +------------------------------------------------------------------+|
 |  |   AI Providers (via config/ai.php)                                ||
-|  |   Lab::Gemini | Lab::Anthropic | Lab::Ollama | Lab::OpenAI        ||
+|  |   Lab::OpenAI (openrouter) | Lab::Ollama        ||
 |  |   (Provider-agnostic, failover automatico)                        ||
 |  +------------------------------------------------------------------+|
 |                                                                      |
@@ -228,7 +228,7 @@ class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools
 
 // Uso:
 $plan = OrchestratorAgent::make(task: $task)
-    ->prompt($task->prd_payload, provider: Lab::Anthropic, model: 'claude-sonnet-4-6');
+    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
 
 foreach ($plan['subtasks'] as $subtask) {
     Subtask::create($subtask);
@@ -272,11 +272,11 @@ class LLMGateway
 
 // Uso direto no agent:
 $response = OrchestratorAgent::make(task: $task)
-    ->prompt($prd, provider: Lab::Anthropic, model: 'claude-sonnet-4-6');
+    ->prompt($prd, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
 
 // Failover automatico: se Anthropic falhar, trocar provider
 $response = OrchestratorAgent::make(task: $task)
-    ->prompt($prd, provider: Lab::Gemini, model: 'gemini-3.1-flash-lite-preview');
+    ->prompt($prd, provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6');
 ```
 
 **`LLMGateway` e completamente eliminado.** O SDK gerencia providers, autenticacao e failover.
@@ -373,7 +373,7 @@ use Illuminate\Support\Facades\Concurrency;
 
 // Fase 1: Orchestrator planeja (Prompt Chaining)
 $plan = OrchestratorAgent::make(task: $task)
-    ->prompt($task->prd_payload, provider: Lab::Anthropic);
+    ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4-7');
 
 // Fase 2: Subtasks paralelas (Parallelization)
 $results = Concurrency::run(
@@ -381,7 +381,7 @@ $results = Concurrency::run(
         ->filter(fn($s) => empty($s['dependencies']))
         ->map(fn($subtask) => fn() =>
             SpecialistAgent::make(subtask: $subtask)
-                ->prompt($subtask['sub_prd'], provider: Lab::Gemini)
+                ->prompt($subtask['sub_prd'], provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6')
         )->all()
 );
 
@@ -389,7 +389,7 @@ $results = Concurrency::run(
 foreach ($results as $result) {
     $audit = QAAuditorAgent::make()
         ->prompt("Sub-PRD: {$result->subPrd}\nDiff: {$result->diff}",
-                 provider: Lab::Anthropic);
+                 provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6');
 
     if (!$audit['approved']) {
         // Re-executa com feedback (loop de correcao)
@@ -553,18 +553,13 @@ app/
 
 ```php
 return [
-    'default' => env('AI_PROVIDER', 'gemini'),
+    'default' => env('AI_PROVIDER', 'openrouter'),
 
     'providers' => [
-        'anthropic' => [
-            'driver' => 'anthropic',
-            'key' => env('ANTHROPIC_API_KEY'),
-        ],
-        'gemini' => [
-            'driver' => 'gemini',
-            'key' => env('GEMINI_API_KEY'),
-            'url' => env('GEMINI_BASE_URL', 'http://localhost:3080'),
-            // Proxy local para rate limiting e logging
+        'openrouter' => [
+            'driver' => 'openai',  // OpenAI-compatible API
+            'key' => env('OPENROUTER_API_KEY'),
+            'url' => 'https://openrouter.ai/api/v1',
         ],
         'ollama' => [
             'driver' => 'ollama',
@@ -572,23 +567,18 @@ return [
         ],
     ],
 
-    // Modelos padrao por tipo de operacao
-    'defaults' => [
-        'text' => 'gemini-3.1-flash-lite-preview',
-        'embeddings' => 'text-embedding-3-small',
-    ],
-
     // Mapeamento Agente → Provider/Modelo (equivale ao LLMGateway)
     'agent_routing' => [
-        'orchestrator' => ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-6'],
-        'qa_auditor' => ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-6'],
-        'security' => ['provider' => 'anthropic', 'model' => 'claude-sonnet-4-6'],
-        'backend' => ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview'],
-        'frontend' => ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview'],
-        'filament' => ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview'],
-        'database' => ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview'],
-        'devops' => ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview'],
-        'compressor' => ['provider' => 'ollama', 'model' => 'qwen2.5:0.5b'],
+        'orchestrator'   => ['provider' => 'openrouter', 'model' => 'anthropic/claude-opus-4-7'],
+        'qa_auditor'     => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'security'       => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'backend'        => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'frontend'       => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'filament'       => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'database'       => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'devops'         => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-4-6'],
+        'docs'           => ['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4-5-20251001'],
+        'compressor'     => ['provider' => 'ollama',     'model' => 'qwen2.5:0.5b'],
     ],
 ];
 ```

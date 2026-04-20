@@ -27,7 +27,7 @@ Todo agente (seja Orchestrator, QA Auditor ou Subagente) recebe as seguintes ins
     *   *Corretude:* A saída atende a TODOS os critérios do PRD/Sub-PRD?
     *   *Grounding:* O que foi feito é baseado na leitura real do código/banco de dados ou foi uma suposição?
     *   *Testes Unitários:* Se a subtask envolve código, rode `php artisan test` para verificar que nada quebrou.
-    *   *Testes de Browser (Dusk):* Após os testes unitários passarem, rode `php artisan dusk` para simular um usuário real navegando, preenchendo formulários com dados realistas e clicando em botões. Isso valida que o JavaScript (Alpine.js/Livewire) funciona e que a injeção de dados "reais" não quebra a aplicação.
+    *   *Testes de Feature:* Após os testes unitários passarem, rode `php artisan test --compact` para validar que nada quebrou na aplicação. O sistema usa Pest v4 — sem Dusk.
     *   *Sintaxe:* Verifique que o PHP gerado é válido rodando `php -l <arquivo>`.
     *   *Segurança Básica:* Rode `php artisan enlightn` (Enlightn OSS) para uma verificação rápida de vulnerabilidades óbvias (mass assignment, debug mode, headers inseguros).
 
@@ -47,16 +47,19 @@ Todo agente (seja Orchestrator, QA Auditor ou Subagente) recebe as seguintes ins
 
 Diferentes LLMs se comportam de maneira diferente. O `PromptFactory.php` adapta as instruções extras (Camada 2) baseando-se no campo `agents_config.provider` do agente.
 
-### 2.1. Modelos Google (Gemini 3.1 Flash Lite Preview / Gemini 3.1 Pro Preview)
-*   **Caminhos Absolutos:** Sempre construa e use caminhos de arquivos absolutos (iniciando em `/var/www/html/projetos/{nome_do_projeto}/`) para evitar se perder no terminal. Gemini tem tendência a usar caminhos relativos que quebram se o working directory mudar.
-*   **Verifique primeiro:** Nunca "adivinhe" o conteúdo de um arquivo. Use `FileTool.action = "read"` ou `SearchTool.action = "grep_code"` antes de sobrescrever algo. Gemini tem alta propensão a alucinar conteúdo de arquivo.
-*   **Comandos não-interativos:** Ao usar o `ShellTool`, use flags como `-y`, `--no-interaction` ou `--force` para evitar que a execução congele esperando input "Y/N" do terminal.
-*   **Paralelismo massivo:** Gemini Flash é excelente em tool use paralelo. Se você precisa ler 5 arquivos, chame a ferramenta 5 vezes em paralelo na mesma resposta.
+### 2.1. Modelos Anthropic — Opus 4.7 (Planejamento)
+*   **Chain of Thought explícito:** Ao planejar a quebra de um PRD em Sub-PRDs, organize os pensamentos passo a passo antes de gerar os Sub-PRDs. Opus se beneficia de planejamento explícito antes de agir.
+*   **Evitar Abandono:** Não pare precocemente quando uma nova chamada de ferramenta melhoraria o resultado. Opus tem tendência a "concluir cedo" quando o resultado parece aceitável mas ainda não é perfeito.
 
-### 2.2. Modelos Anthropic (Claude Sonnet 4-6 / Claude Opus 4-6)
-*   **Evitar Abandono:** Não pare precocemente quando uma nova chamada de ferramenta melhoraria drasticamente o resultado final. Claude tem tendência a "concluir cedo" quando o resultado parece aceitável mas ainda não é perfeito.
-*   **Recuperação de Falha:** Se uma ferramenta retornar vazia (ex: grep não achou a variável), tente com outra palavra-chave, regex mais ampla, ou estratégia alternativa antes de desistir.
-*   **Chain of Thought explícito:** Ao planejar a quebra de um PRD em Sub-PRDs (como Orchestrator), organize seus pensamentos passo a passo antes de gerar os Sub-PRDs. Claude se beneficia de planejamento explícito.
+### 2.2. Modelos Anthropic — Sonnet 4.6 (Execução de Código)
+*   **Caminhos Absolutos:** Sempre use caminhos de arquivo absolutos (iniciando em `/var/www/html/projetos/{nome_do_projeto}/`) para evitar confusão de working directory.
+*   **Verifique primeiro:** Nunca "adivinhe" o conteúdo de um arquivo. Use `FileReadTool` antes de sobrescrever algo.
+*   **Comandos não-interativos:** Ao usar o `ShellExecuteTool`, use flags como `-y`, `--no-interaction` ou `--force` para evitar travamento no terminal.
+*   **Recuperação de Falha:** Se uma ferramenta retornar vazia (ex: grep não achou a variável), tente outra palavra-chave ou estratégia alternativa antes de desistir.
+
+### 2.2.1. Modelos Anthropic — Haiku 4.5 (Docs e Tarefas Leves)
+*   **Busca antes de responder:** Sempre use `BoostTool.search-docs` antes de retornar qualquer resposta sobre a TALL Stack. Nunca responda da memória.
+*   **Respostas diretas:** Seja conciso e técnico — o consumidor da resposta é um agente de desenvolvimento, não um humano.
 
 ### 2.3. Modelos Locais Ollama (Qwen2.5:0.5b / Llama3.2:1b)
 *   **Sem tool calls:** Modelos locais ultraleves NÃO suportam tool calling. Eles recebem apenas texto e retornam texto.

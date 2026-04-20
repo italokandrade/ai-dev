@@ -19,9 +19,10 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **AI SDK** | Laravel AI SDK (`laravel/ai` v0.5) — Agents, Tools, Structured Output, Conversations |
 | **MCP** | Laravel MCP (`laravel/mcp` v0.6) — Model Context Protocol servers para interação com agentes |
 | **Boost** | Laravel Boost (`laravel/boost` v2.4) — MCP server com database-schema, search-docs, browser-logs para o SpecialistAgent e QAAuditorAgent |
-| **Planejamento** | OpenRouter → `anthropic/claude-opus-4.7` — OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
-| **Código** | OpenAI Dev → `gpt-5.3-codex` + Vector Store TALL Stack — SpecialistAgent, QAAuditorAgent, DocsAgent |
-| **SDK Default** | OpenAI `openai` — provider padrão para módulos da aplicação (não agênticos) |
+| **Planejamento** | OpenRouter → `anthropic/claude-opus-4-7` — OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
+| **Código** | OpenRouter → `anthropic/claude-sonnet-4-6` — SpecialistAgent, QAAuditorAgent |
+| **Docs/Rápido** | OpenRouter → `anthropic/claude-haiku-4-5-20251001` — DocsAgent |
+| **SDK Default** | OpenRouter (`openrouter`) — provider padrão para módulos da aplicação |
 | **Orquestração** | Laravel Horizon v5 (filas Redis) — Supervisor planejado para fase futura |
 | **IA Local** | Ollama — planejado (fase futura): qwen2.5:0.5b (compressão) + nomic-embed-text (embeddings) |
 | **Redes Sociais** | `hamzahassanm/laravel-social-auto-post` — planejado (fase futura): Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram |
@@ -40,9 +41,9 @@ Humano/Webhook → [Task + PRD] → Orchestrator → Sub-PRDs → Subagentes →
 
 O sistema utiliza 3 classes de agentes, todos implementados como **Agent classes** do Laravel AI SDK (`laravel/ai`):
 
-1. **OrchestratorAgent (Planner)** — `implements Agent` — Recebe o PRD principal e o decompõe em Sub-PRDs focados. **Provider: openrouter / claude-opus-4.7**
-2. **SpecialistAgent (Executor)** — `implements Agent, HasTools` — Implementa cada Sub-PRD: lê e escreve arquivos, executa comandos, faz commits. **Provider: openai_dev / gpt-5.3-codex**
-3. **QAAuditorAgent (Judge)** — `implements Agent, HasTools` — Audita toda entrega contra o PRD original. **Provider: openai_dev / gpt-5.3-codex**
+1. **OrchestratorAgent (Planner)** — `implements Agent` — Recebe o PRD principal e o decompõe em Sub-PRDs focados. **Provider: openrouter / claude-opus-4-7**
+2. **SpecialistAgent (Executor)** — `implements Agent, HasTools` — Implementa cada Sub-PRD: lê e escreve arquivos, executa comandos, faz commits. **Provider: openrouter / claude-sonnet-4-6**
+3. **QAAuditorAgent (Judge)** — `implements Agent, HasTools` — Audita toda entrega contra o PRD original. **Provider: openrouter / claude-sonnet-4-6**
 
 A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados no PostgreSQL, conversas persistidas via `RemembersConversations` do SDK, e rollback via Git branch por task.
 
@@ -117,7 +118,7 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 ### Fase 1: Core Loop (MVP) — ✅ Em andamento
 - Ciclo completo: Task → OrchestratorAgent → SpecialistAgent → QAAuditorAgent → Git Commit
 - Agent classes com `HasTools` (SDK nativo) + BoostTool obrigatório antes de escrever código
-- Provider strategy: openrouter/claude-opus-4.7 → planejamento | openai_dev/gpt-5.3-codex → código
+- Provider strategy: openrouter único — Opus 4.7 (planejamento) | Sonnet 4.6 (código/QA) | Haiku 4.5 (docs)
 - PostgreSQL 16 + Redis 7 + Laravel Horizon v5
 
 ### Fase 2: Qualidade, Segurança e UI

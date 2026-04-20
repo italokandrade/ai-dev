@@ -371,6 +371,39 @@ Em vez de reescrever o arquivo inteiro (que consome tokens e pode perder conteú
 - **Query timeout:** SELECT com LIMIT obrigatório. Queries sem LIMIT recebem `LIMIT 1000` automaticamente.
 - **Backup automático:** Antes de qualquer `execute` (INSERT/UPDATE/DELETE), a ferramenta faz um `SELECT` dos registros afetados e salva como backup no log.
 
+### Padrões de Segurança para Produção (Production-Safe)
+
+Inspirado nas boas práticas de Database Tools para agentes em produção:
+
+**1. `formatOutput()` — cap de saída**
+A ferramenta implementa um método `formatOutput()` que trunca o resultado em `MAX_OUTPUT_LENGTH = 8000` caracteres antes de retornar ao agente. Isso previne explosão de contexto quando uma query retorna muitos registros.
+
+```php
+private const MAX_OUTPUT_LENGTH = 8000;
+
+private function formatOutput(array $rows): string
+{
+    $output = json_encode($rows, JSON_PRETTY_PRINT);
+    if (strlen($output) > self::MAX_OUTPUT_LENGTH) {
+        $output = substr($output, 0, self::MAX_OUTPUT_LENGTH)
+            . "\n\n[TRUNCADO — muitos resultados. Use LIMIT para refinar.]";
+    }
+    return $output;
+}
+```
+
+**2. Usuário DB read-only (recomendado)**
+Para a ação `query` (SELECT), recomenda-se configurar um usuário PostgreSQL com permissão apenas de leitura:
+
+```sql
+CREATE USER aidev_readonly WITH PASSWORD 'senha_segura';
+GRANT CONNECT ON DATABASE ai_dev_core TO aidev_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO aidev_readonly;
+```
+
+**3. Query builder seguro**
+A ação `query` usa `DB::select()` com bindings parametrizados — nunca interpolação de string. A ação `execute` usa Eloquent/query builder que é inerentemente seguro contra SQL injection e não gera `DELETE/DROP` por acidente.
+
 ---
 
 ## 4. GitTool — Controle de Versão e Integração GitHub

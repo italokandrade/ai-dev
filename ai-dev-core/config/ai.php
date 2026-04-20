@@ -115,15 +115,10 @@ return [
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
         ],
 
-        'openai_dev' => [
-            'driver' => 'openai',
-            'key' => env('OPENAI_API_KEY_DEV'),
-        ],
-
         'openrouter' => [
-            'driver' => 'openrouter',
+            'driver' => 'openai',
             'key' => env('OPENROUTER_API_KEY'),
-            'model' => env('OPENROUTER_MODEL', 'anthropic/claude-opus-4.7'),
+            'url' => 'https://openrouter.ai/api/v1',
         ],
 
         'voyageai' => [
@@ -137,19 +132,9 @@ return [
             'url' => env('XAI_URL', 'https://api.x.ai/v1'),
         ],
 
-        'primary_chain' => [
+        'openrouter_chain' => [
             'driver' => 'failover',
-            'providers' => ['gemini', 'claude', 'openai'],
-        ],
-
-        'orchestrator_chain' => [
-            'driver' => 'failover',
-            'providers' => ['gemini', 'claude', 'openai'],
-        ],
-
-        'specialist_chain' => [
-            'driver' => 'failover',
-            'providers' => ['claude', 'gemini', 'openai'],
+            'providers' => ['openrouter', 'openai'],
         ],
     ],
 

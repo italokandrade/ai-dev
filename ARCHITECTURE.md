@@ -31,8 +31,9 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐    │
 │  │   Motores LLM                                                │    │
-│  │   openrouter/claude-opus-4.7 (Planejamento)                  │    │
-│  │   openai_dev/gpt-5.3-codex + Vector Store TALL (Código)      │    │
+│  │   openrouter/claude-opus-4-7 (Planejamento)                   │    │
+│  │   openrouter/claude-sonnet-4-6 (Código/QA)                   │    │
+│  │   openrouter/claude-haiku-4-5-20251001 (Docs)                │    │
 │  │   Ollama Local (Compressor — planejado, fase futura)          │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
@@ -190,25 +191,25 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 
 O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 
-| Classe | Provider Principal | Provider Backup | Motivo |
+| Classe | Provider | Modelo | Motivo |
 |---|---|---|---|
-| **Orchestrator** | **Gemini** (via proxy) | Claude (fallback) | Gemini tem maior cota de uso gratuito; o Orchestrator é chamado muito frequentemente |
-| **Todos os Agentes Specialists** | **Claude** (via proxy, modelo auto) | Gemini (fallback) | Claude Code seleciona o modelo automaticamente; gera código mais preciso e com menos alucinações |
-| **QA Auditor** | **Claude** (via proxy, modelo auto) | Gemini (fallback) | Auditoria exige raciocínio rigoroso — Claude em modo auto escolhe conforme a tarefa |
-| **Context Compressor** | **Ollama** (local) | — | Sem custo de API; modelo leve suficiente para sumarização |
+| **Orchestrator / Specification / Quotation / Refine** | **openrouter** | `anthropic/claude-opus-4-7` | Máxima qualidade para planejamento e especificação |
+| **SpecialistAgent / QAAuditorAgent** | **openrouter** | `anthropic/claude-sonnet-4-6` | Qualidade + custo para execução e auditoria de código |
+| **DocsAgent** | **openrouter** | `anthropic/claude-haiku-4-5-20251001` | Rápido e barato para consultas de documentação |
+| **Context Compressor** | **Ollama** (local) | `qwen2.5:0.5b` | Sem custo de API; modelo leve suficiente para sumarização (Fase 3) |
 
-**SDK Default (`config/ai.php`):** `openai` com modelo `gpt-5-nano` — usado como fallback geral e para tasks onde nenhum provider específico foi configurado.
+**SDK Default (`config/ai.php`):** `openrouter` — provider padrão para todos os agentes e módulos da aplicação. Família Anthropic: Opus 4.7 (planejamento), Sonnet 4.6 (código/QA), Haiku 4.5 (docs).
 
 **Agentes Padrão Pré-Configurados:**
 
-| ID | Papel | Provider Principal | Backup | Temperatura |
+| ID | Papel | Provider | Modelo | Temperatura |
 |---|---|---|---|---|
-| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `gemini` (via proxy) | `anthropic` | 0.2 |
-| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `anthropic` (via proxy) | `gemini` | 0.1 |
-| `security-specialist` | Auditor — Pentest, OWASP Top 10, vulnerabilidades | `anthropic` (via proxy) | `gemini` | 0.1 |
-| `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `anthropic` (via proxy) | `gemini` | 0.2 |
-| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `anthropic` (via proxy) | `gemini` | 0.4 |
-| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `anthropic` (via proxy) | `gemini` | 0.5 |
+| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `openrouter` | claude-opus-4-7 | 0.2 |
+| `qa-auditor` | Judge — Audita cada entrega contra o PRD | `openrouter` | claude-sonnet-4-6 | 0.1 |
+| `security-specialist` | Auditor — Pentest, OWASP Top 10, vulnerabilidades | `openrouter` | claude-sonnet-4-6 | 0.1 |
+| `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `openrouter` | claude-sonnet-4-6 | 0.2 |
+| `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `openrouter` | claude-sonnet-4-6 | 0.4 |
+| `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `openrouter` | claude-sonnet-4-6 | 0.5 |
 | `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `anthropic` (via proxy) | `gemini` | 0.3 |
 | `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `anthropic` (via proxy) | `gemini` | 0.2 |
 | `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `anthropic` (via proxy) | `gemini` | 0.2 |
@@ -1187,7 +1188,7 @@ O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entr
 **Seleção Automática de Motor via Laravel AI SDK:**
 
 ```text
-SDK default (config/ai.php): provider 'openai', model 'gpt-5-nano' — fallback geral
+SDK default (config/ai.php): provider 'openrouter' — família Anthropic via OpenRouter
 
 Cada Agent class define provider/model via PHP Attributes com array de fallback:
 
