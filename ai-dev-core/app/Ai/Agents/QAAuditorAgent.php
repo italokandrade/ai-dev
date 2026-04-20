@@ -2,20 +2,23 @@
 
 namespace App\Ai\Agents;
 
+use App\Ai\Tools\BoostTool;
 use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Provider(Lab::Anthropic)]
+#[Provider('openai_dev')]
+#[Model('gpt-5.3-codex')]
 #[Temperature(0.1)]
 #[MaxTokens(2048)]
 #[Timeout(120)]
-class QAAuditorAgent implements Agent
+class QAAuditorAgent implements Agent, HasTools
 {
     use Promptable;
 
@@ -54,5 +57,12 @@ Ou quando rejeitado:
   "summary": "O que foi ou não foi feito"
 }
 INSTRUCTIONS;
+    }
+
+    public function tools(): iterable
+    {
+        return [
+            new BoostTool,
+        ];
     }
 }

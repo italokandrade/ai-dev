@@ -55,7 +55,7 @@ class SubagentJob implements ShouldQueue
 
         try {
             $agent = new SpecialistAgent($workDir);
-            $response = $agent->prompt($prompt);
+            $response = $agent->prompt($prompt, provider: 'specialist_chain');
 
             $resultLog = (string) $response;
         } catch (\Throwable $e) {

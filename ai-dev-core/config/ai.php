@@ -50,12 +50,6 @@ return [
     */
 
     'providers' => [
-        'anthropic' => [
-            'driver' => 'anthropic',
-            'key' => env('ANTHROPIC_API_KEY'),
-            'url' => env('ANTHROPIC_URL', 'https://api.anthropic.com/v1'),
-        ],
-
         'azure' => [
             'driver' => 'azure',
             'key' => env('AZURE_OPENAI_API_KEY'),
@@ -81,8 +75,15 @@ return [
         ],
 
         'gemini' => [
-            'driver' => 'gemini',
-            'key' => env('GEMINI_API_KEY'),
+            'driver' => 'anthropic',
+            'key' => env('GEMINI_API_KEY', 'proxy-key'),
+            'url' => env('GEMINI_URL', 'http://127.0.0.1:8001/v1'),
+        ],
+
+        'claude' => [
+            'driver' => 'anthropic',
+            'key' => env('CLAUDE_API_KEY', 'proxy-key'),
+            'url' => env('CLAUDE_URL', 'http://127.0.0.1:8002/v1'),
         ],
 
         'groq' => [
@@ -114,9 +115,15 @@ return [
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
         ],
 
+        'openai_dev' => [
+            'driver' => 'openai',
+            'key' => env('OPENAI_API_KEY_DEV'),
+        ],
+
         'openrouter' => [
             'driver' => 'openrouter',
             'key' => env('OPENROUTER_API_KEY'),
+            'model' => env('OPENROUTER_MODEL', 'anthropic/claude-opus-4.7'),
         ],
 
         'voyageai' => [
@@ -128,6 +135,21 @@ return [
             'driver' => 'xai',
             'key' => env('XAI_API_KEY'),
             'url' => env('XAI_URL', 'https://api.x.ai/v1'),
+        ],
+
+        'primary_chain' => [
+            'driver' => 'failover',
+            'providers' => ['gemini', 'claude', 'openai'],
+        ],
+
+        'orchestrator_chain' => [
+            'driver' => 'failover',
+            'providers' => ['gemini', 'claude', 'openai'],
+        ],
+
+        'specialist_chain' => [
+            'driver' => 'failover',
+            'providers' => ['claude', 'gemini', 'openai'],
         ],
     ],
 

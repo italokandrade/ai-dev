@@ -1,48 +1,33 @@
 <?php
 
-namespace Tests\Feature\Models;
-
 use App\Enums\AgentProvider;
 use App\Models\AgentConfig;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class AgentConfigTest extends TestCase
-{
-    use RefreshDatabase;
+beforeEach(function () {
+    $this->seed(\Database\Seeders\AgentsConfigSeeder::class);
+});
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->seed(\Database\Seeders\AgentsConfigSeeder::class);
-    }
+test('agent configs are seeded', function () {
+    expect(AgentConfig::count())->toBeGreaterThanOrEqual(10);
+});
 
-    public function test_agent_configs_are_seeded(): void
-    {
-        $agents = AgentConfig::all();
-        $this->assertGreaterThanOrEqual(10, $agents->count());
-    }
+test('orchestrator agent exists and is anthropic', function () {
+    $orchestrator = AgentConfig::find('orchestrator');
 
-    public function test_orchestrator_agent_exists_and_is_anthropic(): void
-    {
-        $orchestrator = AgentConfig::find('orchestrator');
+    expect($orchestrator)->not->toBeNull()
+        ->and($orchestrator->provider)->toBe(AgentProvider::Anthropic)
+        ->and($orchestrator->is_active)->toBeTrue();
+});
 
-        $this->assertNotNull($orchestrator);
-        $this->assertEquals(AgentProvider::Anthropic, $orchestrator->provider);
-        $this->assertTrue($orchestrator->is_active);
-    }
+test('backend specialist is gemini', function () {
+    $backend = AgentConfig::find('backend-specialist');
 
-    public function test_backend_specialist_is_gemini(): void
-    {
-        $backend = AgentConfig::find('backend-specialist');
+    expect($backend)->not->toBeNull()
+        ->and($backend->provider)->toBe(AgentProvider::Gemini);
+});
 
-        $this->assertNotNull($backend);
-        $this->assertEquals(AgentProvider::Gemini, $backend->provider);
-    }
+test('agent has assigned tasks relationship', function () {
+    $agent = AgentConfig::find('orchestrator');
 
-    public function test_agent_has_assigned_tasks_relationship(): void
-    {
-        $agent = AgentConfig::find('orchestrator');
-        $this->assertCount(0, $agent->assignedTasks);
-    }
-}
+    expect($agent->assignedTasks)->toHaveCount(0);
+});

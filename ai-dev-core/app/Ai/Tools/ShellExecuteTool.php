@@ -68,7 +68,8 @@ class ShellExecuteTool implements Tool
             'timeout' => $schema->integer()
                 ->description('Timeout in seconds (default: 120, max: 600)')
                 ->min(1)
-                ->max(600),
+                ->max(600)
+                ->required(),
         ];
     }
 }

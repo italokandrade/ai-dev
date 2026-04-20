@@ -30,9 +30,10 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │  └───────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐    │
-│  │   Motores LLM (Inferência Dupla)                             │    │
-│  │   Gemini Flash (Executor) │ Claude Opus/Sonnet (Cérebro)     │    │
-│  │   Ollama Local (Compressor)                                   │    │
+│  │   Motores LLM                                                │    │
+│  │   openrouter/claude-opus-4.7 (Planejamento)                  │    │
+│  │   openai_dev/gpt-5.3-codex + Vector Store TALL (Código)      │    │
+│  │   Ollama Local (Compressor — planejado, fase futura)          │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 │                                                                      │
 │  ┌───────────────────────┐  ┌───────────────────────────────────┐   │

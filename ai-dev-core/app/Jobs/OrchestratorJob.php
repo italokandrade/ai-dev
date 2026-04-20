@@ -14,6 +14,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class OrchestratorJob implements ShouldQueue
 {
@@ -46,7 +47,7 @@ class OrchestratorJob implements ShouldQueue
         $prompt = $this->buildPrompt();
 
         try {
-            $response = OrchestratorAgent::make()->prompt($prompt);
+            $response = OrchestratorAgent::make()->prompt($prompt, provider: 'orchestrator_chain');
             $raw = trim((string) $response);
 
             // Strip markdown fences if present
@@ -65,22 +66,43 @@ class OrchestratorJob implements ShouldQueue
             return;
         }
 
+        // 1st pass: Create subtasks and map titles to UUIDs
+        $titleToUuid = [];
+        $createdData = [];
         $order = 1;
+
         foreach ($subPrds as $subPrd) {
-            Subtask::create([
+            $subtask = Subtask::create([
                 'task_id' => $this->task->id,
                 'title' => $subPrd['title'] ?? "Subtask {$order}",
                 'sub_prd_payload' => $subPrd,
                 'status' => SubtaskStatus::Pending,
                 'assigned_agent' => $subPrd['assigned_agent'] ?? 'backend-specialist',
-                'dependencies' => $subPrd['dependencies'] ?? null,
+                'dependencies' => null,
                 'execution_order' => $subPrd['execution_order'] ?? $order,
                 'file_locks' => $subPrd['files'] ?? null,
             ]);
+
+            $titleToUuid[$subtask->title] = $subtask->id;
+            $createdData[] = ['model' => $subtask, 'raw' => $subPrd];
             $order++;
         }
 
         Log::info('OrchestratorJob: Created '.count($subPrds)." subtasks for task {$this->task->id}");
+
+        // 2nd pass: Update dependencies with actual UUIDs
+        foreach ($createdData as $item) {
+            $rawDeps = $item['raw']['dependencies'] ?? [];
+            if (! empty($rawDeps)) {
+                $uuidDeps = collect($rawDeps)->map(function ($depTitle) use ($titleToUuid) {
+                    return $titleToUuid[$depTitle] ?? null;
+                })->filter(fn ($id) => ! empty($id) && Str::isUuid($id))->values()->all();
+
+                if (! empty($uuidDeps)) {
+                    $item['model']->update(['dependencies' => $uuidDeps]);
+                }
+            }
+        }
 
         $this->dispatchReadySubtasks();
     }

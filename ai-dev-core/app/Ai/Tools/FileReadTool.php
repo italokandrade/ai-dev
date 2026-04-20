@@ -76,11 +76,13 @@ class FileReadTool implements Tool
                 ->required(),
             'offset' => $schema->integer()
                 ->description('Line number to start reading from (default: 0).')
-                ->min(0),
+                ->min(0)
+                ->required(),
             'limit' => $schema->integer()
                 ->description('Maximum number of lines to return (default: 500, max: 2000).')
                 ->min(1)
-                ->max(2000),
+                ->max(2000)
+                ->required(),
         ];
     }
 }

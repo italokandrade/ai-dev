@@ -1,87 +1,74 @@
 <?php
 
-namespace Tests\Feature\Models;
-
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectSpecification;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class ProjectTest extends TestCase
-{
-    use RefreshDatabase;
+test('project can be created', function () {
+    $project = Project::create([
+        'name' => 'test-project',
+        'status' => 'active',
+    ]);
 
-    public function test_project_can_be_created(): void
-    {
-        $project = Project::create([
-            'name' => 'test-project',
-            'status' => 'active',
-        ]);
+    expect($project)->toBeInstanceOf(Project::class)
+        ->and($project->name)->toBe('test-project')
+        ->and($project->status->value)->toBe('active');
+});
 
-        $this->assertInstanceOf(Project::class, $project);
-        $this->assertEquals('test-project', $project->name);
-        $this->assertEquals('active', $project->status->value);
-    }
+test('project has modules relationship', function () {
+    $project = Project::create([
+        'name' => 'test-modules-rel',
+        'status' => 'active',
+    ]);
 
-    public function test_project_has_modules_relationship(): void
-    {
-        $project = Project::create([
-            'name' => 'test-modules-rel',
-            'status' => 'active',
-        ]);
+    ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Auth Module',
+        'description' => 'Authentication module',
+        'status' => 'planned',
+    ]);
 
-        ProjectModule::create([
-            'project_id' => $project->id,
-            'name' => 'Auth Module',
-            'description' => 'Authentication module',
-            'status' => 'planned',
-        ]);
+    expect($project->modules)->toHaveCount(1)
+        ->and($project->modules->first()->name)->toBe('Auth Module');
+});
 
-        $this->assertCount(1, $project->modules);
-        $this->assertEquals('Auth Module', $project->modules->first()->name);
-    }
+test('project has specifications relationship', function () {
+    $project = Project::create([
+        'name' => 'test-spec-rel',
+        'status' => 'active',
+    ]);
 
-    public function test_project_has_specifications_relationship(): void
-    {
-        $project = Project::create([
-            'name' => 'test-spec-rel',
-            'status' => 'active',
-        ]);
+    ProjectSpecification::create([
+        'project_id' => $project->id,
+        'user_description' => 'A test system',
+        'version' => 1,
+    ]);
 
-        ProjectSpecification::create([
-            'project_id' => $project->id,
-            'user_description' => 'A test system',
-            'version' => 1,
-        ]);
+    expect($project->specifications)->toHaveCount(1)
+        ->and($project->currentSpecification)->not->toBeNull();
+});
 
-        $this->assertCount(1, $project->specifications);
-        $this->assertNotNull($project->currentSpecification);
-    }
+test('project calculates overall progress', function () {
+    $project = Project::create([
+        'name' => 'test-progress',
+        'status' => 'active',
+    ]);
 
-    public function test_project_calculates_overall_progress(): void
-    {
-        $project = Project::create([
-            'name' => 'test-progress',
-            'status' => 'active',
-        ]);
+    ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Module A',
+        'description' => 'First',
+        'status' => 'completed',
+        'progress_percentage' => 100,
+    ]);
 
-        ProjectModule::create([
-            'project_id' => $project->id,
-            'name' => 'Module A',
-            'description' => 'First',
-            'status' => 'completed',
-            'progress_percentage' => 100,
-        ]);
+    ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Module B',
+        'description' => 'Second',
+        'status' => 'planned',
+        'progress_percentage' => 0,
+    ]);
 
-        ProjectModule::create([
-            'project_id' => $project->id,
-            'name' => 'Module B',
-            'description' => 'Second',
-            'status' => 'planned',
-            'progress_percentage' => 0,
-        ]);
-
-        $this->assertEquals(50.0, $project->overallProgress());
-    }
-}
+    expect($project->overallProgress())->toBe(50.0);
+});

@@ -64,11 +64,14 @@ class GitOperationTool implements Tool
                 ->enum(['status', 'diff', 'log', 'branch_create', 'branch_checkout', 'branch_list', 'add', 'commit', 'push', 'reset_hard', 'stash'])
                 ->required(),
             'branch' => $schema->string()
-                ->description('Branch name for branch_create or branch_checkout actions.'),
+                ->description('Branch name for branch_create or branch_checkout actions.')
+                ->required(),
             'path' => $schema->string()
-                ->description('File path for git add. If omitted, stages all changed files (-A).'),
+                ->description('File path for git add. If omitted, stages all changed files (-A).')
+                ->required(),
             'message' => $schema->string()
-                ->description('Commit message for the commit action.'),
+                ->description('Commit message for the commit action.')
+                ->required(),
         ];
     }
 }

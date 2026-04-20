@@ -1,103 +1,91 @@
 <?php
 
-namespace Tests\Feature\Models;
-
-use App\Enums\TaskStatus;
 use App\Enums\Priority;
+use App\Enums\TaskStatus;
 use App\Models\Project;
 use App\Models\Task;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class TaskTest extends TestCase
+function createProject(): Project
 {
-    use RefreshDatabase;
-
-    private function createProject(): Project
-    {
-        return Project::create([
-            'name' => 'test-task-project',
-            'status' => 'active',
-        ]);
-    }
-
-    public function test_task_can_be_created_with_prd_payload(): void
-    {
-        $project = $this->createProject();
-
-        $task = Task::create([
-            'project_id' => $project->id,
-            'title' => 'Implement login',
-            'prd_payload' => [
-                'objective' => 'Create login page',
-                'acceptance_criteria' => ['User can log in', 'Error shown on failure'],
-                'constraints' => ['Use Filament auth'],
-                'knowledge_areas' => ['backend', 'filament'],
-            ],
-            'status' => 'pending',
-            'priority' => Priority::High,
-            'source' => 'manual',
-        ]);
-
-        $this->assertInstanceOf(Task::class, $task);
-        $this->assertEquals('Create login page', $task->prd_payload['objective']);
-        $this->assertCount(2, $task->prd_payload['acceptance_criteria']);
-    }
-
-    public function test_task_valid_status_transition(): void
-    {
-        $project = $this->createProject();
-
-        $task = Task::create([
-            'project_id' => $project->id,
-            'title' => 'Test transition',
-            'prd_payload' => ['objective' => 'test'],
-            'status' => 'pending',
-            'priority' => Priority::Medium,
-            'source' => 'manual',
-        ]);
-
-        $task->transitionTo(TaskStatus::InProgress, 'test');
-        $this->assertEquals(TaskStatus::InProgress, $task->fresh()->status);
-    }
-
-    public function test_task_invalid_status_transition_throws(): void
-    {
-        $project = $this->createProject();
-
-        $task = Task::create([
-            'project_id' => $project->id,
-            'title' => 'Test invalid transition',
-            'prd_payload' => ['objective' => 'test'],
-            'status' => 'pending',
-            'priority' => Priority::Medium,
-            'source' => 'manual',
-        ]);
-
-        $task->transitionTo(TaskStatus::InProgress, 'test');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $task->transitionTo(TaskStatus::Completed, 'test');
-    }
-
-    public function test_task_can_check_retry_availability(): void
-    {
-        $project = $this->createProject();
-
-        $task = Task::create([
-            'project_id' => $project->id,
-            'title' => 'Test retry',
-            'prd_payload' => ['objective' => 'test'],
-            'status' => 'pending',
-            'priority' => Priority::Medium,
-            'source' => 'manual',
-            'retry_count' => 2,
-            'max_retries' => 3,
-        ]);
-
-        $this->assertTrue($task->canRetry());
-
-        $task->update(['retry_count' => 3]);
-        $this->assertFalse($task->canRetry());
-    }
+    return Project::create([
+        'name' => 'test-task-project',
+        'status' => 'active',
+    ]);
 }
+
+test('task can be created with prd payload', function () {
+    $project = createProject();
+
+    $task = Task::create([
+        'project_id' => $project->id,
+        'title' => 'Implement login',
+        'prd_payload' => [
+            'objective' => 'Create login page',
+            'acceptance_criteria' => ['User can log in', 'Error shown on failure'],
+            'constraints' => ['Use Filament auth'],
+            'knowledge_areas' => ['backend', 'filament'],
+        ],
+        'status' => 'pending',
+        'priority' => Priority::High,
+        'source' => 'manual',
+    ]);
+
+    expect($task)->toBeInstanceOf(Task::class)
+        ->and($task->prd_payload['objective'])->toBe('Create login page')
+        ->and($task->prd_payload['acceptance_criteria'])->toHaveCount(2);
+});
+
+test('task valid status transition', function () {
+    $project = createProject();
+
+    $task = Task::create([
+        'project_id' => $project->id,
+        'title' => 'Test transition',
+        'prd_payload' => ['objective' => 'test'],
+        'status' => 'pending',
+        'priority' => Priority::Medium,
+        'source' => 'manual',
+    ]);
+
+    $task->transitionTo(TaskStatus::InProgress, 'test');
+
+    expect($task->fresh()->status)->toBe(TaskStatus::InProgress);
+});
+
+test('task invalid status transition throws', function () {
+    $project = createProject();
+
+    $task = Task::create([
+        'project_id' => $project->id,
+        'title' => 'Test invalid transition',
+        'prd_payload' => ['objective' => 'test'],
+        'status' => 'pending',
+        'priority' => Priority::Medium,
+        'source' => 'manual',
+    ]);
+
+    $task->transitionTo(TaskStatus::InProgress, 'test');
+
+    expect(fn () => $task->transitionTo(TaskStatus::Completed, 'test'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('task can check retry availability', function () {
+    $project = createProject();
+
+    $task = Task::create([
+        'project_id' => $project->id,
+        'title' => 'Test retry',
+        'prd_payload' => ['objective' => 'test'],
+        'status' => 'pending',
+        'priority' => Priority::Medium,
+        'source' => 'manual',
+        'retry_count' => 2,
+        'max_retries' => 3,
+    ]);
+
+    expect($task->canRetry())->toBeTrue();
+
+    $task->update(['retry_count' => 3]);
+    expect($task->canRetry())->toBeFalse();
+});

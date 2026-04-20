@@ -4,12 +4,16 @@ namespace App\Ai\Agents;
 
 use App\Services\SystemContextService;
 use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[Provider('openrouter')]
+#[Model('anthropic/claude-opus-4.7')]
 #[Temperature(0.7)]
 #[MaxTokens(2048)]
 #[Timeout(60)]

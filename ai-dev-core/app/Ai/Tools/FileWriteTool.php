@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
@@ -37,6 +38,7 @@ class FileWriteTool implements Tool
 
     private function writeFile(string $path, string $content): string
     {
+        Log::info("FileWriteTool: Writing to '{$path}'");
         $dir = dirname($path);
         if (! is_dir($dir) && ! mkdir($dir, 0755, true) && ! is_dir($dir)) {
             return json_encode(['success' => false, 'error' => "Cannot create directory: {$dir}"]);
@@ -44,14 +46,19 @@ class FileWriteTool implements Tool
 
         $bytes = @file_put_contents($path, $content);
         if ($bytes === false) {
+            Log::error("FileWriteTool: Failed to write to '{$path}'");
+
             return json_encode(['success' => false, 'error' => "Cannot write file: {$path}"]);
         }
+
+        Log::info("FileWriteTool: Successfully wrote {$bytes} bytes to '{$path}'");
 
         return json_encode(['success' => true, 'path' => $path, 'bytes_written' => $bytes]);
     }
 
     private function replaceInFile(string $path, string $oldString, string $newString): string
     {
+        Log::info("FileWriteTool: Replacing in '{$path}'");
         if (! file_exists($path)) {
             return json_encode(['success' => false, 'error' => "File not found: {$path}"]);
         }
@@ -63,15 +70,21 @@ class FileWriteTool implements Tool
 
         $count = substr_count($content, $oldString);
         if ($count === 0) {
+            Log::warning("FileWriteTool: old_string not found in '{$path}'");
+
             return json_encode(['success' => false, 'error' => 'old_string not found in file. Check exact content including whitespace.']);
         }
 
         if ($count > 1) {
+            Log::warning("FileWriteTool: old_string found {$count} times in '{$path}'");
+
             return json_encode(['success' => false, 'error' => "old_string found {$count} times — provide more context to make it unique."]);
         }
 
         $newContent = str_replace($oldString, $newString, $content);
         @file_put_contents($path, $newContent);
+
+        Log::info("FileWriteTool: Successfully applied 1 replacement in '{$path}'");
 
         return json_encode(['success' => true, 'path' => $path, 'replacements' => 1]);
     }
@@ -100,11 +113,14 @@ class FileWriteTool implements Tool
                 ->description('Absolute or project-relative path to the target file or directory.')
                 ->required(),
             'content' => $schema->string()
-                ->description('Full file content for the "write" action.'),
+                ->description('Full file content for the "write" action.')
+                ->required(),
             'old_string' => $schema->string()
-                ->description('Exact string to find for the "replace" action. Must be unique in the file.'),
+                ->description('Exact string to find for the "replace" action. Must be unique in the file.')
+                ->required(),
             'new_string' => $schema->string()
-                ->description('Replacement string for the "replace" action.'),
+                ->description('Replacement string for the "replace" action.')
+                ->required(),
         ];
     }
 }

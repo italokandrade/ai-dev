@@ -2,9 +2,13 @@
 
 namespace App\Ai\Agents;
 
+use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 
+#[Provider('openrouter')]
+#[Model('anthropic/claude-opus-4.7')]
 class QuotationAgent implements Agent
 {
     use Promptable;

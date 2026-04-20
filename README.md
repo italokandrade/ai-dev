@@ -16,15 +16,15 @@ O AI-Dev é um ecossistema que utiliza múltiplos agentes de IA coordenados para
 | **Animações** | Anime.js |
 | **Banco Relacional** | PostgreSQL 16 + pgvector (busca vetorial nativa) |
 | **Filas/Cache** | Redis 7.0 |
-| **AI SDK** | Laravel AI SDK (`laravel/ai`) — Agents, Tools, Structured Output, Conversations |
-| **MCP** | Laravel MCP (`laravel/mcp`) — Model Context Protocol servers para interação com agentes |
-| **Boost** | Laravel Boost (`laravel/boost`) — Guidelines, Skills e Documentation API para agentes |
-| **SDK Default** | OpenAI `gpt-5-nano` — provider padrão do Laravel AI SDK (`config/ai.php`) |
-| **Orchestrator** | Gemini (primário) + Claude (backup) — maior cota de uso no Orchestrator |
-| **Agents** | Claude Sonnet 4-6 (primário) + Gemini (backup) — código mais preciso nos especialistas |
-| **IA Local** | Ollama (qwen2.5:0.5b para compressão e nomic-embed-text para embeddings) |
-| **Redes Sociais** | `hamzahassanm/laravel-social-auto-post` — Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram |
-| **Orquestração** | Supervisor + Laravel Horizon |
+| **AI SDK** | Laravel AI SDK (`laravel/ai` v0.5) — Agents, Tools, Structured Output, Conversations |
+| **MCP** | Laravel MCP (`laravel/mcp` v0.6) — Model Context Protocol servers para interação com agentes |
+| **Boost** | Laravel Boost (`laravel/boost` v2.4) — MCP server com database-schema, search-docs, browser-logs para o SpecialistAgent e QAAuditorAgent |
+| **Planejamento** | OpenRouter → `anthropic/claude-opus-4.7` — OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
+| **Código** | OpenAI Dev → `gpt-5.3-codex` + Vector Store TALL Stack — SpecialistAgent, QAAuditorAgent, DocsAgent |
+| **SDK Default** | OpenAI `openai` — provider padrão para módulos da aplicação (não agênticos) |
+| **Orquestração** | Laravel Horizon v5 (filas Redis) — Supervisor planejado para fase futura |
+| **IA Local** | Ollama — planejado (fase futura): qwen2.5:0.5b (compressão) + nomic-embed-text (embeddings) |
+| **Redes Sociais** | `hamzahassanm/laravel-social-auto-post` — planejado (fase futura): Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram |
 
 ---
 
@@ -40,9 +40,9 @@ Humano/Webhook → [Task + PRD] → Orchestrator → Sub-PRDs → Subagentes →
 
 O sistema utiliza 3 classes de agentes, todos implementados como **Agent classes** do Laravel AI SDK (`laravel/ai`):
 
-1. **OrchestratorAgent (Planner)** — `implements Agent, HasStructuredOutput, HasTools` — Recebe o PRD principal e o decompõe em Sub-PRDs focados. **Provider: Gemini (primário), Claude (backup)**
-2. **Specialist Agents (Executors)** — `implements Agent, Conversational, HasTools` — Especialistas (Backend, Frontend, Filament, DBA, DevOps) que executam cada Sub-PRD. **Provider: Claude (primário), Gemini (backup)**
-3. **QAAuditorAgent (Judge)** — `implements Agent, HasStructuredOutput` — Audita toda entrega contra o PRD original. **Provider: Claude (primário), Gemini (backup)**
+1. **OrchestratorAgent (Planner)** — `implements Agent` — Recebe o PRD principal e o decompõe em Sub-PRDs focados. **Provider: openrouter / claude-opus-4.7**
+2. **SpecialistAgent (Executor)** — `implements Agent, HasTools` — Implementa cada Sub-PRD: lê e escreve arquivos, executa comandos, faz commits. **Provider: openai_dev / gpt-5.3-codex**
+3. **QAAuditorAgent (Judge)** — `implements Agent, HasTools` — Audita toda entrega contra o PRD original. **Provider: openai_dev / gpt-5.3-codex**
 
 A comunicação é feita via **Laravel Queue + Redis**, com máquina de estados no PostgreSQL, conversas persistidas via `RemembersConversations` do SDK, e rollback via Git branch por task.
 
@@ -114,22 +114,21 @@ Todas as ferramentas implementam o contrato `Tool` do Laravel AI SDK, com `schem
 
 ## 🎯 Fases de Implementação
 
-### Fase 1: Core Loop (MVP) — Laravel AI SDK
-- Ciclo completo: Task → OrchestratorAgent → Specialist Agents → QAAuditorAgent → Git Commit
-- Agent classes com `HasTools`, `HasStructuredOutput`, `Conversational` (SDK nativo)
-- 10 Tools (`implements Tool`) + config/ai.php (OpenAI gpt-5-nano default) + PostgreSQL + Redis + Supervisor
-- Provider strategy: Gemini→Orchestrator, Claude→Agents, OpenAI gpt-5-nano→fallback
+### Fase 1: Core Loop (MVP) — ✅ Em andamento
+- Ciclo completo: Task → OrchestratorAgent → SpecialistAgent → QAAuditorAgent → Git Commit
+- Agent classes com `HasTools` (SDK nativo) + BoostTool obrigatório antes de escrever código
+- Provider strategy: openrouter/claude-opus-4.7 → planejamento | openai_dev/gpt-5.3-codex → código
+- PostgreSQL 16 + Redis 7 + Laravel Horizon v5
 
 ### Fase 2: Qualidade, Segurança e UI
-- QA Auditor com Claude + Security Specialist + Performance Analyst
+- Security Specialist + Performance Analyst
 - Sentinel Self-Healing + Enlightn + Larastan + Nikto + SQLMap
-- Filament v5 Dashboard + Circuit breakers + Git branching por task
-- Laravel MCP servers para integração com agentes externos
+- Circuit breakers + Git branching por task
+- Supervisor para workers de longa duração
 
 ### Fase 3: IA Avançada + Redes Sociais
-- RAG Vetorial via pgvector nativo no PostgreSQL + Compressão de contexto (Ollama)
-- Laravel Boost (guidelines, skills, documentation API)
-- Multi-provider failover via `Lab` enum + Auto-alimentação de conhecimento
+- RAG Vetorial via pgvector nativo no PostgreSQL + Compressão de contexto (Ollama local)
+- `HasStructuredOutput` nos agents JSON (OrchestratorAgent, QAAuditorAgent, QuotationAgent)
 - SocialTool + `social_accounts` — publicação automática em 8 plataformas
 
 ---

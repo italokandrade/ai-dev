@@ -2,23 +2,26 @@
 
 namespace App\Ai\Agents;
 
+use App\Ai\Tools\BoostTool;
+use App\Ai\Tools\DocSearchTool;
 use App\Ai\Tools\FileReadTool;
 use App\Ai\Tools\FileWriteTool;
 use App\Ai\Tools\GitOperationTool;
 use App\Ai\Tools\ShellExecuteTool;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Provider(Lab::Anthropic)]
+#[Provider('openai_dev')]
+#[Model('gpt-5.3-codex')]
 #[Temperature(0.2)]
 #[MaxTokens(8192)]
 #[MaxSteps(30)]
@@ -74,6 +77,8 @@ INSTRUCTIONS;
     public function tools(): iterable
     {
         return [
+            new BoostTool,
+            new DocSearchTool,
             new ShellExecuteTool($this->projectPath),
             new FileReadTool($this->projectPath),
             new FileWriteTool($this->projectPath),

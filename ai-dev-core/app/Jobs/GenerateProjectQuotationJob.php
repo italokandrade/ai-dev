@@ -59,7 +59,33 @@ class GenerateProjectQuotationJob implements ShouldQueue
         }
 
         $complexity = $this->inferComplexityLevel($aiSpec);
-        $urgency = 1; // Normal por padrão — pode ser ajustado pelo usuário
+        $urgency = 1; // Normal por padrão
+
+        if ($existing) {
+            $existing->update([
+                'project_description' => $aiSpec['objective'] ?? $spec?->user_description ?? '',
+                'complexity_level' => $complexity,
+                'required_areas' => $this->inferRequiredAreas($hours),
+                'backend_hours' => (int) ($hours['backend_hours'] ?? 0),
+                'frontend_hours' => (int) ($hours['frontend_hours'] ?? 0),
+                'mobile_hours' => (int) ($hours['mobile_hours'] ?? 0),
+                'database_hours' => (int) ($hours['database_hours'] ?? 0),
+                'devops_hours' => (int) ($hours['devops_hours'] ?? 0),
+                'design_hours' => (int) ($hours['design_hours'] ?? 0),
+                'testing_hours' => (int) ($hours['testing_hours'] ?? 0),
+                'security_hours' => (int) ($hours['security_hours'] ?? 0),
+                'pm_hours' => (int) ($hours['pm_hours'] ?? 0),
+                'notes' => isset($hours['justification'])
+                    ? "Estimativa gerada automaticamente pela IA.\n\nJustificativa: {$hours['justification']}"
+                    : 'Estimativa gerada automaticamente pela IA.',
+            ]);
+            $existing->recalculate();
+            $existing->save();
+
+            Log::info("GenerateProjectQuotationJob: Existing quotation updated for '{$this->project->name}'");
+
+            return;
+        }
 
         $quotation = ProjectQuotation::create([
             'project_id' => $this->project->id,
@@ -81,7 +107,7 @@ class GenerateProjectQuotationJob implements ShouldQueue
             'status' => 'draft',
             'notes' => isset($hours['justification'])
                 ? "Estimativa gerada automaticamente pela IA.\n\nJustificativa: {$hours['justification']}"
-                : 'Estimativa gerada automaticamente pela IA após aprovação da especificação.',
+                : 'Estimativa gerada automaticamente pela IA.',
         ]);
 
         $quotation->recalculate();

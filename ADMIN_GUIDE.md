@@ -4,7 +4,7 @@ Este documento descreve o funcionamento do ambiente web de gestão do ecossistem
 
 ## 1. Gestão de Projetos (`Projects`)
 O ponto de partida para qualquer automação. Cada projeto representa uma aplicação distinta no servidor.
-- **Provedor e Modelo:** Define qual IA (Gemini, Claude, Ollama) será o "cérebro" padrão do projeto.
+- **Provedor e Modelo:** Os agents usam `openrouter/claude-opus-4.7` para planejamento e `openai_dev/gpt-5.3-codex` para código. Configurado em `config/ai.php`.
 - **Contexto Persistente:** O sistema armazena IDs de sessão para que a IA mantenha a memória de longo prazo sobre o projeto.
 
 ## 2. Estrutura de Módulos (`Modules`)
@@ -77,5 +77,5 @@ Se você encontrar erros ao operar o sistema, consulte esta seção de lições 
 
 ### 4. Configuração de IA e Chaves API
 - **Problema:** IA não responde ou erro de autenticação.
-- **Causa:** Chaves API (`OPENAI_API_KEY`) e modelos (`gpt-5-nano`) não são versionados por segurança.
-- **Solução:** Verifique o arquivo `.env` local. O sistema está pré-configurado para usar OpenAI como provedor padrão para refinamento de descrição.
+- **Causa:** Chaves API não são versionadas por segurança.
+- **Solução:** Verifique o arquivo `.env` local. Providers ativos: `OPENROUTER_API_KEY` (planejamento) e `OPENAI_API_KEY_DEV` (código). Provider padrão: `OPENAI_API_KEY`.
