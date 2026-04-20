@@ -1,344 +1,637 @@
 # PRD — ai-dev-core (Plataforma Master de Desenvolvimento Autônomo)
 
-> **Versão:** 1.0 — 2026-04-20
-> **Escopo:** Refatoração completa do ai-dev-core com base na documentação arquitetural consolidada.
-> **Referências:** `README.md`, `ARCHITECTURE.md`, `FERRAMENTAS.md`, `PROMPTS.md`, `INFRASTRUCTURE.md`, `PRD_SCHEMA.md`, `ADMIN_GUIDE.md`, `STANDARD_MODULES.md`
+> **Versão:** 2.0 — 2026-04-20
+> **Escopo:** Refatoração completa do ai-dev-core. Documento escrito com base na inspeção direta do código atual.
+> **Referências:** `README.md`, `ARCHITECTURE.md`, `FERRAMENTAS.md`, `PROMPTS.md`, `INFRASTRUCTURE.md`, `PRD_SCHEMA.md`, `ADMIN_GUIDE.md`
+>
+> **Legenda de status:**
+> - ✅ Implementado e alinhado com o projeto
+> - ⚠️ Existe mas precisa de refatoração
+> - ❌ Não implementado — deve ser criado
 
 ---
 
-## 1. Visão Geral do Projeto
+## 1. Visão Geral
 
-O **ai-dev-core** é uma aplicação Laravel 13 standalone, cuja missão é **orquestrar o ciclo completo de desenvolvimento autônomo** (planejamento, codificação, auditoria, testes, commits, rollback) de outras aplicações Laravel — chamadas de **Projetos Alvo**. Ele não expõe produto ao usuário final; ele entrega código nos repositórios dos Projetos Alvo.
+O **ai-dev-core** é uma aplicação Laravel 13 cuja missão é orquestrar o ciclo completo de desenvolvimento autônomo (planejamento → codificação → QA → segurança → performance → commit) de outras aplicações Laravel (**Projetos Alvo**). Todo código escrito pelos agentes vai para o filesystem do Projeto Alvo. O ai-dev-core nunca modifica a si próprio via agentes.
 
-### 1.1. Objetivo Central
+**Stack obrigatória (não negociável):**
 
-> Permitir que um humano cadastre um PRD (Product Requirement Document) via Admin Panel do Filament v5 e o sistema execute, de forma totalmente autônoma, o ciclo completo: planejamento → especialistas → QA → segurança → performance → commit — sem intervenção humana, exceto em casos de escalada ou aprovação de orçamento.
-
-### 1.2. Stack Obrigatória (Não Negociável)
-
-| Camada | Tecnologia |
-|---|---|
-| Backend | Laravel 13 + PHP 8.3 |
-| Frontend | Livewire 4 + Alpine.js v3 + Tailwind CSS v4 |
-| Admin Panel | Filament v5 |
-| Banco Relacional | PostgreSQL 16 + pgvector |
-| Filas/Cache | Redis 7.0 + Laravel Horizon v5 |
-| AI SDK | `laravel/ai` v0.5 (Agents, Tools, HasStructuredOutput, HasTools, Conversational, RemembersConversations) |
-| MCP | `laravel/mcp` v0.6 |
-| Boost | `laravel/boost` v2.4 |
-| LLM Planejamento | OpenRouter → `anthropic/claude-opus-4.7` |
-| LLM Código/QA | OpenRouter → `anthropic/claude-sonnet-4-6` |
-| LLM Docs | OpenRouter → `anthropic/claude-haiku-4-5-20251001` |
-| Testes | Pest v4 + PHPUnit v12 |
-| Codebase path | `/var/www/html/projetos/ai-dev/ai-dev-core` |
-
----
-
-## 2. Arquitetura em Duas Camadas (Princípio Inviolável)
-
-O ai-dev-core **nunca** modifica seu próprio código em produção via agentes. Toda escrita de código, commit e teste ocorre **dentro do Projeto Alvo** (`projects.local_path`). O acoplamento entre camadas é por:
-
-1. **Filesystem** — `projects.local_path` (ex: `/var/www/html/projetos/portal`). Todas as tools (`FileReadTool`, `FileWriteTool`, `ShellExecuteTool`, `GitOperationTool`) são escopadas a esse path.
-2. **Boost MCP do Projeto Alvo** — `BoostTool` roteia `php artisan boost:*` **dentro do** `local_path`, refletindo schema, docs e estado real **daquele** projeto.
-
----
-
-## 3. Módulos do Sistema
-
-### Módulo A — Banco de Dados (Core State)
-
-**Banco:** `ai_dev_core`
-
-#### Tabelas Operacionais (Fase 1 — devem existir e funcionar):
-
-| Tabela | Status Esperado |
-|---|---|
-| `projects` | ✅ Implementada |
-| `project_specifications` | ✅ Implementada |
-| `project_modules` | ✅ Implementada |
-| `project_quotations` | ✅ Implementada |
-| `tasks` | ✅ Implementada |
-| `subtasks` | ✅ Implementada |
-| `agents_config` | ✅ Implementada |
-| `task_transitions` | ✅ Implementada |
-| `agent_conversations` | ✅ Implementada (SDK) |
-| `agent_conversation_messages` | ✅ Implementada (SDK) |
-| `social_accounts` | ✅ Migration criada (integração pendente Fase 3) |
-
-#### Tabelas Planejadas:
-
-| Tabela | Fase | Descrição |
+| Camada | Tecnologia | Status |
 |---|---|---|
-| `agent_executions` | Fase 2 | Log de cada chamada LLM (tokens, custo, latência) |
-| `tool_calls_log` | Fase 2 | Auditoria de cada tool call executada |
-| `webhooks_config` | Fase 2 | Webhooks de entrada (GitHub, CI/CD) |
-| `context_library` | Fase 3 | Padrões de código TALL ("Bíblia TALL") |
-| `problems_solutions` | Fase 3 | RAG vetorial — pares problema/solução com `vector(1536)` |
+| Backend | Laravel 13.5 + PHP 8.3 | ✅ |
+| Frontend | Livewire 4 + Alpine.js v3 + Tailwind CSS v4 | ✅ |
+| Admin Panel | Filament v5.5 | ✅ |
+| Banco Relacional | PostgreSQL 16 + pgvector | ✅ |
+| Filas/Cache | Redis 7 + Laravel Horizon v5 | ✅ |
+| AI SDK | `laravel/ai` v0.5 | ✅ |
+| Boost | `laravel/boost` v2.4 | ✅ |
+| LLM Planejamento | OpenRouter → `anthropic/claude-opus-4.7` | ✅ |
+| LLM Código/QA | OpenRouter → `anthropic/claude-sonnet-4-6` | ✅ |
+| LLM Docs | OpenRouter → `anthropic/claude-haiku-4-5-20251001` | ✅ |
+| Testes | Pest v4 + PHPUnit v12 | ✅ |
+| Codebase path | `/var/www/html/projetos/ai-dev/ai-dev-core` | ✅ |
 
-#### Máquina de Estados da Task (Obrigatória):
+---
 
+## 2. Estado Atual — Diagnóstico por Módulo
+
+---
+
+### Módulo A — Banco de Dados
+
+#### A.1. Migrations existentes ✅
+
+Todas as migrations de Fase 1 existem e foram executadas:
+
+| Tabela | Status |
+|---|---|
+| `projects` | ✅ |
+| `agents_config` | ✅ |
+| `tasks` | ✅ |
+| `subtasks` | ✅ |
+| `task_transitions` | ✅ |
+| `agent_conversations` | ✅ (gerenciada pelo SDK) |
+| `project_specifications` | ✅ |
+| `project_modules` | ✅ (com parent_id hierárquico) |
+| `project_quotations` | ✅ |
+| `social_accounts` | ✅ (migration criada, integração pendente Fase 3) |
+| `system_settings` | ✅ |
+
+#### A.2. Migrations pendentes
+
+| Tabela | Fase | Status |
+|---|---|---|
+| `agent_executions` | 2 | ❌ |
+| `tool_calls_log` | 2 | ❌ |
+| `webhooks_config` | 2 | ❌ |
+| `context_library` | 3 | ❌ |
+| `problems_solutions` | 3 | ❌ (precisa de coluna `vector(1536)` via pgvector) |
+
+#### A.3. Enums
+
+✅ Implementados e completos: `TaskStatus`, `SubtaskStatus`, `Priority`, `TaskSource`, `AgentProvider`, `KnowledgeArea`, `ModuleStatus`, `SecuritySeverity`, `StackComponent`, `ExecutionStatus`, `ToolCallStatus`.
+
+#### A.4. Máquina de Estados
+
+✅ `TaskStatus::canTransitionTo()` e `SubtaskStatus::canTransitionTo()` implementados com `allowedTransitions()`. Transições inválidas lançam `InvalidArgumentException`. `TaskTransition` é gravado em toda transição.
+
+**Máquina Task:**
 ```
 pending → in_progress → qa_audit → testing → completed
-                                ↘ rejected → in_progress (retry) ou escalated
-                    ↘ rollback → failed
+                     ↘ rollback → failed | pending (retry)
+           qa_audit → rejected → in_progress | escalated
 ```
 
-Toda transição é gravada em `task_transitions`. Transições inválidas são bloqueadas pelo Model.
+**Máquina Subtask:**
+```
+pending → running → qa_audit → success
+        ↘ error → pending (retry)
+pending → blocked → pending
+```
 
 ---
 
 ### Módulo B — Agentes de Desenvolvimento
 
-Todos os agentes residem em `app/Ai/Agents/`. Cada um implementa `Agent` do SDK e usa `Promptable` trait.
+#### B.1. OrchestratorAgent ⚠️
 
-| Agente | Modelo | Interfaces SDK | Propósito |
-|---|---|---|---|
-| `OrchestratorAgent` | Opus 4.7 | `Agent, HasStructuredOutput, HasTools` | Quebra PRD em Sub-PRDs; define execution_order; enfileira subtasks |
-| `BackendSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Models, Controllers, Services, APIs |
-| `FrontendSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Livewire components, Alpine.js, Tailwind |
-| `FilamentSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Resources, Widgets, Pages Filament v5 |
-| `DatabaseSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Migrations, Enums, Seeders, queries |
-| `DevOpsSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Deploy, CI/CD, Supervisor, Docker |
-| `TestingSpecialist` | Sonnet 4.6 | `Agent, HasTools` | Pest v4, factories, feature/unit tests |
-| `QAAuditorAgent` | Sonnet 4.6 | `Agent, HasStructuredOutput, HasTools` | Audita diff; aprova/rejeita com JSON estruturado |
-| `SecuritySpecialist` | Sonnet 4.6 | `Agent, HasStructuredOutput, HasTools` | Enlightn, Nikto, audit de dependências |
-| `PerformanceAnalyst` | Sonnet 4.6 | `Agent, HasStructuredOutput, HasTools` | Lighthouse CI, Pest browser tests, métricas |
-| `DocsAgent` | Haiku 4.5 | `Agent, HasTools` | Gera/atualiza documentação via Boost search-docs |
-| `RefineDescriptionAgent` | Opus 4.7 | `Agent, HasTools` | IA de interação — refina descrição de task no Admin Panel |
-| `SpecificationAgent` | Opus 4.7 | `Agent, HasTools` | IA de interação — gera spec técnica a partir do PRD |
-| `QuotationAgent` | Opus 4.7 | `Agent, HasStructuredOutput, HasTools` | IA de interação — estima custo e ROI |
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Decompõe PRD em Sub-PRDs retornando array JSON.
 
-**Regra:** `HasStructuredOutput` é obrigatório em agentes que retornam JSON estruturado (OrchestratorAgent, QAAuditorAgent, QuotationAgent, SecuritySpecialist, PerformanceAnalyst). O SDK valida o schema na saída — sem parsing manual.
+**O que falta / precisa refatorar:**
+- ❌ Não implementa `HasStructuredOutput` — saída JSON é parseada manualmente com `json_decode()` e `preg_replace` para remover markdown fences. Risco de falha silenciosa de formato.
+- ❌ Não implementa `HasTools` — o PRD arquitetural exige ferramentas para leitura de contexto.
+- ⚠️ O `OrchestratorJob` chama `prompt(..., provider: 'orchestrator_chain')` mas esse provider não existe em `config/ai.php`. Apenas `openrouter_chain` existe. **Isso é um bug ativo.**
+
+**Refatoração necessária (Fase 1):**
+1. Implementar `HasStructuredOutput` com schema do array de Sub-PRDs.
+2. Corrigir o provider: renomear `orchestrator_chain` → `openrouter_chain` no `OrchestratorJob`, ou adicionar o provider ao `config/ai.php`.
+
+---
+
+#### B.2. QAAuditorAgent ⚠️
+
+**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider `openrouter`, modelo `claude-sonnet-4-6`. Retorna JSON de auditoria.
+
+**O que falta / precisa refatorar:**
+- ❌ Não implementa `HasStructuredOutput` — parse manual de JSON com `preg_replace` e `json_decode`. O `QAAuditJob` auto-aprova em caso de falha de parse (comportamento perigoso).
+- ⚠️ Schema de retorno atual é simplificado (`approved`, `overall_quality`, `issues`, `summary`). O schema canônico do PRD exige: `criteria_checklist`, `recommendation`, `issues` com `file/line/severity/description/suggestion`.
+
+**Refatoração necessária (Fase 2 — alta prioridade):**
+1. Implementar `HasStructuredOutput` com schema canônico completo.
+2. Eliminar o auto-approve em caso de falha de parse — deve falhar explicitamente.
+3. Atualizar `instructions()` para exigir o schema canônico.
+
+---
+
+#### B.3. SpecialistAgent ✅⚠️
+
+**O que existe:** Implementa `Agent, HasTools`. Recebe `$projectPath` no constructor. Injeta as 6 tools escopadas ao `projectPath`. Provider `openrouter`, modelo `claude-sonnet-4-6`.
+
+**Observação de design:** O PRD arquitetural listava classes separadas por especialidade (BackendSpecialist, FrontendSpecialist, etc.). O código implementou um `SpecialistAgent` genérico que recebe `assigned_agent` como string. Esta é uma decisão válida — agente genérico + specialization via prompt é mais simples e funcional. O PRD passa a documentar este design.
+
+**O que falta:**
+- ⚠️ O `SubagentJob` passa `provider: 'specialist_chain'` ao chamar `prompt()`. Este provider não existe em `config/ai.php`. **Bug ativo.**
+- ⚠️ `instructions()` não diferenciam o tipo de especialista (`assigned_agent`). O agente deveria adaptar seu comportamento ao tipo recebido.
+- ❌ Agente não recebe `assigned_agent` do subtask para adaptar o prompt — recebe apenas `$projectPath`.
+
+**Refatoração necessária (Fase 1):**
+1. Corrigir provider `specialist_chain` → `openrouter_chain` (ou criar o provider).
+2. Fazer `SpecialistAgent` receber o `assigned_agent` slug no constructor e usar no `instructions()`.
+
+---
+
+#### B.4. RefineDescriptionAgent ✅
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Usa `SystemContextService` para contexto dinâmico da stack. Sem `HasTools`.
+
+**Status:** Alinhado com o projeto. Sem refatoração necessária no momento.
+
+---
+
+#### B.5. SpecificationAgent ⚠️
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Retorna JSON de especificação técnica.
+
+**O que falta:**
+- ❌ Não implementa `HasStructuredOutput` — parse manual no `GenerateProjectSpecificationJob`.
+- ❌ Não tem `HasTools`.
+
+**Refatoração necessária (Fase 2):**
+1. Implementar `HasStructuredOutput` com schema da especificação.
+
+---
+
+#### B.6. QuotationAgent ⚠️
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Retorna JSON de orçamento.
+
+**O que falta:**
+- ❌ Não implementa `HasStructuredOutput` — parse manual no `GenerateProjectQuotationJob`.
+- ❌ Não tem `HasTools`.
+
+**Refatoração necessária (Fase 2 — alta prioridade):**
+1. Implementar `HasStructuredOutput` com schema de orçamento (horas por área, custo humano vs. AI-Dev, ROI).
+
+---
+
+#### B.7. DocsAgent ✅
+
+**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider `openrouter`, modelo `claude-haiku-4-5-20251001`. Busca documentação via `search-docs`.
+
+**Status:** Alinhado. Sem refatoração necessária no momento.
+
+---
+
+#### B.8. SecuritySpecialist ❌
+
+Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Modelo `claude-sonnet-4-6`. Rodará Enlightn, Nikto, `composer audit`. Retornará JSON estruturado com vulnerabilidades encontradas.
+
+---
+
+#### B.9. PerformanceAnalyst ❌
+
+Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Modelo `claude-sonnet-4-6`. Rodará Pest 4 browser tests (`visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`). Retornará JSON estruturado com métricas de performance.
 
 ---
 
 ### Módulo C — Ferramentas Atômicas (Tool Layer)
 
-Residem em `app/Ai/Tools/`. Todas implementam `Laravel\Ai\Contracts\Tool`.
+#### C.1. BoostTool ⚠️ CRÍTICO
 
-| Tool | Escopo | Propósito |
-|---|---|---|
-| `BoostTool` | `local_path` do Projeto Alvo | Envelopa `php artisan boost:*` do Projeto Alvo (database-schema, search-docs, database-query, browser-logs) |
-| `FileReadTool` | `local_path` do Projeto Alvo | Leitura de arquivos (path, limite de linhas) |
-| `FileWriteTool` | `local_path` do Projeto Alvo | Escrita (`action: create/replace/append`); **`action=patch` não existe** |
-| `GitOperationTool` | `local_path` do Projeto Alvo | Git (status, diff, add, commit, push, branch, checkout, revert) |
-| `ShellExecuteTool` | `local_path` do Projeto Alvo | Shell com allowlist de binários (`php`, `composer`, `git`, `npm`, `phpstan`, `enlightn`, `nikto`) |
-| `DocSearchTool` | `local_path` do Projeto Alvo | Busca semântica em docs via Boost; Fase 3: fallback web (DuckDuckGo/Firecrawl) |
+**O que existe:** Implementa `Tool`. Mapeia sub-tools do Boost (`search-docs`, `database-schema`, `database-query`, `browser-logs`, `last-error`). Instancia as classes Boost via `app()`.
 
-**Regra crítica:** `BoostTool` deve ser instanciado com o `local_path` do Projeto Alvo (não do ai-dev-core). **Status atual:** BoostTool opera no contexto do ai-dev-core — tornar project-path-aware é item pendente de Fase 1.
+**Problemas críticos:**
+- ❌ **Não é project-path-aware.** Não tem `workingDirectory` no constructor. As classes Boost são instanciadas via `app()` e operam no contexto do ai-dev-core, **não do Projeto Alvo**. Isso é a falha mais crítica do sistema: o agente lê o schema do banco errado.
+- ❌ `BoostTool` não é instanciado com `local_path` no `SpecialistAgent`. Atualmente o `SpecialistAgent` passa `new BoostTool` sem argumentos — quando deveria passar `new BoostTool($this->projectPath)`.
+- ❌ `DocsAgent` e `QAAuditorAgent` também usam `new BoostTool` sem path.
+- ❌ Schema do `database-query` usa SQL raw — sem allowlist, sem redação de campos sensíveis, sem conexão readonly, sem cap de 5.000 chars.
 
-**Hardening `database-query` (Fase 2):** Migrar de SQL raw para schema estruturado com allowlist de tabelas/colunas/operadores, redação de campos `_token/_secret/_password/_key/_hash`, conexão `readonly`, cap de **5.000 chars** de output.
+**Refatoração necessária (Fase 1 — bloqueante):**
+1. Adicionar `__construct(private readonly ?string $workingDirectory = null)`.
+2. Rotear todas as sub-tools para o `workingDirectory` recebido (executar `php artisan boost:*` dentro do `local_path`).
+3. Atualizar todos os agentes que instanciam `BoostTool` para passar o `projectPath`.
+
+**Refatoração necessária (Fase 2 — alta prioridade):**
+4. Hardening do `database-query`: allowlist de tabelas/colunas/operadores, redação de campos `_token/_secret/_password/_key/_hash`, conexão `readonly`, cap de 5.000 chars.
 
 ---
 
-### Módulo D — Pipeline de Jobs (Filas Horizon)
+#### C.2. FileReadTool ✅
 
-Todos os Jobs residem em `app/Jobs/`. Enfileirados via Laravel Queue + Redis + Horizon.
+**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Suporta leitura de arquivo com offset/limit e listagem de diretório. Escopad ao `projectPath`.
+
+**Status:** Alinhado. Sem refatoração necessária.
+
+---
+
+#### C.3. FileWriteTool ✅
+
+**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Actions: `write` (criar/sobrescrever), `replace` (find & replace único), `mkdir`. Escopo ao `projectPath`.
+
+**Status:** Alinhado. `action=replace` é o correto per PRD. `action=patch` não existe. Sem refatoração necessária.
+
+---
+
+#### C.4. GitOperationTool ✅
+
+**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Actions: `status`, `diff`, `log`, `branch_create`, `branch_checkout`, `branch_list`, `add`, `commit`, `push`, `reset_hard`, `stash`. Escopado ao `projectPath`.
+
+**Status:** Alinhado. Falta `revert` para rollback preciso por commit hash — adicionar na Fase 2.
+
+---
+
+#### C.5. ShellExecuteTool ⚠️
+
+**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Tem lista negra (`BLOCKED_PATTERNS`) de comandos perigosos.
+
+**O que falta:**
+- ❌ Não tem **allowlist de binários** — o PRD exige allowlist explícita (`php`, `composer`, `git`, `npm`, `phpstan`, `enlightn`, `nikto`, `composer audit`). A lista negra atual apenas bloqueia padrões específicos como `rm -rf /`, mas qualquer outro binário passa.
+
+**Refatoração necessária (Fase 2):**
+1. Substituir `BLOCKED_PATTERNS` por allowlist de binários explícita.
+2. Binário fora da allowlist → lançar exception auditada.
+
+---
+
+#### C.6. DocSearchTool ⚠️
+
+**O que existe:** Implementa `Tool`. Delega para `DocsAgent` que usa `BoostTool.search-docs` internamente.
+
+**O que falta:**
+- ❌ Não é project-path-aware. Não recebe `workingDirectory` e não passa path para o `DocsAgent`/`BoostTool` interno. Após o fix do `BoostTool` (C.1), este tool também precisará receber o path.
+
+**Refatoração necessária (Fase 1, junto com BoostTool):**
+1. Adicionar `__construct(private readonly string $workingDirectory)`.
+2. Passar `workingDirectory` ao instanciar `BoostTool` internamente.
+
+---
+
+### Módulo D — Pipeline de Jobs
+
+#### D.1. OrchestratorJob ⚠️
+
+**O que existe:** Implementa `ShouldQueue`. Fila `orchestrator`. Transição `pending → in_progress`, chama `OrchestratorAgent`, cria subtasks, despacha subtasks prontas via `SubagentJob`.
+
+**Problemas:**
+- ⚠️ Passa `provider: 'orchestrator_chain'` ao chamar `OrchestratorAgent::make()->prompt()`. Provider inexistente em `config/ai.php`. **Bug ativo — vai falhar em produção.**
+- ⚠️ Após `HasStructuredOutput` ser implementado no `OrchestratorAgent`, o parse manual de JSON neste Job deve ser removido.
+- ❌ Não cria branch git por task (`task/{uuid_short}`) antes de despachar subtasks. Git branching por task é Fase 2.
+
+**Refatoração necessária (Fase 1):**
+1. Corrigir `provider` para `openrouter_chain` (ou criar `orchestrator_chain` em `config/ai.php`).
+2. Remover parse manual após implementar `HasStructuredOutput`.
+
+---
+
+#### D.2. SubagentJob ⚠️
+
+**O que existe:** Implementa `ShouldQueue`. Fila `agents`. Instancia `SpecialistAgent($workDir)`, chama `prompt()`, captura diff, despacha `QAAuditJob`.
+
+**Problemas:**
+- ⚠️ **Nome diverge do PRD**: o PRD define `ProcessSubtaskJob`, o código chama `SubagentJob`. Deve ser renomeado para consistência.
+- ⚠️ **Fila diverge**: usa fila `agents`, mas o Horizon está configurado com supervisor para fila `subagent`. **Bug de roteamento de fila.**
+- ⚠️ Passa `provider: 'specialist_chain'` ao chamar `SpecialistAgent`. Provider inexistente. **Bug ativo.**
+- ❌ Não passa `assigned_agent` ao instanciar `SpecialistAgent` — agente não sabe qual especialidade aplicar.
+
+**Refatoração necessária (Fase 1):**
+1. Renomear para `ProcessSubtaskJob`.
+2. Corrigir fila para `subtasks` (e atualizar Horizon).
+3. Corrigir `provider` para `openrouter_chain`.
+4. Passar `assigned_agent` ao construtor do `SpecialistAgent`.
+
+---
+
+#### D.3. QAAuditJob ✅⚠️
+
+**O que existe:** Implementa `ShouldQueue`. Fila `qa`. Chama `QAAuditorAgent`, parse de JSON, aprova/rejeita subtask, commit com hash, despacha próximas subtasks ou conclui task.
+
+**Problemas:**
+- ⚠️ Auto-approve em caso de falha de parse (`json_decode` falha → aprova automaticamente). Comportamento perigoso.
+- ⚠️ Após `HasStructuredOutput` no `QAAuditorAgent`, o parse manual deve ser removido.
+- ❌ Após aprovação, não despacha `SecurityAuditJob` (Fase 2).
+
+**Refatoração necessária (Fase 2):**
+1. Remover auto-approve — falha de parse deve rejeitar a subtask.
+2. Remover parse manual após `HasStructuredOutput`.
+3. Após todas subtasks aprovadas, despachar `SecurityAuditJob` em vez de ir direto para `completed`.
+
+---
+
+#### D.4. SecurityAuditJob ❌
+
+Não existe. Deve ser criado na Fase 2. Fila `security`. Executa `SecuritySpecialist`. Após aprovação, despacha `PerformanceAnalysisJob`.
+
+---
+
+#### D.5. PerformanceAnalysisJob ❌
+
+Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `PerformanceAnalyst`. Após aprovação, conclui a task (`→ completed`).
+
+---
+
+#### D.6. Jobs Auxiliares existentes (fora do pipeline principal)
+
+Os jobs abaixo existem e são usados pelo Admin Panel. Não estavam no PRD original mas fazem parte do sistema:
 
 | Job | Fila | Propósito |
 |---|---|---|
-| `OrchestratorJob` | `orchestrator` | Despacha `OrchestratorAgent`, grava subtasks, enfileira `ProcessSubtaskJob` por execution_order |
-| `ProcessSubtaskJob` | `subtasks` | Executa `SpecialistAgent` para uma Subtask específica |
-| `QAAuditJob` | `qa` | Executa `QAAuditorAgent` sobre o diff da subtask |
-| `SecurityAuditJob` | `security` | Executa `SecuritySpecialist` após QA aprovar |
-| `PerformanceAnalysisJob` | `performance` | Executa `PerformanceAnalyst` após Security aprovar |
+| `GenerateProjectSpecificationJob` | `orchestrator` | Gera spec técnica via `SpecificationAgent` |
+| `GenerateProjectQuotationJob` | `orchestrator` | Gera orçamento via `QuotationAgent` |
+| `GenerateTasksFromSpecJob` | `orchestrator` | Cria tasks a partir de spec aprovada |
+| `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo |
 
-**Decisão de arquitetura (Horizon vs. `Concurrency::run()`):** O sistema usa Horizon (Queue-based) em vez de `Concurrency::run()` para garantir durabilidade entre reinicios de servidor. Ver `MIGRATION_LARAVEL13.md §3.6`.
+**Status:** Existem e funcionam. Devem ser documentados e mantidos.
 
 ---
 
 ### Módulo E — Admin Panel (Filament v5)
 
-Reside em `app/Filament/`. Interface humana do ai-dev-core.
+#### E.1. Resources ✅
 
-#### Resources (Fase 2):
+Todos já implementados — o PRD dizia que eram Fase 2, mas já existem:
 
-| Resource | Propósito |
+| Resource | Status |
 |---|---|
-| `ProjectResource` | CRUD de Projetos Alvo (local_path, repo, status) |
-| `TaskResource` | CRUD de Tasks com PRD editor, status pipeline, métricas |
-| `AgentConfigResource` | Configuração dinâmica de cada agente (modelo, temperatura, prompt) |
+| `ProjectResource` | ✅ Implementado com form, table, view, IAs de interação integradas |
+| `TaskResource` | ✅ Implementado com form, table, view, SubtasksRelationManager |
+| `AgentConfigResource` | ✅ Implementado |
+| `ProjectSpecificationResource` | ✅ Implementado (extra) |
+| `ProjectModuleResource` | ✅ Implementado com TasksRelationManager (extra) |
+| `ProjectQuotationResource` | ✅ Implementado (extra) |
+| `SocialAccountResource` | ✅ Migration criada, resource implementado (integração Fase 3) |
 
-#### Dashboard (Fase 2):
+#### E.2. Widgets de Dashboard ✅
 
-- Widget de Tasks Ativas (status, agente alocado, progresso)
-- Widget de Custo (tokens consumidos, custo USD por task/projeto)
-- Widget de Saúde dos Workers (filas Horizon ativas, jobs falhos)
-- Widget de Últimas Subtasks (resultado, diff, QA score)
+Todos já implementados:
 
-#### IAs de Interação (Fase 1 — integradas ao Admin Panel):
+| Widget | Status |
+|---|---|
+| `DevelopmentStatusWidget` | ✅ |
+| `StatsOverviewWidget` | ✅ |
+| `TaskBoardWidget` | ✅ |
+| `ProjectRoadmapWidget` | ✅ |
+| `AgentHealthWidget` | ✅ |
 
-| Agente | Trigger | Resultado |
-|---|---|---|
-| `RefineDescriptionAgent` | Botão "Refinar" ao criar task | Texto da descrição refinado para precisão técnica |
-| `SpecificationAgent` | Aprovação da descrição | Spec técnica completa gerada em `project_specifications` |
-| `QuotationAgent` | Aprovação da spec | Orçamento com custo humano vs. AI-Dev e ROI em `project_quotations` |
+#### E.3. IAs de Interação no Admin Panel ✅⚠️
+
+- ✅ `RefineDescriptionAgent` integrado no `ProjectResource` — funcional.
+- ⚠️ `SpecificationAgent` e `QuotationAgent` aguardam `HasStructuredOutput` para eliminar parse manual nos Jobs.
 
 ---
 
 ### Módulo F — Segurança e Auditoria
 
-#### F.1. PostgreSQL Read-Only por Projeto Alvo (Fase 2):
+#### F.1. Tool::dispatched() Listener ❌
 
-Provisionar usuário `aidev_readonly` com `GRANT SELECT` em cada banco de Projeto Alvo. Configurar conexão `readonly` em `config/database.php` para `BoostTool.database-query`.
+`AppServiceProvider::boot()` registra apenas o `failover` provider. Nenhum listener `Tool::dispatched()` existe. A tabela `tool_calls_log` não existe e não será populada.
 
-#### F.2. Listener `Tool::dispatched()` (Fase 2 — Alta Prioridade):
-
-```php
-// AppServiceProvider::boot()
-Tool::dispatched(function (string $toolName, array $input, mixed $output) {
-    ToolCallsLog::create([...]);
-});
-```
-
-Registrar em `AppServiceProvider` para popular `tool_calls_log` em **toda** tool call.
-
-#### F.3. `ShellExecuteTool` Binary Allowlist (Fase 2):
-
-Binários permitidos: `php`, `composer`, `git`, `npm`, `phpstan`, `phpstan`, `enlightn`, `nikto`, `composer audit`. Qualquer binário fora da lista deve lançar exception.
-
-#### F.4. Circuit Breakers (Fase 2):
-
-- Limite de custo por task (configurável em `agents_config`)
-- Limite de retries (`tasks.max_retries`, default: 3)
-- Timeout por job (configurável por fila no Horizon)
-- Escalada para Human-in-the-Loop ao atingir `max_retries`
+**Necessário (Fase 2 — alta prioridade):**
+1. Criar migration `tool_calls_log`.
+2. Criar Model `ToolCallLog`.
+3. Registrar listener em `AppServiceProvider::boot()`.
 
 ---
 
-### Módulo G — Sentinela (Self-Healing Runtime — Fase 2)
+#### F.2. ShellExecuteTool Binary Allowlist ❌
 
-Exception Handler customizado instalado em cada **Projeto Alvo**. Quando detecta exceção em runtime:
-
-1. Captura stack trace completo
-2. Cria automaticamente uma task no ai-dev-core com PRD preenchido (título `[SENTINEL]`, `priority_hint: critical`, `source: sentinel`)
-3. Preenche `context.error_stack_trace`, `context.related_files` e `context.related_tables` a partir do trace
-4. Insere task com prioridade máxima (100) na fila
+Ver C.5. Atualmente usa lista negra, não allowlist. Fase 2.
 
 ---
 
-### Módulo H — Git Branching e FileLockManager (Fase 2)
+#### F.3. BoostTool database-query Hardening ❌
 
-- Cada task recebe um branch dedicado: `task/{task_uuid_short}` (registrado em `tasks.git_branch`)
-- `FileLockManager` (mutex) previne conflito de escrita entre subtasks paralelas
-- `tasks.commit_hash` registra o hash final para rollback via `git revert <hash>`
-- Subtasks registram `subtasks.commit_hash` para rollback preciso por subtask
+Ver C.1. Fase 2 — alta prioridade.
 
 ---
 
-### Módulo I — RAG e Memória Vetorial (Fase 3)
+#### F.4. PostgreSQL Read-Only User ❌
 
-#### I.1. `problems_solutions` (pgvector):
-
-Migration com coluna `vector(1536)`. Toda resolução de erro via Sentinela alimenta automaticamente esta tabela via `ProblemSolutionRecorder` (Listener).
-
-#### I.2. `SimilaritySearch::usingModel()`:
-
-Tool nativa do SDK (`SimilaritySearch::usingModel(ProblemSolution::class, 'embedding')->minSimilarity(0.7)`). Registrada dinamicamente nos agentes — o agente decide quando usar, não é injeção estática obrigatória.
-
-#### I.3. Context Compressor (Ollama Local):
-
-`qwen2.5:0.5b` local via Ollama. Comprime contexto quando janela atinge 60%. Zero custo de API.
-
-#### I.4. Prompt Caching:
-
-Ordem obrigatória: instrução estática → docs semi-estáticas → contexto dinâmico do PRD.
+Não provisionado. Script de criação de usuário `aidev_readonly` com `GRANT SELECT` por banco do Projeto Alvo e conexão `readonly` em `config/database.php` do Projeto Alvo. Fase 2.
 
 ---
 
-## 4. Fases de Implementação
+#### F.5. Circuit Breakers ✅ (parcial)
 
-### Fase 1 — Core Loop (MVP Mínimo Funcional)
+- ✅ `tasks.max_retries` com `canRetry()` implementado.
+- ✅ Subtask tem `retry_count` e `max_retries`.
+- ✅ Escalada para `escalated` quando `max_retries` excedido.
+- ❌ Limite de custo por task (por tokens/USD) — não implementado.
+- ❌ Timeout de Job configurável por agente via `agents_config` — atualmente hardcoded.
 
-**Objetivo:** Ciclo completo funcional: Task → OrchestratorAgent → SpecialistAgent → QAAuditorAgent → Commit.
+---
+
+### Módulo G — FileLockManager e Git Branching
+
+#### G.1. FileLockManager ✅⚠️
+
+**O que existe:** A lógica de mutex está implementada diretamente no `Subtask::hasFileLockConflict()` — verifica se outra subtask `running` trava os mesmos arquivos.
+
+**O que falta:**
+- ⚠️ O PRD especifica `FileLockManager.php` como Service em `app/Services/`. A lógica está no Model. Funciona, mas viola separação de responsabilidades. Extração para Service é Fase 2.
+
+---
+
+#### G.2. Git Branching por Task ❌
+
+**O que existe:** O `SpecialistAgent` instrui o LLM a criar branch `feature/subtask-{id}` (por subtask, não por task). O campo `tasks.git_branch` existe na tabela mas não é populado pelo `OrchestratorJob`.
+
+**O que falta:**
+- ❌ `OrchestratorJob` deve criar branch `task/{task_uuid_short}` no início e registrar em `tasks.git_branch`.
+- ❌ Todas as subtasks devem trabalhar no mesmo branch da task (não em branches separados por subtask).
+- ❌ `GitOperationTool` não tem action `revert` para rollback preciso por `commit_hash`.
+
+**Necessário (Fase 2):**
+1. `OrchestratorJob` cria `git checkout -b task/{uuid_short}` e salva em `tasks.git_branch`.
+2. `SpecialistAgent` remove a criação de branch — trabalha no branch da task.
+3. `GitOperationTool` recebe action `revert` com `commit_hash`.
+
+---
+
+### Módulo H — Sentinela (Self-Healing Runtime)
+
+❌ Não existe. Fase 2. Exception Handler customizado para Projetos Alvo que gera tasks automaticamente no ai-dev-core com `source: sentinel`.
+
+---
+
+### Módulo I — Horizon e Filas
+
+#### I.1. Config do Horizon ⚠️
+
+**Problema crítico:** O `SubagentJob` publica na fila `agents`, mas o Horizon tem supervisor configurado para fila `subagent`. Os jobs de subtask **nunca serão processados** com a config atual.
+
+**Tabela de divergências:**
+
+| Job | Fila usada pelo Job | Supervisor Horizon | Status |
+|---|---|---|---|
+| `OrchestratorJob` | `orchestrator` | `orchestrator` | ✅ |
+| `SubagentJob` | `agents` | `subagent` | ❌ Bug |
+| `QAAuditJob` | `qa` | `qa` | ✅ |
+
+**Necessário (Fase 1 — bloqueante):**
+1. Alinhar fila do `SubagentJob` (futuro `ProcessSubtaskJob`) para `subtasks` e criar supervisor correspondente no Horizon.
+
+---
+
+#### I.2. Providers em config/ai.php ⚠️
+
+**Problema crítico:** OrchestratorJob e SubagentJob chamam providers inexistentes:
+- `OrchestratorJob` → `'orchestrator_chain'` — **não existe**
+- `SubagentJob` → `'specialist_chain'` — **não existe**
+- Existe apenas: `openrouter`, `openrouter_chain` (failover), e outros providers não-Anthropic.
+
+**Necessário (Fase 1 — bloqueante):**
+Escolher uma das abordagens:
+- **Opção A:** Renomear as chamadas para `'openrouter_chain'` nos dois Jobs.
+- **Opção B:** Adicionar `orchestrator_chain` e `specialist_chain` como aliases de failover no `config/ai.php`.
+
+---
+
+### Módulo J — Services
+
+#### J.1. SystemContextService ✅
+
+Implementado. Monta contexto dinâmico (OS, DB, stack, rotas) para prompts de IAs de interação.
+
+#### J.2. PRDValidator ❌
+
+Não existe. Fase 2. Deve validar PRD contra o JSON Schema antes de aceitar task:
+- Campos obrigatórios presentes
+- Enums válidos
+- Paths com prefixo `/var/www/html/projetos/`
+- Dedup por título/hash
+
+#### J.3. TaskOrchestrator ❌
+
+Não existe. Fase 2. Coordena o pipeline `Agent → QA → Security → Performance → Git`.
+
+#### J.4. FileLockManager ❌ (como Service)
+
+Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
+
+---
+
+## 3. Plano de Refatoração por Fase
+
+---
+
+### Fase 1 — Bugs Críticos e Core Loop Funcional
+
+**Objetivo:** Eliminar bugs que impedem o pipeline de rodar e garantir que o ciclo Task → Orchestrator → Specialist → QA → Commit funcione end-to-end.
 
 **Critérios de Aceite da Fase 1:**
 
-- [ ] Migrations criadas e rodando para: `projects`, `tasks`, `subtasks`, `agents_config`, `task_transitions`, `project_specifications`, `project_modules`, `project_quotations`, `agent_conversations`, `agent_conversation_messages`
-- [ ] Models com Enums e validação de transições de estado (transição inválida lança exception)
-- [ ] `OrchestratorAgent` (Opus 4.7): implementa `Agent, HasStructuredOutput, HasTools`; quebra PRD em Sub-PRDs; retorna JSON com array de subtasks
-- [ ] `QAAuditorAgent` (Sonnet 4.6): implementa `Agent, HasStructuredOutput, HasTools`; retorna JSON canônico com `approved`, `criteria_checklist`, `issues`, `overall_quality`, `recommendation`
-- [ ] Pelo menos 1 `SpecialistAgent` funcional (BackendSpecialist) com as 6 tools injetadas
-- [ ] 6 Tools implementando `Laravel\Ai\Contracts\Tool`: `BoostTool`, `DocSearchTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool`, `ShellExecuteTool`
-- [ ] **BoostTool project-path-aware**: recebe `local_path` do Projeto Alvo no constructor e roteia `php artisan boost:*` para aquele path
-- [ ] `OrchestratorJob`, `ProcessSubtaskJob`, `QAAuditJob` implementados e enfileiráveis
-- [ ] Horizon v5 configurado com 4 filas: `orchestrator`, `subtasks`, `qa`, `default`
-- [ ] IAs de Interação funcionando no Admin Panel: `RefineDescriptionAgent`, `SpecificationAgent`, `QuotationAgent`
-- [ ] `PRDValidator.php` implementado e chamado antes de aceitar task
-- [ ] Teste end-to-end documentado: task "Criar Model de Post" executada de ponta a ponta sem intervenção humana
-- [ ] Nenhum agente opera fora do `local_path` do Projeto Alvo
+- [ ] **[Bug #1 — Bloqueante]** Corrigir provider inexistente no `OrchestratorJob` (`orchestrator_chain` → `openrouter_chain` ou criar o provider)
+- [ ] **[Bug #2 — Bloqueante]** Corrigir provider inexistente no `SubagentJob` (`specialist_chain` → `openrouter_chain` ou criar o provider)
+- [ ] **[Bug #3 — Bloqueante]** Alinhar fila do `SubagentJob` com supervisor do Horizon (`agents` → `subtasks`, criar supervisor)
+- [ ] **[Bug #4 — Crítico]** `BoostTool` project-path-aware: adicionar `__construct(private readonly ?string $workingDirectory = null)` e rotear sub-tools para o `workingDirectory`
+- [ ] **[Bug #5 — Crítico]** `SpecialistAgent` passar `new BoostTool($this->projectPath)` em vez de `new BoostTool`
+- [ ] **[Bug #6 — Crítico]** `QAAuditorAgent` passar `new BoostTool($this->projectPath)` — o auditor precisa ler o banco/docs do Projeto Alvo
+- [ ] **[Bug #7]** `DocSearchTool` receber `workingDirectory` e passar ao `BoostTool` interno
+- [ ] **[Melhoria]** `SpecialistAgent` receber `assigned_agent` slug no constructor e adaptar `instructions()` por especialidade
+- [ ] **[Melhoria]** Renomear `SubagentJob` → `ProcessSubtaskJob` (mantendo alias para retrocompatibilidade da fila)
+- [ ] Teste end-to-end documentado: task "Criar Model de Post" no Projeto Alvo executada de ponta a ponta sem intervenção humana
 
 ---
 
 ### Fase 2 — Qualidade, Segurança e Observabilidade
 
-**Objetivo:** Camadas de segurança, auditoria completa e interface de gestão operacional.
+**Objetivo:** `HasStructuredOutput`, auditoria de tools, segurança, pipeline completo com Security + Performance.
 
 **Critérios de Aceite da Fase 2:**
 
-- [ ] **[Alta]** `HasStructuredOutput` implementado em: `OrchestratorAgent`, `QAAuditorAgent`, `QuotationAgent`, `SecuritySpecialist`, `PerformanceAnalyst`
-- [ ] **[Alta]** Listener `Tool::dispatched()` em `AppServiceProvider` populando `tool_calls_log` em toda tool call
-- [ ] **[Alta]** `BoostTool.database-query` hardened: schema estruturado (`table/columns/where` com allowlist), redação de `_token/_secret/_password/_key/_hash`, conexão `readonly`, cap 5.000 chars
-- [ ] Migrations criadas e rodando para: `agent_executions`, `tool_calls_log`, `webhooks_config`
-- [ ] Filament Resources: `ProjectResource`, `TaskResource`, `AgentConfigResource` (listagem paginada, formulários, filtros)
-- [ ] Dashboard Filament com widgets: Tasks Ativas, Custo por Projeto, Saúde dos Workers, Últimas Subtasks
-- [ ] `SecurityAuditJob` + `SecuritySpecialist` implementados (Enlightn, Nikto, `composer audit`)
-- [ ] `PerformanceAnalysisJob` + `PerformanceAnalyst` implementados (Pest 4 browser tests: `visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`)
-- [ ] Sentinela instalado em Projetos Alvo e gerando tasks automaticamente no ai-dev-core
-- [ ] `FileLockManager` implementado; subtasks paralelas não escrevem no mesmo arquivo simultaneamente
-- [ ] Git branching por task (`tasks.git_branch = task/{uuid_short}`), commit hash registrado
-- [ ] `ShellExecuteTool` com allowlist de binários; tentativa de binário não permitido lança exception auditada
-- [ ] Circuit breakers: limite de custo por task, `max_retries` respeitado, escalada para Human-in-the-Loop
-- [ ] PostgreSQL read-only user provisionado por Projeto Alvo (script de provisionamento documentado)
-- [ ] `TaskOrchestrator.php` (Service) coordenando o pipeline Agent→QA→Security→Performance→Git
-- [ ] `PRDValidator.php` com todas as validações (campos obrigatórios, enums, path prefix, dedup)
+- [ ] **[Alta — segurança/validação]** `HasStructuredOutput` implementado em: `OrchestratorAgent`, `QAAuditorAgent`, `SpecificationAgent`, `QuotationAgent`
+- [ ] **[Alta — auditoria]** Migration `tool_calls_log` + Model `ToolCallLog` + listener `Tool::dispatched()` em `AppServiceProvider`
+- [ ] **[Alta — segurança]** `BoostTool.database-query` hardening: schema estruturado com allowlist, redação de campos sensíveis, conexão `readonly`, cap 5.000 chars
+- [ ] Migration `agent_executions` + Model `AgentExecution`
+- [ ] Migration `webhooks_config` + Model `WebhookConfig`
+- [ ] `SecuritySpecialist` agent implementado (`Agent, HasStructuredOutput, HasTools`)
+- [ ] `PerformanceAnalyst` agent implementado (`Agent, HasStructuredOutput, HasTools`) com Pest 4 browser tests
+- [ ] `SecurityAuditJob` implementado (fila `security`)
+- [ ] `PerformanceAnalysisJob` implementado (fila `performance`)
+- [ ] `QAAuditJob` despachar `SecurityAuditJob` após todas subtasks aprovadas (em vez de ir direto para `completed`)
+- [ ] `QAAuditJob` remover auto-approve em caso de falha de parse
+- [ ] `ShellExecuteTool` substituir lista negra por allowlist explícita de binários
+- [ ] `GitOperationTool` receber action `revert` com `commit_hash`
+- [ ] `OrchestratorJob` criar branch `task/{uuid_short}` e salvar em `tasks.git_branch`
+- [ ] `SpecialistAgent` remover criação de branch — trabalhar no branch da task
+- [ ] Sentinela implementado no Projeto Alvo (Exception Handler gerando tasks `source: sentinel`)
+- [ ] `PRDValidator.php` implementado em `app/Services/`
+- [ ] `FileLockManager.php` extraído para `app/Services/` (lógica saindo do Model Subtask)
+- [ ] PostgreSQL read-only user provisionado por Projeto Alvo (script documentado em `INFRASTRUCTURE.md`)
+- [ ] Horizon configurado com supervisores para filas `subtasks`, `security`, `performance`
 
 ---
 
-### Fase 3 — Inteligência, Memória e Expansão
+### Fase 3 — Inteligência e Memória
 
-**Objetivo:** Memória vetorial, auto-evolução, compressão de contexto e publicação em redes sociais.
+**Objetivo:** RAG vetorial, compressão de contexto, auto-evolução, redes sociais.
 
 **Critérios de Aceite da Fase 3:**
 
 - [ ] Migration `problems_solutions` com coluna `vector(1536)` via pgvector
-- [ ] `ProblemSolutionRecorder` (Listener no Sentinela): alimenta `problems_solutions` automaticamente após resolução
-- [ ] `SimilaritySearch::usingModel(ProblemSolution::class, 'embedding')->minSimilarity(0.7)` registrado como Tool SDK dinâmica nos agentes
-- [ ] `ContextCompressor` Agent (Ollama `qwen2.5:0.5b`) + `ContextCompressionJob` funcional
-- [ ] `toEmbeddings()` via SDK para vetorizar pares problema/solução
-- [ ] Prompt Caching com ordem correta: estático → semi-estático → dinâmico
-- [ ] `DocSearchTool` com fallback web (DuckDuckGo / Firecrawl self-hosted) quando Boost não tiver a doc
-- [ ] `context_library` migration + seed inicial com padrões TALL obrigatórios
-- [ ] Webhooks de entrada (GitHub, CI/CD) recebendo e convertendo em tasks automaticamente
-- [ ] `SocialPostingAgent` (Haiku 4.5) + `social_accounts` (Filament Resource) + integração `hamzahassanm/laravel-social-auto-post`
-- [ ] OWASP ZAP em modo headless para scan profundo (complementar ao Nikto do Fase 2)
+- [ ] `ProblemSolutionRecorder` (Listener) auto-alimentando `problems_solutions` após resolução via Sentinela
+- [ ] `SimilaritySearch::usingModel(ProblemSolution::class, 'embedding')->minSimilarity(0.7)` como Tool SDK dinâmica
+- [ ] Migration `context_library` + seed inicial com padrões TALL
+- [ ] `ContextCompressor` Agent (Ollama `qwen2.5:0.5b`) + `ContextCompressionJob`
+- [ ] Prompt Caching com ordem: estático → semi-estático → dinâmico
+- [ ] `DocSearchTool` fallback web (DuckDuckGo / Firecrawl) quando Boost não tiver a doc
+- [ ] Webhooks de entrada (GitHub, CI/CD) → tasks automáticas
+- [ ] `SocialPostingAgent` + integração `hamzahassanm/laravel-social-auto-post`
+- [ ] OWASP ZAP em modo headless (complementar ao Nikto)
 
 ---
 
-## 5. Restrições Técnicas (Invioláveis)
+## 4. Restrições Técnicas (Invioláveis)
 
-1. **Stack exclusiva TALL:** Tailwind + Alpine.js + Laravel + Livewire. Proibido React, Vue, Inertia.js ou qualquer SPA framework.
-2. **Sem Blade manual em formulários:** usar exclusivamente FormBuilder do Filament v5.
-3. **Proibido DB::raw() sem justificativa:** usar Eloquent. SQL raw só em otimizações documentadas.
-4. **Sem pacotes npm/composer extras** sem avaliação de segurança e aprovação explícita.
-5. **Agentes só escrevem dentro do `local_path` do Projeto Alvo.** Nunca no filesystem do ai-dev-core.
-6. **`FileWriteTool` action válidas:** `create`, `replace`, `append`. Não existe `action=patch`.
-7. **Dusk removido** dos dois lados (ai-dev-core e Projetos Alvo). Testes de browser usam **Pest v4**: `visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`.
-8. **PRD obrigatório** para toda task. `PRDValidator.php` rejeita tasks sem os campos obrigatórios.
-9. **`HasStructuredOutput`** obrigatório em todo agente que retorna JSON estruturado. Proibido parsing manual de JSON de saída.
-10. **Cap de 5.000 chars** no output do `BoostTool.database-query`.
-11. **Horizon** (não `Concurrency::run()`) para paralelização de subtasks. Garante durabilidade entre reinicios.
+1. **Stack exclusiva TALL:** Tailwind + Alpine.js + Laravel + Livewire. Proibido React, Vue, Inertia.js.
+2. **Agentes escrevem apenas dentro do `local_path` do Projeto Alvo.** Nunca no filesystem do ai-dev-core.
+3. **`FileWriteTool` actions válidas:** `write`, `replace`, `mkdir`. `action=patch` não existe.
+4. **Dusk removido.** Testes de browser: Pest v4 com `visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`.
+5. **`HasStructuredOutput` obrigatório** em agentes que retornam JSON estruturado. Proibido parse manual.
+6. **Cap de 5.000 chars** no output do `BoostTool.database-query`.
+7. **Horizon** (não `Concurrency::run()`) para paralelização. Ver `MIGRATION_LARAVEL13.md §3.6`.
+8. **PRDValidator** rejeita toda task sem os campos obrigatórios do schema.
+9. **`BoostTool` sempre instanciado com `workingDirectory`** do Projeto Alvo — nunca sem argumento em código de produção.
 
 ---
 
-## 6. Restrições de Modelos LLM
+## 5. Mapeamento de Providers LLM (config/ai.php)
 
-| Situação | Modelo Permitido |
-|---|---|
-| Planejamento complexo (OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent) | `anthropic/claude-opus-4.7` via OpenRouter |
-| Código, QA, especialistas, segurança, performance | `anthropic/claude-sonnet-4-6` via OpenRouter |
-| Documentação, buscas, tarefas simples (DocsAgent) | `anthropic/claude-haiku-4-5-20251001` via OpenRouter |
-| Compressão de contexto, embeddings (Fase 3) | Ollama local — `qwen2.5:0.5b` |
+| Provider key | Driver | Uso |
+|---|---|---|
+| `openrouter` | openai (OpenRouter URL) | Default — todos os agentes |
+| `openrouter_chain` | failover → [openrouter, openai] | Fallback automático |
+| `ollama` | ollama | Fase 3 — ContextCompressor, embeddings |
+
+**Todos os Jobs devem usar `openrouter_chain`** (com failover) em vez de `openrouter` direto. Os providers `orchestrator_chain` e `specialist_chain` referenciados no código atual não existem e devem ser corrigidos.
+
+---
+
+## 6. Tabelas do Banco (Referência Canônica)
+
+### Operacionais (ai-dev-core — todas no banco `ai_dev_core`):
+
+| Tabela | Fase | Status |
+|---|---|---|
+| `users` | Core | ✅ |
+| `projects` | 1 | ✅ |
+| `project_specifications` | 1 | ✅ |
+| `project_modules` | 1 | ✅ |
+| `project_quotations` | 1 | ✅ |
+| `tasks` | 1 | ✅ |
+| `subtasks` | 1 | ✅ |
+| `agents_config` | 1 | ✅ |
+| `task_transitions` | 1 | ✅ |
+| `agent_conversations` | 1 | ✅ |
+| `agent_conversation_messages` | 1 | ✅ (SDK) |
+| `system_settings` | 1 | ✅ |
+| `social_accounts` | 1 | ✅ (migration; integração Fase 3) |
+| `agent_executions` | 2 | ❌ |
+| `tool_calls_log` | 2 | ❌ |
+| `webhooks_config` | 2 | ❌ |
+| `context_library` | 3 | ❌ |
+| `problems_solutions` | 3 | ❌ |
 
 ---
 
@@ -348,87 +641,7 @@ Ordem obrigatória: instrução estática → docs semi-estáticas → contexto 
 |---|---|
 | Laravel AI SDK — Multi-Agent Workflows | https://laravel.com/blog/building-multi-agent-workflows-with-the-laravel-ai-sdk |
 | Laravel AI SDK — Production-Safe Database Tools | https://laravel.com/blog/laravel-ai-sdk-building-production-safe-database-tools-for-agents |
-| Laravel AI SDK Docs | https://laravel.com/docs/ai |
 | Filament v5 Docs | https://filamentphp.com/docs/ |
 | Laravel 13 Docs | https://laravel.com/docs/13.x |
 | Pest v4 Docs | https://pestphp.com/docs |
 | Laravel Horizon Docs | https://laravel.com/docs/horizon |
-| Laravel Boost Docs | https://laravel.com/docs/boost |
-
----
-
-## 8. Tabelas do ai-dev-core (Referência Canônica)
-
-### Tabelas do Core Master (injetadas em todos os Projetos, incluindo ai-dev-core):
-
-| Tabela | Propósito |
-|---|---|
-| `audit_logs` | Log global de todas as ações (Insert/Update/Delete) |
-| `roles` e `permissions` | Perfis e permissões granulares por módulo |
-| `system_settings` | Configurações do sistema via UI (evita hardcoding no `.env`) |
-| `users` | Cadastro central de usuários |
-
-### Tabelas operacionais do ai-dev-core:
-
-| Tabela | Propósito |
-|---|---|
-| `projects` | Projetos Alvo (repo, `local_path`, status) |
-| `project_specifications` | Specs técnicas geradas pelo `SpecificationAgent` |
-| `project_modules` | Módulos/submódulos hierárquicos com PRD por módulo |
-| `project_quotations` | Orçamentos com ROI |
-| `tasks` | Tasks com PRD JSON e máquina de estados |
-| `subtasks` | Decomposição granular (Sub-PRD por especialista) |
-| `agents_config` | Configuração dinâmica dos agentes |
-| `task_transitions` | Log de auditoria de transições |
-| `agent_conversations` | Conversas SDK (`RemembersConversations`) |
-| `agent_conversation_messages` | Mensagens SDK |
-| `social_accounts` | Credenciais de redes sociais (Fase 3) |
-| `agent_executions` | Log LLM por chamada — tokens, custo (Fase 2) |
-| `tool_calls_log` | Auditoria de cada tool call (Fase 2) |
-| `webhooks_config` | Webhooks de entrada (Fase 2) |
-| `context_library` | Padrões TALL ("Bíblia") — few-shot fixo (Fase 3) |
-| `problems_solutions` | RAG vetorial — pares erro/solução com `vector(1536)` (Fase 3) |
-
----
-
-## 9. Diretrizes de Qualidade
-
-- Todo código gerado **deve passar** em `php artisan test` sem falhas antes do commit
-- Todo código gerado **deve passar** em `phpstan --level=8` sem erros
-- Nenhuma task é marcada `completed` sem aprovação do `QAAuditorAgent` com `approved: true`
-- Nenhuma subtask commita em `main` — sempre em `task/{uuid_short}`, merge após aprovação total
-- `OrchestratorAgent` deve registrar `execution_order` e `dependencies` em toda subtask para controle de paralelização via Horizon
-- QA Auditor retorna JSON canônico:
-  ```json
-  {
-    "approved": true,
-    "criteria_checklist": [{"criterion": "...", "passed": true, "note": "..."}],
-    "issues": [{"file": "...", "line": 0, "severity": "critical|minor|cosmetic", "description": "...", "suggestion": "..."}],
-    "overall_quality": "excellent|good|acceptable|poor",
-    "recommendation": "approve|fix_and_retry|escalate_to_human"
-  }
-  ```
-
----
-
-## 10. Estado Atual do Projeto (Referência para a Refatoração)
-
-> **Fonte:** `MIGRATION_LARAVEL13.md` — migração Laravel 13 concluída.
-
-**Concluído:**
-- Laravel 13 + Laravel AI SDK v0.5.1 + Filament v5 + PostgreSQL 16 + pgvector + Redis 7 + Horizon v5 + Pest v4 instalados e operacionais
-- Migrations das tabelas operacionais existem e foram rodadas
-- Estrutura de diretórios `app/Ai/Agents/` e `app/Ai/Tools/` criada
-
-**Pendente (foco da refatoração):**
-- `BoostTool` não é project-path-aware (opera no contexto do ai-dev-core)
-- `HasStructuredOutput` ausente em OrchestratorAgent, QAAuditorAgent, QuotationAgent
-- `Tool::dispatched()` listener não implementado
-- `BoostTool.database-query` ainda usa SQL raw sem hardening
-- Filament Resources para Projects, Tasks, AgentConfig não implementados
-- SecuritySpecialist, PerformanceAnalyst, SecurityAuditJob, PerformanceAnalysisJob não implementados
-- FileLockManager não implementado
-- PRDValidator não implementado
-- Sentinela não implementado
-- Git branching por task não implementado
-- Teste end-to-end completo não executado
