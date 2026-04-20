@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Laravel\Ai\Contracts\RemembersConversations;
-use Laravel\Ai\Traits\HasConversations;
+use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Concerns\RemembersConversations;
 
-class Project extends Model implements RemembersConversations
+class Project extends Model implements Conversational
 {
-    use Auditable, HasConversations, HasUuids;
+    use Auditable, RemembersConversations, HasUuids;
 
     protected $fillable = [
         'name',

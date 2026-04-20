@@ -9,12 +9,12 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Laravel\Ai\Contracts\RemembersConversations;
-use Laravel\Ai\Traits\HasConversations;
+use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Concerns\RemembersConversations;
 
-class Task extends Model implements RemembersConversations
+class Task extends Model implements Conversational
 {
-    use Auditable, HasConversations, HasUuids;
+    use Auditable, RemembersConversations, HasUuids;
 
     protected $fillable = [
         'project_id',
@@ -41,11 +41,7 @@ class Task extends Model implements RemembersConversations
     {
         return [
             'status' => TaskStatus::class,
-            'source' => TaskSource::class,
-            'prd_payload' => 'array',
-            'priority' => \App\Enums\Priority::class,
-            'retry_count' => 'integer',
-            'max_retries' => 'integer',
+            'prd_payload' => 'json',
             'is_redo' => 'boolean',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
@@ -62,51 +58,34 @@ class Task extends Model implements RemembersConversations
         return $this->belongsTo(ProjectModule::class, 'module_id');
     }
 
-    public function originalTask(): BelongsTo
-    {
-        return $this->belongsTo(self::class, 'original_task_id');
-    }
-
-    public function redos(): HasMany
-    {
-        return $this->hasMany(self::class, 'original_task_id');
-    }
-
-    public function assignedAgent(): BelongsTo
-    {
-        return $this->belongsTo(AgentConfig::class, 'assigned_agent_id');
-    }
-
     public function subtasks(): HasMany
     {
-        return $this->hasMany(Subtask::class)->orderBy('execution_order');
+        return $this->hasMany(Subtask::class);
     }
 
     public function transitions(): HasMany
     {
-        return $this->hasMany(TaskTransition::class, 'entity_id')
-            ->where('entity_type', 'task')
-            ->orderBy('created_at');
+        return $this->hasMany(TaskTransition::class);
     }
 
-    public function transitionTo(TaskStatus $newStatus, string $triggeredBy, ?array $metadata = null): void
+    public function canTransitionTo(TaskStatus $newStatus): bool
     {
-        if (! $this->status->canTransitionTo($newStatus)) {
-            throw new \InvalidArgumentException(
-                "Transição inválida: {$this->status->value} → {$newStatus->value}"
-            );
+        return $this->status->canTransitionTo($newStatus);
+    }
+
+    public function transitionTo(TaskStatus $newStatus, string $agent = 'system', array $metadata = []): void
+    {
+        if (! $this->canTransitionTo($newStatus)) {
+            throw new \InvalidArgumentException("Invalid transition from {$this->status->value} to {$newStatus->value}");
         }
 
         $oldStatus = $this->status;
-
         $this->update(['status' => $newStatus]);
 
-        TaskTransition::create([
-            'entity_type' => 'task',
-            'entity_id' => $this->id,
-            'from_status' => $oldStatus->value,
-            'to_status' => $newStatus->value,
-            'triggered_by' => $triggeredBy,
+        $this->transitions()->create([
+            'from_status' => $oldStatus,
+            'to_status' => $newStatus,
+            'assigned_agent' => $agent,
             'metadata' => $metadata,
         ]);
     }
@@ -116,38 +95,13 @@ class Task extends Model implements RemembersConversations
         return $this->retry_count < $this->max_retries;
     }
 
-    /**
-     * Refaz esta task (redo) em vez de criar uma nova.
-     * Reseta o estado, limpa subtasks anteriores e re-dispatcha o Orchestrator.
-     */
-    public function redo(?array $updatedPrd = null): self
+    public function isCompleted(): bool
     {
-        // Se a task original já completou ou falhou, cria um redo linkado
-        if (in_array($this->status, [TaskStatus::Completed, TaskStatus::Failed])) {
-            $redo = self::create([
-                'project_id' => $this->project_id,
-                'title' => $this->title,
-                'prd_payload' => $updatedPrd ?? $this->prd_payload,
-                'status' => TaskStatus::Pending,
-                'priority' => $this->priority,
-                'source' => $this->source,
-                'max_retries' => $this->max_retries,
-                'is_redo' => true,
-                'original_task_id' => $this->original_task_id ?? $this->id,
-            ]);
+        return $this->status === TaskStatus::Completed;
+    }
 
-            TaskTransition::create([
-                'entity_type' => 'task',
-                'entity_id' => $redo->id,
-                'from_status' => null,
-                'to_status' => TaskStatus::Pending->value,
-                'triggered_by' => 'redo',
-                'metadata' => ['original_task_id' => $this->id],
-            ]);
-
-            return $redo;
-        }
-
-        return $this;
+    public function isFailed(): bool
+    {
+        return $this->status === TaskStatus::Failed;
     }
 }
