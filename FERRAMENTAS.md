@@ -59,7 +59,7 @@ As ferramentas que tocam filesystem/shell/git recebem `string $workingDirectory`
 |---|---|---|
 | `search-docs` | Busca na documentação da stack TALL do alvo (Laravel, Livewire, Filament, Tailwind, Alpine, Anime.js) — com versão correspondente à instalada no alvo | `queries: string[]` |
 | `database-schema` | Retorna colunas, tipos, índices, FKs de uma tabela do alvo | `table: string` |
-| `database-query` | Executa SELECT no banco do alvo (sem DDL/DML destrutivo) | `query: string`, `limit: int` |
+| `database-query` | Executa SELECT no banco do alvo via schema estruturado *(Fase 2: migrar de SQL raw para `table/columns/where` com allowlist — ver §Hardening abaixo)* | `table: string`, `columns: string[]`, `where: array` *(alvo)* · `query: string`, `limit: int` *(atual)* |
 | `browser-logs` | Últimos logs capturados pelo Telescope/Debugbar do alvo | `limit: int` |
 | `last-error` | Última exceção registrada em `storage/logs` do alvo | — |
 
@@ -149,9 +149,9 @@ DB::connection('readonly')->select($query, $bindings)
 
 Configurar em `config/database.php` do ai-dev-core com as credenciais de leitura do Projeto Alvo.
 
-#### Cap de saída (8 000 chars com slicing proporcional)
+#### Cap de saída (5 000 chars com slicing proporcional)
 
-O resultado JSON não deve ultrapassar 8 000 caracteres. Se ultrapassar, fatiar proporcionalmente (estimar linhas que cabem, cortar, tentar novamente ao meio se ainda não couber):
+O resultado JSON não deve ultrapassar 5 000 caracteres (alinhado com a recomendação do blog [Production-Safe Database Tools](https://laravel.com/blog/laravel-ai-sdk-building-production-safe-database-tools-for-agents)). Se ultrapassar, fatiar proporcionalmente (estimar linhas que cabem, cortar, tentar novamente ao meio se ainda não couber):
 
 ```php
 private function capOutput(array $rows, int $maxChars = 8000): string
@@ -160,8 +160,8 @@ private function capOutput(array $rows, int $maxChars = 8000): string
     if (strlen($encoded) <= $maxChars) {
         return $encoded;
     }
-    $perRow = strlen($encoded) / count($rows);
-    $count  = max(1, (int) ($maxChars / $perRow));
+    $avgLength = strlen($encoded) / count($rows);
+    $count     = (int) ($maxChars / $avgLength * 0.9);
     do {
         $result = json_encode(array_slice($rows, 0, $count));
         $count  = (int) ($count / 2);

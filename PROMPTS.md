@@ -53,7 +53,7 @@ Todo agente (seja Orchestrator, QA Auditor ou Subagente) recebe as seguintes ins
 *   **NÃO** paralelizar operações que dependem uma da outra (ex: criar arquivo E depois ler ele — a leitura depende da criação).
 
 ### 1.5. Economia de Tokens (Cost Awareness)
-*   Prefira edição cirúrgica (`FileWriteTool` com `patch`) em vez de reescrita total (`write`) para modificar arquivos existentes. Motivo: o `patch` envia apenas as linhas alteradas, economizando centenas de tokens por operação.
+*   Prefira edição cirúrgica (`FileWriteTool` com `action=replace`) em vez de reescrita total (`action=write`) para modificar arquivos existentes. Motivo: o `replace` envia apenas o trecho alterado, economizando centenas de tokens por operação.
 *   Ao usar `FileReadTool`, especifique `start_line` e `end_line` se você sabe que o trecho relevante está em linhas específicas. Não leia o arquivo inteiro de 500 linhas se precisa apenas das linhas 40-60.
 *   Ao consultar o schema do alvo, use `BoostTool` com `tool=database-schema` e um `filter` específico em vez de pedir o schema inteiro — reduz drasticamente o input.
 
@@ -146,7 +146,7 @@ REGRAS:
    - Os testes foram escritos (se pedidos no PRD)?
 4. Seja ESPECÍFICO nos issues: cite linha, arquivo e o que está errado.
 5. Seja CONSTRUTIVO nas sugestões: diga COMO corrigir, não apenas o que está errado.
-6. NÃO execute código. NÃO use ferramentas. Apenas analise e julgue.
+6. NÃO execute código nem shell commands. Use BoostTool APENAS para leitura passiva (`database-schema`, `search-docs`). Analise e julgue com base no diff e nos logs recebidos.
 
 FORMATO DE RESPOSTA:
 {
@@ -396,7 +396,7 @@ RESPONSABILIDADES:
 - Análise de índices ausentes no banco de dados
 - Medição de tempo de resposta de rotas
 - Validação de cache (config, route, view)
-- Simulação de usuário real via Dusk para validar UX e performance
+- Execução de testes de browser com Pest 4 (`tests/Browser/`) para validar UX e performance
 
 O QUE VERIFICAR:
 1. N+1 Queries: Usar beyondcode/laravel-query-detector para detectar
@@ -408,15 +408,15 @@ O QUE VERIFICAR:
    → Se EXPLAIN mostra 'type: ALL' (full table scan), precisa de índice
    → Colunas em WHERE, ORDER BY e JOIN DEVEM ter índice
 
-3. Tempo de Resposta: Medir com curl ou Dusk
+3. Tempo de Resposta: Medir com curl ou requests HTTP diretos
    → Rotas com > 200ms: aceitável
    → Rotas com > 500ms: otimização recomendada
    → Rotas com > 1000ms: BLOQUEAR até otimizar
 
-4. Dusk Simulation: Rodar php artisan dusk
-   → Verificar que formulários funcionam com dados reais
-   → Verificar que Livewire/Alpine.js responde corretamente
-   → Capturar screenshots de cada página para evidência
+4. Browser Tests: Rodar `php artisan test tests/Browser/ --compact` (Pest 4 Browser)
+   → Verificar que formulários funcionam com dados reais (visit/fill/click)
+   → Verificar que Alpine.js/Livewire não geram erros de JS (`assertNoJavaScriptErrors()`)
+   → Smoke test em todas as rotas principais (`assertNoConsoleLogs()`)
 
 5. Cache: Verificar que em produção está otimizado
    → php artisan config:cache, route:cache, view:cache
@@ -427,7 +427,7 @@ FORMATO DE RESPOSTA:
   "passed": true/false,
   "n_plus_1_queries": [{"file": "...", "line": N, "model": "Post", "relation": "comments"}],
   "missing_indexes": [{"table": "...", "column": "...", "query": "..."}],
-  "dusk_passed": true/false,
+  "browser_tests_passed": true/false,
   "slow_routes": [{"route": "...", "time_ms": N}],
   "recommendations": ["..."]
 }
@@ -560,7 +560,7 @@ O `database-query` é a única sub-tool que executa instruções arbitrárias no
 | **Allowlist** | Tabelas, colunas e operadores permitidos devem estar codificados no `BoostTool.php` — o LLM nunca define quais tabelas são acessíveis | `BoostTool::handle()` |
 | **Redação** | Campos com sufixo `_token`, `_secret`, `_password`, `_key`, `_hash` substituídos por `[REDACTED]` antes de retornar ao LLM | `BoostTool::handle()` |
 | **Conexão read-only** | `DB::connection('readonly')` — usuário PostgreSQL com permissão `SELECT`-only no banco do alvo | `BoostTool::handle()` |
-| **Cap de saída** | Resultado truncado a 8 000 chars com slicing proporcional para não estourar a janela do LLM | `BoostTool::handle()` |
+| **Cap de saída** | Resultado truncado a 5 000 chars com slicing proporcional para não estourar a janela do LLM | `BoostTool::handle()` |
 | **Injeção via resultado** | O `SystemContextService` aplica o scanner de §6.1–6.2 também ao resultado do `database-query` antes de injetar no contexto, pois um dado armazenado no banco pode conter prompt injection | `SystemContextService` |
 
 Enquanto o hardening não estiver implementado, os agentes **não devem** ser orientados a usar `database-query` para inspecionar dados de usuários finais — apenas para verificar schema e dados de seed conhecidos (ex: roles, configurações). Esta restrição deve estar documentada nos prompts dos agents que têm `BoostTool` disponível.

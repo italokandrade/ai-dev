@@ -90,11 +90,11 @@ Projetos Alvo podem divergir (ex: pinar Filament v5.3 enquanto o ai-dev-core usa
 
 ---
 
-## 2. Modelagem do Banco de Dados Relacional (Core), Web UI e API Headless
+## 2. Modelagem do Banco de Dados Relacional (Core), Web UI e API REST
 
-Diferente da versão inicial puramente CLI, o AI-Dev contará com uma **Interface Web (UI)** desenvolvida em Filament v5 e uma **API Headless** (via gRPC ou REST). 
-- **Web UI:** Servirá *exclusivamente* para gestão: cadastrar novos projetos, configurar o prompt dos agentes, inserir tarefas/PRDs manualmente, e monitorar o progresso em tempo real via dashboard.
-- **API Headless:** Permitirá que sistemas externos (como webhooks do GitHub, pipelines de CI/CD ou extensões de VS Code) injetem tarefas e ouçam o progresso em tempo real.
+O AI-Dev opera com dois canais de entrada:
+- **Web UI (Filament v5):** Gestão humana — cadastrar projetos, configurar agentes, inserir tarefas/PRDs manualmente, monitorar progresso em tempo real via dashboard.
+- **API REST:** Permite que sistemas externos (webhooks do GitHub, pipelines de CI/CD, extensões de IDE) injetem tarefas e consultem o progresso programaticamente via Laravel API Resources.
 
 O Orquestrador continua operando em background via *polling/events* nestas tabelas.
 
@@ -731,7 +731,7 @@ app/
 │   │   ├── FilamentSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
 │   │   ├── DatabaseSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
 │   │   ├── DevOpsSpecialist.php         ← implements Agent, Conversational, HasTools — Executor
-│   │   ├── SecuritySpecialist.php       ← implements Agent, HasTools — Auditor de Segurança
+│   │   ├── SecuritySpecialist.php       ← implements Agent, HasStructuredOutput, HasTools — Auditor de Segurança
 │   │   ├── PerformanceAnalyst.php       ← implements Agent, HasStructuredOutput — Analista
 │   │   └── ContextCompressor.php        ← implements Agent (usa Ollama) — Compressão
 │   └── Tools/
@@ -743,7 +743,11 @@ app/
 │       └── ShellExecuteTool.php         ← implements Laravel\Ai\Contracts\Tool — artisan/composer/npm
 │
 ├── Jobs/
-│   ├── ProcessTaskJob.php               ← Orquestra o pipeline Agent→QA→Git (simplificado)
+│   ├── OrchestratorJob.php              ← Despacha OrchestratorAgent → grava subtasks → enfileira workers
+│   ├── ProcessSubtaskJob.php            ← Executa um SpecialistAgent para uma Subtask específica
+│   ├── QAAuditJob.php                   ← Executa QAAuditorAgent sobre o diff de uma subtask
+│   ├── SecurityAuditJob.php             ← Executa SecuritySpecialist após QA aprovar
+│   ├── PerformanceAnalysisJob.php       ← Executa PerformanceAnalyst após Security aprovar
 │   └── ContextCompressionJob.php        ← Comprime sessão quando atinge threshold 0.6
 │
 ├── Events/
@@ -773,6 +777,8 @@ app/
 ├── Models/
 │   ├── Project.php
 │   ├── ProjectModule.php
+│   ├── ProjectSpecification.php
+│   ├── ProjectQuotation.php
 │   ├── Task.php
 │   ├── Subtask.php
 │   ├── AgentConfig.php
@@ -831,11 +837,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
    → Gravar branch name em tasks.git_branch.
 
 3. [MEMÓRIA & CONTEXTO]
-   a. Consultar `problems_solutions` via busca semântica usando o `prd_payload` da task.
-      → `whereVectorSimilarTo()` do Eloquent (pgvector nativo no PostgreSQL) retorna os Top 3
-        problemas+soluções mais similares ao PRD atual por similaridade de cosseno (>0.7).
-      → Isso evita repetir erros. Se a task é "Criar Resource de Posts" e no passado 
-        um Resource similar falhou por falta de `$table` property, essa informação será injetada.
+   a. *(Fase 3 — quando `problems_solutions` estiver implementado)* Busca semântica via `SimilaritySearch::usingModel(ProblemSolution::class)` — tool SDK que o agente chama dinamicamente quando necessário. Retorna os Top 3 problemas+soluções com similaridade de cosseno > 0.7. O agente decide quando usar com base na complexidade do PRD — não é injeção estática obrigatória.
    b. Consultar `context_library` WHERE knowledge_area IN (áreas da task) AND is_active = true.
       → Carrega os padrões de código TALL que o agente DEVE seguir.
    c. Carregar histórico de conversa via `RemembersConversations` (SDK nativo — tabela `agent_conversations`).
@@ -903,12 +905,13 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
      → Pergunta ao LLM:
        "O código gerado atende ESTRITAMENTE a TODOS os critérios do Sub-PRD?
         Os padrões TALL foram seguidos? Existem bugs óbvios?"
-     → O LLM responde com um JSON estruturado:
+     → O LLM responde com um JSON estruturado (schema canônico em PROMPTS.md §3.2):
        {
          "approved": true/false,
-         "issues": ["descrição do problema 1", ...],
-         "severity": "critical" | "minor" | "cosmetic",
-         "suggestion": "como corrigir"
+         "criteria_checklist": [{"criterion": "...", "passed": true/false, "note": "..."}],
+         "issues": [{"file": "...", "line": N, "severity": "critical|minor|cosmetic", "description": "...", "suggestion": "..."}],
+         "overall_quality": "excellent|good|acceptable|poor",
+         "recommendation": "approve|fix_and_retry|escalate_to_human"
        }
      → Se APROVADO:
        → Marcar subtask como 'success'. Registrar em task_transitions.
@@ -1008,7 +1011,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 
       a. Detecção de N+1 Queries:
          → Instala/usa `beyondcode/laravel-query-detector` temporariamente
-         → Roda Dusk ou requests simulados contra as rotas do projeto
+         → Roda requests simulados via `ShellExecuteTool` (curl) e testes Pest Browser contra as rotas do projeto
          → Cada query lazy-loaded é reportada com arquivo e linha
       
       b. Verificação de Índices Missing:
@@ -1016,16 +1019,15 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
          → Roda `EXPLAIN` nas queries e verifica se estão usando index scan
          → Sugere criação de índices via migration
       
-      c. Dusk Browser Simulation (Validação Real):
-         → Roda `php artisan dusk` para simular um USUÁRIO REAL navegando:
-           - Preenche formulários com dados realistas (via Factory)
-           - Clica em botões, navega entre páginas
-           - Verifica que JavaScript (Alpine.js/Livewire) funciona
-           - Captura screenshots em cada passo para evidência visual
-         → Se Dusk falhar:
-           - Captura screenshot do erro via `ShellExecuteTool` (`php artisan dusk --debug`) + `BoostTool.browser-logs` do Projeto Alvo
-           - Inclui o screenshot no relatório para análise multimodal
-           - Cria subtask de correção com o screenshot como contexto
+      c. Browser Tests com Pest 4 (Validação Real):
+         → Roda `php artisan test tests/Browser/ --compact` via `ShellExecuteTool`:
+           - Preenche formulários com dados realistas via `visit()/fill()/click()`
+           - Verifica ausência de erros de JavaScript (`assertNoJavaScriptErrors()`)
+           - Smoke test em todas as rotas principais (`assertNoConsoleLogs()`)
+         → Se os testes de browser falharem:
+           - Captura o output do Pest + `BoostTool.browser-logs` (Telescope/Debugbar) para diagnóstico
+           - Inclui o stack trace no relatório como contexto para análise
+           - Cria subtask de correção com prioridade alta
       
       d. Análise de Tempo de Resposta:
          → Mede o tempo de resposta de cada rota principal do projeto
@@ -1040,15 +1042,15 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
         "passed": true/false,
         "n_plus_1_queries": [{"file": "...", "line": 45, "model": "Post", "relation": "comments"}],
         "missing_indexes": [{"table": "posts", "column": "user_id", "query": "..."}],
-        "dusk_passed": true/false,
-        "dusk_screenshots": ["/storage/screenshots/..."],
+        "browser_tests_passed": true/false,
+        "browser_test_failures": ["..."],
         "slow_routes": [{"route": "/posts", "time_ms": 780}],
         "recommendations": ["Adicionar eager loading em PostController@index: Post::with('comments')"]
       }
 
     → Se PASSAR: Avançar para CI/CD.
     → Se n_plus_1 ou slow_routes detectados: Criar subtask de otimização (prioridade média).
-    → Se dusk FALHAR: Criar subtask de correção (prioridade alta).
+    → Se browser_tests_passed = false: Criar subtask de correção de UI/JS (prioridade alta).
     → Otimizações não são bloqueantes (o deploy continua), mas geram tasks futuras.
 
 11. [CI/CD & COMMIT]
@@ -1067,15 +1069,15 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
 
     O sistema possui TRÊS camadas de feedback implacáveis:
 
-    **Camada 1: CI/CD Testing (Testes Unitários + Integração + Browser)**
+    **Camada 1: CI/CD Testing (Testes Unitários + Integração + Browser Logs)**
     → O servidor de testes roda a suite COMPLETA em 3 etapas:
-      Etapa 1: `php artisan test --parallel` (Pest/PHPUnit — backend)
-      Etapa 2: `php artisan dusk` (Dusk — simulação browser com dados reais)
+      Etapa 1: `php artisan test --parallel` (Pest v4 — Feature + Unit)
+      Etapa 2: `php artisan test tests/Browser/ --compact` (Pest 4 Browser — simulação real pós-merge)
       Etapa 3: `php artisan enlightn` (Enlightn — segurança + performance)
-    → POR QUE rodar Dusk AQUI também (além do passo 10)?
-      Porque o passo 10 testa o código no branch da task. O passo 12 testa 
+    → POR QUE rodar browser tests AQUI também (além do passo 10)?
+      Porque o passo 10 testa o código no branch da task. O passo 12 testa
       APÓS o merge no main — pode haver conflitos que quebraram a aplicação.
-      O Dusk aqui valida que a aplicação COMPLETA funciona, não apenas a feature nova.
+      Os browser tests aqui validam que a aplicação COMPLETA funciona, não apenas a feature nova.
     → Se TODOS os testes passarem:
       → Task vai para 'completed'. Missão cumprida.
       → O ProblemSolutionRecorder salva PRD + solução no banco vetorial.

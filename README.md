@@ -108,7 +108,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 | [ADMIN_GUIDE.md](./ADMIN_GUIDE.md) | Uso do Admin Panel Filament do ai-dev-core — onde o humano cria projetos e tasks |
 | [PRD_SCHEMA.md](./PRD_SCHEMA.md) | JSON Schema formal do PRD (Product Requirement Document) e Sub-PRD |
 | [STANDARD_MODULES.md](./STANDARD_MODULES.md) | Catálogo de Módulos Padrão (Core Master) injetados em cada Projeto Alvo |
-| [FERRAMENTAS.md](./FERRAMENTAS.md) | Catálogo das 10 ferramentas atômicas consumidas pelos agentes |
+| [FERRAMENTAS.md](./FERRAMENTAS.md) | Catálogo das 6 ferramentas atômicas consumidas pelos agentes |
 | [PROMPTS.md](./PROMPTS.md) | Engenharia de prompts: regras universais, role descriptions, segurança anti-injection |
 | [INFRASTRUCTURE.md](./INFRASTRUCTURE.md) | Requisitos de servidor, supervisor, Ollama, pgvector, ferramentas de segurança |
 | [MIGRATION_LARAVEL13.md](./MIGRATION_LARAVEL13.md) | Histórico de migração para Laravel 13 + AI SDK (arquivado) |

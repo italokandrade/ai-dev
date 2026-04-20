@@ -181,7 +181,45 @@ curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:0.5b","prompt":"O
 
 ---
 
-### 2.3. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
+### 2.3. Usuário PostgreSQL Read-Only por Projeto Alvo *(Fase 2 — Hardening do BoostTool)*
+
+**Status:** ⏳ **Pendente** — necessário antes de ativar o hardening de `BoostTool.database-query` (ver `FERRAMENTAS.md §1`).
+
+**Por quê:** O `database-query` deve usar `DB::connection('readonly')` — uma conexão PostgreSQL com permissão exclusiva de `SELECT`. Isso garante que, mesmo que o agente tente executar um `DELETE` ou `DROP`, o próprio banco recusa. É uma defesa em profundidade independente da allowlist da aplicação.
+
+**Como provisionar (executar uma vez por Projeto Alvo):**
+
+```sql
+-- 1. Criar usuário read-only (substituir <nome_banco> pelo banco do projeto alvo)
+CREATE USER aidev_readonly WITH PASSWORD '<senha_segura>';
+
+-- 2. Conceder apenas SELECT em todas as tabelas existentes
+GRANT CONNECT ON DATABASE <nome_banco> TO aidev_readonly;
+GRANT USAGE ON SCHEMA public TO aidev_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO aidev_readonly;
+
+-- 3. Garantir que tabelas futuras também sejam acessíveis
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO aidev_readonly;
+```
+
+**Como registrar no `config/database.php` do ai-dev-core:**
+
+```php
+'readonly' => [
+    'driver'   => 'pgsql',
+    'host'     => env('DB_TARGET_HOST', '127.0.0.1'),
+    'port'     => env('DB_TARGET_PORT', '5432'),
+    'database' => env('DB_TARGET_DATABASE'),          // banco do Projeto Alvo
+    'username' => env('DB_TARGET_READONLY_USER'),     // aidev_readonly
+    'password' => env('DB_TARGET_READONLY_PASSWORD'),
+],
+```
+
+> **Nota:** O `local_path` do projeto alvo determina QUAL banco usar. Em produção, `ProcessSubtaskJob` injetará as credenciais corretas ao instanciar o `BoostTool` com o `$workingDirectory` do alvo. Por ora, esta conexão pode apontar para o banco de desenvolvimento do alvo em uso.
+
+---
+
+### 2.4. Banco de Dados Vetorial (Memória de Longo Prazo e RAG)
 
 **Status:** ⏳ **Pendente** — pgvector está disponível no PostgreSQL 16 mas ainda não foi habilitado no banco `ai_dev_core`. Habilitar quando iniciar a Fase 3 (RAG).
 
@@ -256,7 +294,7 @@ npm run start
 Usar diretamente o `readability-cli` (Mozilla):
 ```bash
 npm install -g @nicolo-ribaudo/readability-cli
-readable "https://filamentphp.com/docs/3.x/panels/resources" --format markdown
+readable "https://filamentphp.com/docs/panels/resources" --format markdown
 ```
 Esta alternativa consome muito menos RAM e é suficiente para o MVP.
 

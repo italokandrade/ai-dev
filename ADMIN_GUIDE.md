@@ -40,7 +40,7 @@ A prioridade não é mais um número confuso, mas sim uma classificação semân
 
 ### 3.2 Vinculação e Fluxo
 - Uma task pode ser avulsa ou vinculada a um **Módulo**.
-- O fluxo segue uma máquina de estados rigorosa: `Pending` > `In Progress` > `Testing` > `Revision` > `Completed`/`Failed`.
+- O fluxo segue uma máquina de estados rigorosa: `pending` → `in_progress` → `qa_audit` → `testing` → `completed` / `rejected` → `rollback` → `failed`.
 
 ## 4. Orçamentos e Custos (`Quotations`)
 Localizado no grupo "Configuração", permite estimar o custo humano vs. custo AI-Dev.

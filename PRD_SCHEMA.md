@@ -88,7 +88,7 @@ Este é o formato que preenche o campo `tasks.prd_payload`:
           "type": "array",
           "description": "URLs de documentação ou exemplos que o agente deve consultar via `DocSearchTool` (Laravel Boost `search-docs`).",
           "items": { "type": "string" },
-          "examples": ["https://filamentphp.com/docs/3.x/panels/resources"]
+          "examples": ["https://filamentphp.com/docs/panels/resources"]
         },
         "screenshots": {
           "type": "array",
@@ -158,8 +158,8 @@ Abaixo está um exemplo real e completo de um PRD bem escrito para criar um CRUD
     ],
     "related_tables": ["users"],
     "reference_urls": [
-      "https://filamentphp.com/docs/3.x/panels/resources/creating-records",
-      "https://filamentphp.com/docs/3.x/tables/columns"
+      "https://filamentphp.com/docs/panels/resources/creating-records",
+      "https://filamentphp.com/docs/tables/columns"
     ]
   },
   "priority_hint": "high",
