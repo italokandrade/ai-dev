@@ -52,7 +52,7 @@ Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e
 
 **O que é:** O Supervisor é o padrão da indústria para monitorar processos de longa duração no Linux. Ele substitui o uso frágil de `nohup` e `&` para rodar scripts em background.
 
-**Por que precisamos:** Atualmente o sistema usa `gemini_watchdog.sh` com `nohup`. Se esse script crashar (estouro de memória, timeout de API, falha de rede), ele morre silenciosamente e ninguém percebe. O Supervisor reinicia o processo automaticamente em milissegundos.
+**Por que precisamos:** O padrão anterior usava `gemini_watchdog.sh` com `nohup` — descontinuado. O Supervisor substitui esses scripts frágeis: se um worker crashar (estouro de memória, timeout, falha de rede), ele reinicia automaticamente em milissegundos sem intervenção humana.
 
 **O que ele vai monitorar no AI-Dev:**
 
@@ -538,5 +538,5 @@ php artisan cache:clear
 
 ---
 
-**Nota Final:** Todo o sistema agêntico usa `openrouter` com família Anthropic (Opus 4.7 / Sonnet 4.6 / Haiku 4.5). Único `.env` necessário: `OPENROUTER_API_KEY`. Os proxies locais (8001/8002) são infraestrutura reservada para uso futuro.
+**Nota Final:** Todo o sistema agêntico usa `openrouter` com família Anthropic (Opus 4.7 / Sonnet 4.6 / Haiku 4.5). Único `.env` necessário: `OPENROUTER_API_KEY`. Os proxies Python legados (8001/8002) foram **descontinuados** — não há proxy local intermediário.
 

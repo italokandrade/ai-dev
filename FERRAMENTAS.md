@@ -84,6 +84,15 @@ As ferramentas que tocam filesystem/shell/git recebem `string $workingDirectory`
 - **Sempre antes de auditar código:** o `QAAuditorAgent` valida que o padrão gerado bate com a doc oficial da versão instalada.
 - **Nunca** para buscar docs do ai-dev-core (mesmo que ambos usem Laravel 13 e Filament 5 — o BoostTool do alvo reflete exatamente as versões `composer.lock` do alvo).
 
+### Abordagem de Ferramentas de Banco: Eloquent Individual vs. Query Builder
+
+O artigo [Production-Safe Database Tools](https://laravel.com/blog/laravel-ai-sdk-building-production-safe-database-tools-for-agents) recomenda duas estratégias:
+
+- **Individual Eloquent Tools (ponto de partida recomendado):** uma classe `Tool` por query de negócio (ex: `GetOrdersTool`, `GetSubscriptionsTool`). Schema fixo, intenção clara, surface de ataque mínima — o LLM passa apenas parâmetros tipados, nunca compõe SQL.
+- **Query Builder Tool (para escala):** uma única tool aceita `table/columns/conditions` estruturados. Recomendado somente quando o número de tools individuais ultrapassa ~10, pois exige camadas extras de segurança (allowlist, redação, readonly).
+
+**Decisão deste projeto:** o `database-query` segue o padrão Query Builder desde o início porque é um wrapper de uso interno do sistema — os agentes inspecionam schema do Projeto Alvo, não consultam dados de negócio do usuário final. Tools de domínio de negócio futuras devem seguir o padrão Individual Eloquent.
+
 ### Hardening do `database-query` *(Fase 2 — a implementar)*
 
 A sub-tool `database-query` aceita atualmente SQL livre (`query: string`). Antes de ir para produção, ela deve receber as seguintes proteções, alinhadas com o padrão "Production-Safe Database Tools" do Laravel AI SDK blog:
@@ -160,6 +169,15 @@ private function capOutput(array $rows, int $maxChars = 8000): string
     return $result;
 }
 ```
+
+#### Teste adversarial *(recomendado pelo blog)*
+
+Inclua na suite de testes prompts que tentam acessar tabelas ou colunas fora da allowlist. Exemplos:
+- `"SELECT * FROM users WHERE password IS NOT NULL"` — deve ser bloqueado pela allowlist de colunas
+- `"SELECT * FROM migrations"` — deve ser bloqueado pela allowlist de tabelas
+- Query com operador não permitido (ex: `DROP`, `INSERT`) — deve ser rejeitada antes da execução
+
+Audite o `tool_calls_log` periodicamente para ver o que os agentes realmente consultam em produção.
 
 **Referência:** [Laravel AI SDK — Building Production-Safe Database Tools for Agents](https://laravel.com/blog/laravel-ai-sdk-building-production-safe-database-tools-for-agents)
 

@@ -423,7 +423,7 @@ Essencial para controle de custo, debugging e otimização.
 | `agent_id` | FK → `agents_config.id` | Qual agente fez a chamada |
 | `subtask_id` | FK → `subtasks.id` / Nullable | Subtask associada (se aplicável) |
 | `task_id` | FK → `tasks.id` / Nullable | Task associada |
-| `provider` | String(50) | Provedor usado nesta chamada (ex: `gemini`, `anthropic`) |
+| `provider` | String(50) | Provedor usado nesta chamada (ex: `openrouter`, `ollama`) |
 | `model` | String(100) | Modelo efetivamente usado na chamada (ex: `anthropic/claude-sonnet-4-6`) |
 | `prompt_tokens` | Int | Tokens de entrada consumidos |
 | `completion_tokens` | Int | Tokens de saída gerados |
@@ -741,7 +741,7 @@ app/
 ├── Enums/
 │   ├── TaskStatus.php               ← pending, in_progress, qa_audit, testing, completed, etc.
 │   ├── SubtaskStatus.php            ← pending, running, qa_audit, success, error, blocked
-│   ├── AgentProvider.php            ← gemini, anthropic, ollama
+│   ├── AgentProvider.php            ← openrouter, ollama
 │   ├── TaskSource.php               ← manual, webhook, sentinel, ci_cd
 │   ├── KnowledgeArea.php            ← backend, frontend, database, filament, devops, security, performance
 │   └── SecuritySeverity.php         ← critical, high, medium, low, informational
