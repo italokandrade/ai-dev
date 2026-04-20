@@ -7,6 +7,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Schemas\Components\Grid;
@@ -20,15 +21,10 @@ class SystemSettingsPage extends Page implements HasForms
     use InteractsWithForms;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-cog-6-tooth';
-
     protected static ?string $navigationLabel = 'Configurações';
-
     protected static ?string $title = 'Configurações do Sistema';
-
     protected static string|\UnitEnum|null $navigationGroup = 'Configuracao';
-
     protected static ?int $navigationSort = 10;
-
     protected string $view = 'filament.pages.system-settings-page';
 
     public ?array $data = [];
@@ -37,9 +33,27 @@ class SystemSettingsPage extends Page implements HasForms
     {
         $this->form->fill([
             'system_name' => SystemSetting::get(SystemSetting::SYSTEM_NAME, 'AI-Dev'),
-            'openrouter_api_key' => SystemSetting::get(SystemSetting::OPENROUTER_API_KEY),
-            'default_opus_model' => SystemSetting::get(SystemSetting::DEFAULT_OPUS_MODEL, 'anthropic/claude-opus-4.7'),
-            'default_sonnet_model' => SystemSetting::get(SystemSetting::DEFAULT_SONNET_MODEL, 'anthropic/claude-sonnet-4-6'),
+            
+            // Premium
+            'ai_premium_provider' => SystemSetting::get(SystemSetting::AI_PREMIUM_PROVIDER, 'openrouter'),
+            'ai_premium_key' => SystemSetting::get(SystemSetting::AI_PREMIUM_KEY),
+            'ai_premium_model' => SystemSetting::get(SystemSetting::AI_PREMIUM_MODEL, 'anthropic/claude-opus-4.7'),
+            
+            // High
+            'ai_high_provider' => SystemSetting::get(SystemSetting::AI_HIGH_PROVIDER, 'openrouter'),
+            'ai_high_key' => SystemSetting::get(SystemSetting::AI_HIGH_KEY),
+            'ai_high_model' => SystemSetting::get(SystemSetting::AI_HIGH_MODEL, 'anthropic/claude-sonnet-4-6'),
+            
+            // Fast
+            'ai_fast_provider' => SystemSetting::get(SystemSetting::AI_FAST_PROVIDER, 'openrouter'),
+            'ai_fast_key' => SystemSetting::get(SystemSetting::AI_FAST_KEY),
+            'ai_fast_model' => SystemSetting::get(SystemSetting::AI_FAST_MODEL, 'anthropic/claude-haiku-4.5'),
+
+            // Sistema
+            'ai_system_provider' => SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter'),
+            'ai_system_key' => SystemSetting::get(SystemSetting::AI_SYSTEM_KEY),
+            'ai_system_model' => SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-sonnet-4-6'),
+
             'development_enabled' => SystemSetting::isDevelopmentEnabled(),
             'maintenance_mode' => SystemSetting::get(SystemSetting::MAINTENANCE_MODE, '0') === '1',
         ]);
@@ -50,92 +64,70 @@ class SystemSettingsPage extends Page implements HasForms
         return $schema
             ->schema([
                 Section::make('Identidade do Sistema')
-                    ->description('Configurações visuais e de identificação.')
                     ->schema([
-                        TextInput::make('system_name')
-                            ->label('Nome do Sistema')
-                            ->required(),
+                        TextInput::make('system_name')->label('Nome do Sistema')->required(),
                         Grid::make(2)->schema([
-                            FileUpload::make('system_logo')
-                                ->label('Logotipo')
-                                ->image()
-                                ->directory('system'),
-                            FileUpload::make('system_favicon')
-                                ->label('Favicon')
-                                ->image()
-                                ->directory('system'),
+                            FileUpload::make('system_logo')->label('Logotipo')->image()->directory('system'),
+                            FileUpload::make('system_favicon')->label('Favicon')->image()->directory('system'),
                         ]),
                     ])->collapsible(),
 
-                Section::make('Configurações de IA')
-                    ->description('Credenciais e modelos para as interações do sistema.')
-                    ->schema([
-                        TextInput::make('openrouter_api_key')
-                            ->label('OpenRouter API Key')
-                            ->password()
-                            ->revealable()
-                            ->helperText('Chave usada para as IAs de interação e assistentes.'),
-                        Grid::make(2)->schema([
-                            TextInput::make('default_opus_model')
-                                ->label('Modelo Opus (Planejamento)')
-                                ->default('anthropic/claude-opus-4.7'),
-                            TextInput::make('default_sonnet_model')
-                                ->label('Modelo Sonnet (Código/QA)')
-                                ->default('anthropic/claude-sonnet-4-6'),
-                        ]),
-                    ])->collapsible(),
+                $this->getAiSection('IA Nível PREMIUM (Planejamento)', 'Configurações para o nível mais alto de inteligência.', 'ai_premium'),
+                $this->getAiSection('IA Nível HIGH (Desenvolvimento/QA)', 'Configurações para o motor principal de codificação.', 'ai_high'),
+                $this->getAiSection('IA Nível FAST (Documentação/Jobs)', 'Configurações para tarefas rápidas e menor custo.', 'ai_fast'),
+                $this->getAiSection('IA DO SISTEMA (Produção/Interação)', 'Modelo utilizado pelos usuários finais da aplicação.', 'ai_system'),
 
                 Section::make('Controle Operacional')
-                    ->description('Gerenciamento de execução e disponibilidade.')
                     ->schema([
                         Grid::make(2)->schema([
-                            Toggle::make('development_enabled')
-                                ->label('Habilitar Agentes de Desenvolvimento')
-                                ->helperText('Ativa/Pausa a execução automática de tasks pelos subagentes.')
-                                ->onColor('success')
-                                ->offColor('danger'),
-                            Toggle::make('maintenance_mode')
-                                ->label('Modo de Manutenção')
-                                ->helperText('Bloqueia o acesso de usuários comuns ao sistema.')
-                                ->onColor('warning'),
+                            Toggle::make('development_enabled')->label('Habilitar Agentes')->onColor('success'),
+                            Toggle::make('maintenance_mode')->label('Modo de Manutenção')->onColor('warning'),
                         ]),
                     ]),
             ])
             ->statePath('data');
     }
 
-    protected function getHeaderActions(): array
+    protected function getAiSection(string $title, string $description, string $prefix): Section
     {
-        return [
-            Action::make('save')
-                ->label('Salvar Configurações')
-                ->color('primary')
-                ->action('save'),
-        ];
+        return Section::make($title)
+            ->description($description)
+            ->schema([
+                Grid::make(3)->schema([
+                    Select::make("{$prefix}_provider")
+                        ->label('Provider')
+                        ->options([
+                            'openrouter' => 'OpenRouter',
+                            'anthropic' => 'Anthropic',
+                            'openai' => 'OpenAI',
+                            'ollama' => 'Ollama (Local)',
+                        ])->required(),
+                    TextInput::make("{$prefix}_key")
+                        ->label('API Key')
+                        ->password()
+                        ->revealable(),
+                    TextInput::make("{$prefix}_model")
+                        ->label('Modelo')
+                        ->placeholder('ex: anthropic/claude-3.5-sonnet')
+                        ->required(),
+                ]),
+            ])->collapsible()->collapsed();
     }
 
     public function save(): void
     {
         $data = $this->form->getState();
 
-        SystemSetting::set(SystemSetting::SYSTEM_NAME, $data['system_name']);
-        SystemSetting::set(SystemSetting::OPENROUTER_API_KEY, $data['openrouter_api_key']);
-        SystemSetting::set(SystemSetting::DEFAULT_OPUS_MODEL, $data['default_opus_model']);
-        SystemSetting::set(SystemSetting::DEFAULT_SONNET_MODEL, $data['default_sonnet_model']);
-        SystemSetting::setDevelopmentEnabled($data['development_enabled']);
-        SystemSetting::set(SystemSetting::MAINTENANCE_MODE, $data['maintenance_mode'] ? '1' : '0');
-
-        if (isset($data['system_logo'])) {
-            SystemSetting::set(SystemSetting::SYSTEM_LOGO, is_array($data['system_logo']) ? reset($data['system_logo']) : $data['system_logo']);
-        }
-        
-        if (isset($data['system_favicon'])) {
-            SystemSetting::set(SystemSetting::SYSTEM_FAVICON, is_array($data['system_favicon']) ? reset($data['system_favicon']) : $data['system_favicon']);
+        foreach ($data as $key => $value) {
+            if ($key === 'development_enabled') {
+                SystemSetting::setDevelopmentEnabled($value);
+            } elseif ($key === 'maintenance_mode') {
+                SystemSetting::set(SystemSetting::MAINTENANCE_MODE, $value ? '1' : '0');
+            } else {
+                SystemSetting::set($key, $value);
+            }
         }
 
-        Notification::make()
-            ->title('Configurações atualizadas!')
-            ->success()
-            ->send();
+        Notification::make()->title('Configurações salvas!')->success()->send();
     }
 }

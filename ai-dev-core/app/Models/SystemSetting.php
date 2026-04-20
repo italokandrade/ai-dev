@@ -20,10 +20,25 @@ class SystemSetting extends Model
     public const SYSTEM_LOGO = 'system_logo';
     public const SYSTEM_FAVICON = 'system_favicon';
     
-    // Chaves Fixas (IA)
-    public const OPENROUTER_API_KEY = 'openrouter_api_key';
-    public const DEFAULT_OPUS_MODEL = 'default_opus_model';
-    public const DEFAULT_SONNET_MODEL = 'default_sonnet_model';
+    // IA Nível PREMIUM (Ex: Opus 4.7)
+    public const AI_PREMIUM_PROVIDER = 'ai_premium_provider';
+    public const AI_PREMIUM_KEY = 'ai_premium_key';
+    public const AI_PREMIUM_MODEL = 'ai_premium_model';
+
+    // IA Nível HIGH (Ex: Sonnet 4.6)
+    public const AI_HIGH_PROVIDER = 'ai_high_provider';
+    public const AI_HIGH_KEY = 'ai_high_key';
+    public const AI_HIGH_MODEL = 'ai_high_model';
+
+    // IA Nível FAST (Ex: Haiku 4.5)
+    public const AI_FAST_PROVIDER = 'ai_fast_provider';
+    public const AI_FAST_KEY = 'ai_fast_key';
+    public const AI_FAST_MODEL = 'ai_fast_model';
+
+    // IA DO SISTEMA (Produção/Interação)
+    public const AI_SYSTEM_PROVIDER = 'ai_system_provider';
+    public const AI_SYSTEM_KEY = 'ai_system_key';
+    public const AI_SYSTEM_MODEL = 'ai_system_model';
     
     // Chaves Fixas (Operacional)
     public const DEVELOPMENT_ENABLED = 'development_enabled';
