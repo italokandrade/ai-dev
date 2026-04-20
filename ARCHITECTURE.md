@@ -11,8 +11,8 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │                        AI-DEV CORE (Laravel 13)                      │
 │                                                                      │
 │  ┌────────────┐   ┌──────────────┐   ┌───────────────────────────┐  │
-│  │ Filament v5 │   │  Prompt       │   │   Tool Layer (MCP)        │  │
-│  │ (Web UI)    │   │  Factory      │   │   (Plugins Isolados)      │  │
+│  │ Filament v5 │   │  Agent        │   │   Tool Layer (MCP)        │  │
+│  │ (Web UI)    │   │  instructions │   │   (Laravel AI SDK Tools)  │  │
 │  └──────┬──────┘   └──────┬───────┘   └────────────┬──────────────┘  │
 │         │                 │                        │                  │
 │  ┌──────▼─────────────────▼────────────────────────▼──────────────┐  │
@@ -31,7 +31,7 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐    │
 │  │   Motores LLM                                                │    │
-│  │   openrouter/claude-opus-4-7 (Planejamento)                   │    │
+│  │   openrouter/claude-opus-4.7 (Planejamento)                   │    │
 │  │   openrouter/claude-sonnet-4-6 (Código/QA)                   │    │
 │  │   openrouter/claude-haiku-4-5-20251001 (Docs)                │    │
 │  │   Ollama Local (Compressor — planejado, fase futura)          │    │
@@ -46,6 +46,47 @@ O AI-Dev é um ecossistema de desenvolvimento de software autônomo, assíncrono
 
 **Por que essa arquitetura e não outra?**
 Sistemas multi-agente baseados em "prompt chains" livres (onde uma IA simplesmente chama outra sem controle) são frágeis e imprevisíveis. O AI-Dev elimina esse problema ao usar o PostgreSQL como **fonte da verdade única**: todo estado, toda transição e todo resultado ficam registrados em tabelas com constraints SQL. Não existe "estado na memória" — se o servidor reiniciar, o sistema retoma exatamente de onde parou lendo o banco.
+
+> **Nota de leitura:** O diagrama acima representa o **ai-dev-core** (Master). Todos os componentes (Filament, agentes, pgvector, Sentinel) vivem dentro do ai-dev-core. O código-alvo que o `SpecialistAgent` lê e escreve, o Git que o `GitOperationTool` opera, e o Boost MCP que o `BoostTool` consulta ficam em **outra** aplicação Laravel — o **Projeto Alvo**. Veja a seção 1.A a seguir.
+
+---
+
+## 1.A. Arquitetura em Duas Camadas: ai-dev-core vs. Projeto Alvo
+
+O AI-Dev opera sobre **duas classes distintas de aplicações Laravel**, cada uma com seu próprio ciclo de vida, repositório e Boost MCP. Entender essa separação é pré-requisito para ler qualquer outra seção deste documento.
+
+- **ai-dev-core (Master)** — Esta aplicação Laravel 13 + Filament v5. Contém os agentes de desenvolvimento (`OrchestratorAgent`, `SpecialistAgent`, `QAAuditorAgent`, `DocsAgent`), as AIs de interação com o usuário do Admin Panel (`RefineDescriptionAgent`, `SpecificationAgent`, `QuotationAgent`), as filas, o Boost MCP usado pelo Claude Code para manutenção do próprio ai-dev-core, e o banco `ai_dev_core` (projects, tasks, subtasks, agents_config, task_transitions, etc.).
+- **Projeto Alvo** — Toda aplicação Laravel operada pelo ai-dev-core. Tem seu próprio repositório GitHub, seu próprio banco, suas próprias dependências, seu próprio Boost MCP instalado e pode ter suas próprias AIs de interação (definidas na spec de cada projeto). **Não tem agentes de desenvolvimento** — quem desenvolve é o ai-dev-core, consumindo o Boost do Projeto Alvo como fonte de contexto.
+
+A tabela comparativa canônica — com repositório, codebase, banco, dependências, Boost, Admin Panel, AIs, workers e `.env` — vive em [`README.md` → seção "Arquitetura em Duas Camadas"](./README.md#-arquitetura-em-duas-camadas-authoritative). Este documento referencia aquela tabela e **não** a duplica.
+
+### 1.A.1. Acoplamento entre Camadas
+
+O ai-dev-core se conecta a cada Projeto Alvo por **dois vetores** e nada mais:
+
+1. **Filesystem** — `projects.local_path` armazena o caminho absoluto (ex: `/var/www/html/projetos/portal`). `FileReadTool`, `FileWriteTool`, `ShellExecuteTool` e `GitOperationTool` recebem esse path no constructor e operam **exclusivamente** dentro dele.
+2. **Boost MCP do Projeto Alvo** — o `BoostTool` envelopa `php artisan boost:*` executado **dentro** do `local_path` do alvo. Isso garante que `database-schema`, `search-docs`, `database-query`, `browser-logs` reflitam o estado real **daquele** projeto (inclusive versões de Laravel/Filament/Livewire instaladas, que podem divergir do ai-dev-core).
+
+Nenhum estado do ai-dev-core vaza para o Projeto Alvo: o agente escreve código, commita no repositório do alvo, executa testes no alvo. A trilha de auditoria (quem fez o quê, tokens gastos, transições de status) fica registrada **somente** no banco do ai-dev-core.
+
+### 1.A.2. Duas Classes de AIs
+
+Para evitar confusão entre os vários papéis de IA no ecossistema:
+
+| Papel | Onde vive | Quem usa | Exemplos |
+|---|---|---|---|
+| **IAs de Interação** *(falam com o usuário)* | Em **cada** aplicação Laravel — ai-dev-core tem as suas; cada Projeto Alvo tem as suas. | Usuários finais pelo Admin Panel dessa aplicação. | `RefineDescriptionAgent`, `SpecificationAgent`, `QuotationAgent` (ai-dev-core); copiloto do usuário, classificador, sumarizador (Projeto Alvo). |
+| **IAs de Desenvolvimento** *(escrevem código)* | **Exclusivamente** no ai-dev-core. | O próprio ai-dev-core, processando tasks na fila. Operam sobre o filesystem e o Boost do Projeto Alvo. | `OrchestratorAgent`, `SpecialistAgent`, `QAAuditorAgent`, `DocsAgent`. |
+
+Projetos Alvo **nunca** instanciam agentes de desenvolvimento — desenvolvimento autônomo é a responsabilidade única do ai-dev-core.
+
+### 1.A.3. Stack Compartilhada vs. Stack Divergente
+
+A stack descrita no `README.md` (Laravel 13, Filament v5, Livewire 4, PostgreSQL 16 + pgvector, Redis 7, PHP 8.3) é simultaneamente:
+- A stack interna **do próprio ai-dev-core**;
+- A stack **default** que `instalar_projeto.sh` provisiona para novos Projetos Alvo.
+
+Projetos Alvo podem divergir (ex: pinar Filament v5.3 enquanto o ai-dev-core usa v5.4). O Boost MCP do alvo é quem reflete o real — por isso os agentes sempre consultam o Boost do alvo antes de gerar código, em vez de assumir que a versão do ai-dev-core se aplica.
 
 ---
 
@@ -68,8 +109,7 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `name` | String(255) | Nome legível do projeto (único) |
 | `github_repo` | String(255) / Nullable | URL do repositório GitHub (ex: `italokandrade/portal`) |
 | `local_path` | String(500) / Nullable | Caminho absoluto no servidor (ex: `/var/www/html/projetos/portal`) |
-| `gemini_session_id` | String / Nullable | UUID da conversa persistida no Proxy Gemini — contexto infinito por projeto |
-| `claude_session_id` | String / Nullable | UUID da conversa persistida no Proxy Claude — idem |
+| `anthropic_session_id` | String / Nullable | UUID da conversa persistida pelo SDK (trait `RemembersConversations`) — contexto infinito por projeto, servido via OpenRouter → família Anthropic |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
@@ -177,9 +217,9 @@ Permite trocar o modelo de IA, ajustar o temperatura e alterar o system prompt d
 | `id` | String / PK | Identificador do agente (ex: `orchestrator`, `qa-auditor`, `backend-specialist`) |
 | `display_name` | String(100) | Nome legível para a UI (ex: "Especialista Backend TALL") |
 | `role_description` | Text | System Prompt base que define o comportamento do agente |
-| `provider` | String(50) | Provedor de IA (ex: `gemini`, `anthropic`, `ollama`) |
-| `model` | String(100) | Modelo específico (ex: `gemini-3.1-flash-lite-preview`, `claude-sonnet-4-6`) |
-| `api_key_env_var` | String(100) | Nome da variável de ambiente com a chave API (ex: `GEMINI_API_KEY`) |
+| `provider` | String(50) | Provedor de IA registrado em `config/ai.php` (ex: `openrouter`, `ollama`) |
+| `model` | String(100) | Modelo específico (ex: `anthropic/claude-opus-4.7`, `anthropic/claude-sonnet-4-6`, `anthropic/claude-haiku-4-5-20251001`) |
+| `api_key_env_var` | String(100) | Nome da variável de ambiente com a chave API (ex: `OPENROUTER_API_KEY`) |
 | `temperature` | Float (0.0 - 2.0) | Criatividade (0.0 = determinístico, 1.0+ = criativo). Orchestrator usa 0.2, Executores usam 0.4 |
 | `max_tokens` | Int | Máximo de tokens de saída por resposta. Padrão: 8192 |
 | `knowledge_areas` | JSON | Array de áreas de conhecimento do agente (ex: `["backend", "database", "filament"]`) |
@@ -193,7 +233,7 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 
 | Classe | Provider | Modelo | Motivo |
 |---|---|---|---|
-| **Orchestrator / Specification / Quotation / Refine** | **openrouter** | `anthropic/claude-opus-4-7` | Máxima qualidade para planejamento e especificação |
+| **Orchestrator / Specification / Quotation / Refine** | **openrouter** | `anthropic/claude-opus-4.7` | Máxima qualidade para planejamento e especificação |
 | **SpecialistAgent / QAAuditorAgent** | **openrouter** | `anthropic/claude-sonnet-4-6` | Qualidade + custo para execução e auditoria de código |
 | **DocsAgent** | **openrouter** | `anthropic/claude-haiku-4-5-20251001` | Rápido e barato para consultas de documentação |
 | **Context Compressor** | **Ollama** (local) | `qwen2.5:0.5b` | Sem custo de API; modelo leve suficiente para sumarização (Fase 3) |
@@ -204,15 +244,15 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 
 | ID | Papel | Provider | Modelo | Temperatura |
 |---|---|---|---|---|
-| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `openrouter` | claude-opus-4-7 | 0.2 |
+| `orchestrator` | Planner — Recebe o PRD e quebra em Sub-PRDs | `openrouter` | claude-opus-4.7 | 0.2 |
 | `qa-auditor` | Judge — Audita cada entrega contra o PRD | `openrouter` | claude-sonnet-4-6 | 0.1 |
 | `security-specialist` | Auditor — Pentest, OWASP Top 10, vulnerabilidades | `openrouter` | claude-sonnet-4-6 | 0.1 |
 | `performance-analyst` | Analista — N+1 queries, slow queries, otimizações | `openrouter` | claude-sonnet-4-6 | 0.2 |
 | `backend-specialist` | Executor — Controllers, Models, Services, Migrations | `openrouter` | claude-sonnet-4-6 | 0.4 |
 | `frontend-specialist` | Executor — Blade, Livewire, Alpine.js, Tailwind, Anime.js | `openrouter` | claude-sonnet-4-6 | 0.5 |
-| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `anthropic` (via proxy) | `gemini` | 0.3 |
-| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `anthropic` (via proxy) | `gemini` | 0.2 |
-| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `anthropic` (via proxy) | `gemini` | 0.2 |
+| `filament-specialist` | Executor — Resources, Pages, Widgets, Forms, Tables Filament v5 | `openrouter` | claude-sonnet-4-6 | 0.3 |
+| `database-specialist` | Executor — Migrations, Seeders, Queries complexas | `openrouter` | claude-sonnet-4-6 | 0.2 |
+| `devops-specialist` | Executor — CI/CD, deploy, permissões, Supervisor | `openrouter` | claude-sonnet-4-6 | 0.2 |
 | `context-compressor` | Utilitário — Comprime sessões longas em resumos | `ollama` (qwen2.5:0.5b) | — | 0.1 |
 
 ---
@@ -384,7 +424,7 @@ Essencial para controle de custo, debugging e otimização.
 | `subtask_id` | FK → `subtasks.id` / Nullable | Subtask associada (se aplicável) |
 | `task_id` | FK → `tasks.id` / Nullable | Task associada |
 | `provider` | String(50) | Provedor usado nesta chamada (ex: `gemini`, `anthropic`) |
-| `model` | String(100) | Modelo usado (ex: `gemini-3.1-flash-lite-preview`) |
+| `model` | String(100) | Modelo efetivamente usado na chamada (ex: `anthropic/claude-sonnet-4-6`) |
 | `prompt_tokens` | Int | Tokens de entrada consumidos |
 | `completion_tokens` | Int | Tokens de saída gerados |
 | `total_tokens` | Int | Total de tokens (entrada + saída) |
@@ -403,12 +443,29 @@ Essencial para controle de custo, debugging e otimização.
 **`tool_calls_log`** *(Fase 2 — não implementado ainda)* — Registro de cada ferramenta executada pelos agentes.
 A camada de segurança e auditoria — permite investigar exatamente quais comandos foram rodados, quais arquivos foram alterados, e por quem.
 
+**Listener de auditoria (`Tool::dispatched()`):** O Laravel AI SDK expõe o evento `Tool::dispatched()` que deve ser usado para popular esta tabela de forma transparente, sem poluir o `handle()` de cada tool:
+
+```php
+// AppServiceProvider::boot()
+Tool::dispatched(function (Tool $tool, Request $request, string $result) {
+    ToolCallsLog::create([
+        'tool_name'        => class_basename($tool),
+        'input_params'     => $request->all(),
+        'output_result'    => $result,
+        'execution_time_ms'=> ...,
+        'security_flag'    => false,
+    ]);
+});
+```
+
+Esta é a abordagem recomendada pelo blog "Production-Safe Database Tools for Agents" para rastreabilidade de produção.
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `id` | UUID / PK | Identificador único |
 | `agent_execution_id` | FK → `agent_executions.id` | A qual chamada LLM esta tool call pertence |
 | `subtask_id` | FK → `subtasks.id` / Nullable | Subtask associada |
-| `tool_name` | String(50) | Nome da ferramenta (ex: `ShellTool`, `FileTool`) |
+| `tool_name` | String(50) | Nome da ferramenta (ex: `ShellExecuteTool`, `FileWriteTool`) |
 | `tool_action` | String(50) | Ação específica (ex: `execute`, `write`, `read`, `search`) |
 | `input_params` | JSON | Parâmetros de entrada enviados pelo agente |
 | `output_result` | Text / Nullable | Resultado retornado pela ferramenta |
@@ -472,8 +529,8 @@ $response = BackendSpecialist::make()->continue($conversationId, as: $user)->pro
 
 ---
 
-**`social_accounts`** — Credenciais de redes sociais vinculadas a cada projeto.
-Cada projeto pode publicar em múltiplas redes sociais via o pacote `hamzahassanm/laravel-social-auto-post`. As credenciais são armazenadas aqui, criptografadas, e injetadas pelo `SocialTool` em runtime.
+**`social_accounts`** *(Fase 3 — migration existe, integração não implementada)* — Credenciais de redes sociais vinculadas a cada projeto.
+Planejado para permitir publicação multi-plataforma via `hamzahassanm/laravel-social-auto-post`. As credenciais ficam armazenadas criptografadas. **Não existe tool dedicada no código atual** — quando a feature for implementada, será um Agent dedicado chamando o pacote diretamente, não um Tool SDK genérico.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -633,15 +690,12 @@ app/
 │   │   ├── PerformanceAnalyst.php       ← implements Agent, HasStructuredOutput — Analista
 │   │   └── ContextCompressor.php        ← implements Agent (usa Ollama) — Compressão
 │   └── Tools/
-│       ├── ShellTool.php                ← implements Laravel\Ai\Contracts\Tool
-│       ├── FileTool.php                 ← implements Laravel\Ai\Contracts\Tool
-│       ├── GitTool.php                  ← implements Laravel\Ai\Contracts\Tool
-│       ├── DatabaseTool.php             ← implements Laravel\Ai\Contracts\Tool
-│       ├── SearchTool.php               ← implements Laravel\Ai\Contracts\Tool
-│       ├── TestTool.php                 ← implements Laravel\Ai\Contracts\Tool
-│       ├── SecurityTool.php             ← implements Laravel\Ai\Contracts\Tool
-│       ├── DocsTool.php                 ← implements Laravel\Ai\Contracts\Tool
-│       └── MetaTool.php                 ← implements Laravel\Ai\Contracts\Tool
+│       ├── BoostTool.php                ← implements Laravel\Ai\Contracts\Tool — Boost MCP do Projeto Alvo
+│       ├── DocSearchTool.php            ← implements Laravel\Ai\Contracts\Tool — busca docs TALL via Boost
+│       ├── FileReadTool.php             ← implements Laravel\Ai\Contracts\Tool — leitura com limites
+│       ├── FileWriteTool.php            ← implements Laravel\Ai\Contracts\Tool — escrita/patch validados
+│       ├── GitOperationTool.php         ← implements Laravel\Ai\Contracts\Tool — status/diff/commit
+│       └── ShellExecuteTool.php         ← implements Laravel\Ai\Contracts\Tool — artisan/composer/npm
 │
 ├── Jobs/
 │   ├── ProcessTaskJob.php               ← Orquestra o pipeline Agent→QA→Git (simplificado)
@@ -666,10 +720,10 @@ app/
 │   └── ProblemSolutionRecorder.php        ← Grava na tabela problems_solutions
 │
 ├── Services/
-│   ├── PromptFactory.php            ← Monta contexto dinâmico (padrões TALL + RAG) — simplificado
-│   ├── FileLockManager.php          ← Mutex de arquivos para subtasks paralelas
-│   ├── PRDValidator.php             ← Valida PRD contra o JSON Schema (usa JsonSchema do SDK)
-│   └── TaskOrchestrator.php         ← Coordena o pipeline Agent→QA→Git
+│   ├── SystemContextService.php     ← Monta contexto dinâmico (padrões TALL + RAG + histórico) para a mensagem user do prompt()
+│   ├── FileLockManager.php          ← Mutex de arquivos para subtasks paralelas (Fase 2 — planejado)
+│   ├── PRDValidator.php             ← Valida PRD contra o JSON Schema (Fase 2 — planejado)
+│   └── TaskOrchestrator.php         ← Coordena o pipeline Agent→QA→Git (Fase 2 — planejado)
 │
 ├── Models/
 │   ├── Project.php
@@ -924,7 +978,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
            - Verifica que JavaScript (Alpine.js/Livewire) funciona
            - Captura screenshots em cada passo para evidência visual
          → Se Dusk falhar:
-           - Captura screenshot do erro via TestTool.action = "screenshot"
+           - Captura screenshot do erro via `ShellExecuteTool` (`php artisan dusk --debug`) + `BoostTool.browser-logs` do Projeto Alvo
            - Inclui o screenshot no relatório para análise multimodal
            - Cria subtask de correção com o screenshot como contexto
       
@@ -1032,7 +1086,7 @@ O Orchestrator e os Subagentes possuem uma **trava de compressão (threshold de 
 ```text
 1. O SDK rastreia o uso de tokens via AgentResponse::usage() (campos: promptTokens, completionTokens).
    → Calculamos o ratio: (prompt_tokens / janela_maxima_do_modelo)
-   → Ex: Se o Gemini Flash tem janela de 1M tokens e o prompt está com 600K → ratio = 0.6
+   → Ex: Se o Sonnet 4.6 tem janela de 200K tokens e o prompt está com 120K → ratio = 0.6
 
 2. Quando ratio >= 0.6:
    → O ContextCompressionJob é despachado na fila "compressor".
@@ -1052,7 +1106,7 @@ O Orchestrator e os Subagentes possuem uma **trava de compressão (threshold de 
 
 ### 5.2. Prompt Caching Nativo (Economia de até 90%)
 
-Para provedores que suportam (Anthropic Claude e Google Gemini), o sistema estrutura o prompt para maximizar cache hits:
+Como todo o sistema agêntico roteia para a família Anthropic via OpenRouter (Opus 4.7 / Sonnet 4.6 / Haiku 4.5), o prompt é estruturado para maximizar o cache hit do Anthropic prompt cache:
 
 **Como funciona:**
 
@@ -1089,7 +1143,7 @@ O prompt enviado ao LLM é SEMPRE estruturado nesta ordem:
 
 Por que essa ordem importa?
 
-A API do Claude (Anthropic) e do Gemini (Google) identificam blocos cacheáveis 
+A API da Anthropic (roteada via OpenRouter) identifica blocos cacheáveis 
 pela POSIÇÃO no prompt. Se os primeiros milhares de tokens forem IDÊNTICOS entre 
 duas chamadas, o provedor usa a versão em cache e cobra ~1/10 do preço.
 
@@ -1098,8 +1152,8 @@ a chance de cache hit. Se fizéssemos o contrário (PRD primeiro, System Prompt 
 o cache NUNCA seria aproveitado porque o início do prompt mudaria a cada chamada.
 ```
 
-**Implementação no `PromptFactory.php`:**
-O PromptFactory é o serviço responsável por montar o prompt completo. Ele segue rigorosamente a ordem acima. A Anthropic exige uma flag `cache_control: {"type": "ephemeral"}` nos blocos que devem ser cacheados. O Gemini faz isso automaticamente se os primeiros tokens forem idênticos.
+**Implementação pelo Laravel AI SDK:**
+Os blocos 1 e 2 (estático + semi-estático) são entregues pelo método `Agent::instructions()` e ficam no `system prompt` do SDK — o Laravel AI SDK aplica `cache_control: {"type": "ephemeral"}` automaticamente para os blocos longos de `system`, e o OpenRouter repassa a flag transparentemente para o backend Anthropic. O Bloco 3 (dinâmico) é concatenado ao argumento do `->prompt($subPrd . $toolResult . $qaFeedback)` e vai como mensagem `user`, portanto nunca é cacheado — exatamente o comportamento desejado.
 
 ### 5.3. RAG Vetorial via pgvector (Long-term)
 
@@ -1121,14 +1175,14 @@ O AI-Dev adota diretrizes estritas para a construção do *System Prompt*, basea
 ### 6.1. Injeção Dinâmica Baseada em Áreas de Conhecimento
 
 A tabela `agents_config` possui o campo `knowledge_areas` (JSON array de áreas).
-A **Prompt Factory** (`PromptFactory.php`) usa isso para fazer uma "Injeção Cirúrgica":
+O **`SystemContextService`** (em `app/Services/`) usa isso para fazer uma "Injeção Cirúrgica" antes de chamar `->prompt()`:
 
 **Exemplo concreto:**
 
 ```text
 Cenário: Task com PRD sobre "Erro de Layout no dashboard do Filament"
 
-1. O PromptFactory detecta as knowledge_areas relevantes: ["frontend", "filament"]
+1. O SystemContextService detecta as knowledge_areas relevantes: ["frontend", "filament"]
 
 2. Consulta context_library WHERE knowledge_area IN ("frontend", "filament")
    → Retorna: Padrão "Resource Filament v5 com Tabs", Padrão "Widget de Dashboard"
@@ -1157,9 +1211,10 @@ Camada 1: REGRAS UNIVERSAIS (iguais para todos os agentes)
   → Tool-Use Enforcement, Act Don't Ask, Verification
   → Definidas em PROMPTS.md seções 1.1, 1.2, 1.3
 
-Camada 2: REGRAS DO PROVEDOR (específicas do motor LLM)
-  → Se Gemini: caminhos absolutos, --no-interaction, paralelismo
-  → Se Claude: evitar abandono, recuperação de falha
+Camada 2: REGRAS DO PROVEDOR (específicas da família Anthropic via OpenRouter)
+  → Caminhos absolutos sempre (nunca cwd implícito)
+  → Tool-use com JSON estrito (Anthropic input_schema)
+  → Evitar abandono da task, recuperação de falha com retry
   → Definidas em PROMPTS.md seção 2
 
 Camada 3: ROLE (específica do tipo de agente)
@@ -1167,54 +1222,73 @@ Camada 3: ROLE (específica do tipo de agente)
   → Ex: "Você é um especialista em backend Laravel 13. Sua responsabilidade
          é criar Controllers, Models, Services e Migrations..."
 
-Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo PromptFactory)
+Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo SystemContextService)
   → Padrões TALL relevantes (context_library)
   → Soluções passadas (problems_solutions via RAG)
-  → Histórico comprimido (agent_conversations via RemembersConversations)
+  → Histórico carregado automaticamente pelo SDK (trait RemembersConversations)
+  → Injetado na mensagem user do Agent->prompt() — fora de cache por design
 ```
 
 ### 6.3. Motores de IA e Gestão de Sessão (Contexto Infinito por Projeto)
 
-O AI-Dev opera com um sistema de **Inferência Dupla**, permitindo alternar entre o poder bruto do Google e o raciocínio de elite da Anthropic:
+O AI-Dev concentra **toda a inferência externa em um único gateway — OpenRouter — servindo exclusivamente a família Anthropic**. Três modelos são usados, um para cada classe de trabalho, mais um modelo local para compressão:
 
-*   **Motor Gemini (O Orquestrador):** Proxy Python em `infrastructure/proxy/gemini_proxy.py` (porta 8001) invoca o Gemini CLI com modelo fixo `gemini-3.1-pro-preview`. Atua como orquestrador: recebe o PRD, planeja e despacha Sub-PRDs para os agentes specialists. O session ID é armazenado em `projects.gemini_session_id` para contexto persistente por projeto.
+*   **Opus 4.7 (Planejamento — OpenRouter):** `anthropic/claude-opus-4.7` via OpenRouter. Usado por `OrchestratorAgent`, `SpecificationAgent`, `QuotationAgent` e `RefineDescriptionAgent` — toda tarefa que exige raciocínio de alto nível, decomposição de PRD e estimativa.
 
-*   **Motor Claude (O Auxiliar/Specialist):** Proxy Python em `infrastructure/proxy/claude_proxy.py` (porta 8002) invoca o Claude Code CLI em modo `auto` (sem modelo fixo — Claude Code seleciona conforme disponibilidade e cota). Atua como agentes specialists: executa Sub-PRDs, gera código, audita qualidade. Também é o backup do Gemini em caso de falha.
+*   **Sonnet 4.6 (Código/QA — OpenRouter):** `anthropic/claude-sonnet-4-6` via OpenRouter. Usado por `SpecialistAgent` e todos os specialists de execução (backend, frontend, filament, database, devops, security, performance), além do `QAAuditorAgent`. Escolha padrão para geração e auditoria de código.
 
-*   **Motor Ollama (O Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (ex: `qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto e gerar embeddings — nunca é usado para gerar código ou planejar. Isso poupa os tokens caros dos modelos maiores.
+*   **Haiku 4.5 (Docs — OpenRouter):** `anthropic/claude-haiku-4-5-20251001` via OpenRouter. Usado pelo `DocsAgent` para consultar documentação TALL via `BoostTool.search-docs` — modelo rápido e barato para chamadas de alto volume e baixa complexidade.
 
-*   **Gestão Distribuída de Contexto:** O UUID da conversa ativa é armazenado na tabela `projects` (`gemini_session_id` / `claude_session_id`) e gerenciado pelo trait `RemembersConversations` do SDK. A cada nova chamada, `AgentClass::make()->continue($conversationId, $user)->prompt(...)` resgata automaticamente o histórico do PostgreSQL.
+*   **Ollama (Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (`qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto quando a janela atinge 60% e gerar embeddings — nunca é usado para gerar código ou planejar. Fase 3 do roadmap.
 
-**Seleção Automática de Motor via Laravel AI SDK:**
+*   **Gestão de Contexto:** O conversation ID ativo é armazenado na tabela `projects` (`anthropic_session_id`) e gerenciado pelo trait `RemembersConversations` do SDK. A cada nova chamada, `AgentClass::make()->continue($conversationId, $user)->prompt(...)` resgata automaticamente o histórico do PostgreSQL.
+
+**Seleção de Motor via Laravel AI SDK + OpenRouter:**
 
 ```text
-SDK default (config/ai.php): provider 'openrouter' — família Anthropic via OpenRouter
+SDK default (config/ai.php): provider 'openrouter' — driver 'openai' apontando para https://openrouter.ai/api/v1
+OPENROUTER_API_KEY no .env do ai-dev-core (separada da chave do Projeto Alvo).
 
-Cada Agent class define provider/model via PHP Attributes com array de fallback:
+Cada Agent class define provider/model via PHP Attributes. O atributo
+`#[Provider(...)]` aceita tanto o enum nativo `Laravel\Ai\Enums\Lab::OpenRouter`
+quanto a string `'openrouter'` — ambos resolvem para a mesma entrada em
+`config/ai.php` (alias com driver `openai` + url custom apontando para
+`https://openrouter.ai/api/v1`). Este projeto adota a forma string para manter
+consistência com `openrouter_chain` (alias customizado que não existe no enum):
 
-// ORCHESTRATOR — Gemini principal (gemini-3.1-pro-preview via proxy), Claude backup
-#[Provider([Lab::Gemini, Lab::Anthropic])]
-#[Model('gemini-3.1-pro-preview')]
+// ORCHESTRATOR — Opus 4.7 via OpenRouter
+#[Provider('openrouter')]
+#[Model('anthropic/claude-opus-4.7')]
 class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
-→ Gemini tem maior cota; orquestrador é chamado com alta frequência
+→ Decompõe PRD em Sub-PRDs; exige raciocínio profundo
 
-// AGENTS SPECIALISTS — Claude principal (modelo auto), Gemini backup
-#[Provider([Lab::Anthropic, Lab::Gemini])]
+// SPECIALISTS / QA — Sonnet 4.6 via OpenRouter
+#[Provider('openrouter')]
+#[Model('anthropic/claude-sonnet-4-6')]
 class BackendSpecialist implements Agent, Conversational, HasTools { ... }
-→ Claude Code seleciona o modelo automaticamente (modo auto)
-→ Claude gera código mais preciso e com menos alucinações
+→ Gera e audita código; equilíbrio preço/qualidade
 
-// CONTEXT COMPRESSOR — Ollama local, sem custo de API
-#[Provider(Lab::Ollama)]
+// DOCS — Haiku 4.5 via OpenRouter
+#[Provider('openrouter')]
+#[Model('anthropic/claude-haiku-4-5-20251001')]
+class DocsAgent implements Agent, HasTools { ... }
+→ Alta frequência, baixa complexidade — search-docs via BoostTool
+
+// CONTEXT COMPRESSOR — Ollama local, zero custo de API (Fase 3)
+#[Provider('ollama')]
 #[Model('qwen2.5:0.5b')]
 class ContextCompressor implements Agent { ... }
-→ Modelo leve local, sem custo, 500MB RAM
+→ Modelo leve local, ~500MB RAM
 
-O provider pode ser sobrescrito em runtime:
-  $agent->prompt($prompt, provider: Lab::Anthropic, model: 'claude-opus-4-6')
+O provider/modelo pode ser sobrescrito em runtime:
+  $agent->prompt($prompt, provider: 'openrouter', model: 'anthropic/claude-opus-4.7')
+
+Failover (per ai-sdk.md §Failover) é feito EM RUNTIME, não no atributo, passando
+um array para o parâmetro `provider:` do método `prompt()` — o atributo aceita
+apenas um provider/model único:
+  $agent->prompt($prompt, provider: ['openrouter', 'openrouter_chain'])
 
 Hierarquia de seleção: chamada explícita > PHP Attribute > agents_config > config('ai.default')
-O SDK dispara AgentFailedOver event e tenta o próximo provider no array automaticamente.
 ```
 
 ---
@@ -1225,22 +1299,18 @@ As ferramentas são classes PHP em `app/Ai/Tools/` que implementam o contrato `T
 
 O catálogo completo de ferramentas, com schemas de entrada/saída e exemplos práticos, está documentado em `FERRAMENTAS.md`. Abaixo temos o resumo consolidado:
 
-### Ferramentas Consolidadas (10 Ferramentas Atômicas — `implements Tool`)
+### Ferramentas Atômicas (6 Tools — `implements Laravel\Ai\Contracts\Tool`)
 
 | # | Ferramenta | Classe | Ações Principais |
 |---|---|---|---|
-| 1 | **ShellTool** | `App\Ai\Tools\ShellTool` | Executar comandos de terminal (artisan, npm, composição), com timeout, sandbox e logs |
-| 2 | **FileTool** | `App\Ai\Tools\FileTool` | Ler, criar, editar (patch/diff), renomear, mover, deletar arquivos. Navegação de diretórios |
-| 3 | **DatabaseTool** | `App\Ai\Tools\DatabaseTool` | DDL (migrations), DML (queries), dump, restore, describe, seed |
-| 4 | **GitTool** | `App\Ai\Tools\GitTool` | add, commit, push, pull, branch, merge, diff, stash, revert + API GitHub |
-| 5 | **SearchTool** | `App\Ai\Tools\SearchTool` | Pesquisa web (DuckDuckGo) + scraping inteligente (Firecrawl self-hosted) |
-| 6 | **TestTool** | `App\Ai\Tools\TestTool` | PHPUnit/Pest, Dusk, screenshots de falha, cobertura |
-| 7 | **SecurityTool** | `App\Ai\Tools\SecurityTool` | Enlightn, Larastan, Nikto, SQLMap, OWASP ZAP, dependency audit |
-| 8 | **DocsTool** | `App\Ai\Tools\DocsTool` | Criar/atualizar Markdown, TODOs, documentação técnica |
-| 9 | **SocialTool** | `App\Ai\Tools\SocialTool` | Publicar em redes sociais via `hamzahassanm/laravel-social-auto-post` (Facebook, Instagram, Twitter/X, LinkedIn, TikTok, YouTube, Pinterest, Telegram) |
-| 10 | **MetaTool** | `App\Ai\Tools\MetaTool` | Criar novas ferramentas dinamicamente + logging de impossibilidades |
+| 1 | **BoostTool** | `App\Ai\Tools\BoostTool` | Ponte para o Laravel Boost MCP do Projeto Alvo: `database-schema`, `search-docs`, `browser-logs`, `last-error`, `database-query` |
+| 2 | **DocSearchTool** | `App\Ai\Tools\DocSearchTool` | Busca focada em docs TALL Stack via Boost `search-docs` (wrapper usado pelo `DocsAgent`) |
+| 3 | **FileReadTool** | `App\Ai\Tools\FileReadTool` | Leitura de arquivos do Projeto Alvo com limites de linhas/bytes |
+| 4 | **FileWriteTool** | `App\Ai\Tools\FileWriteTool` | Escrita/patch de arquivos do Projeto Alvo com validação de path |
+| 5 | **GitOperationTool** | `App\Ai\Tools\GitOperationTool` | `status`, `diff`, `add`, `commit`, `branch` no repo do Projeto Alvo |
+| 6 | **ShellExecuteTool** | `App\Ai\Tools\ShellExecuteTool` | Execução de `php artisan`, `composer`, `npm`, `php -l` no cwd do Projeto Alvo |
 
-**Por que consolidamos de 18+ para 10?** Muitos agentes LLM ficam confusos quando têm dezenas de ferramentas com nomes similares. Eles desperdiçam tokens "decidindo" entre `FileArchitectTool` e `FileSystemNavigatorTool`. Com ferramentas consolidadas e sub-ações claras (ex: `FileTool.action = "read"` vs `FileTool.action = "write"`), a IA gasta menos tempo decidindo e mais tempo agindo.
+**Por que apenas 6?** O contrato `Tool` do Laravel AI SDK encoraja ferramentas enxutas com `schema()` preciso — cada Tool é uma classe PHP com ações bem definidas. Ferramentas especializadas (testes, segurança, performance, deploy, redes sociais) são cobertas pela combinação `ShellExecuteTool` + `BoostTool` no Projeto Alvo: `php artisan test`, `php artisan enlightn`, `composer audit`, etc. rodam via shell; schema e logs vêm do Boost. Funcionalidades futuras (publicação em redes sociais, análise dinâmica) serão adicionadas como Agents dedicados, não como Tools genéricas.
 
 ---
 
@@ -1272,12 +1342,12 @@ Fluxo Git de uma Task:
 | **QA rejeita a entrega** | Subagente recebe feedback do QA e tenta corrigir. Até 3 retries |
 | **Retentativas esgotadas** | Task vai para `escalated`. Notifica humano via Filament com todo o contexto |
 | **Servidor cai durante task** | O Supervisor reinicia os workers. A task permanece `in_progress` no DB. O Job é re-despachado automaticamente pelo Laravel Queue (retry built-in) |
-| **Git push falha** | GitTool tenta `git pull --rebase` + `git push` novamente. Se conflito: marca como `escalated` |
-| **API do LLM fora do ar** | O SDK faz failover automático via `AgentFailedOver` event. O `fallback_agent_id` em `agents_config` define o provedor substituto. Ex: se Claude cair, usa Gemini |
+| **Git push falha** | `GitOperationTool` tenta `git pull --rebase` + `git push` novamente. Se conflito: marca como `escalated` |
+| **API do LLM fora do ar** | O SDK faz failover automático via `AgentFailedOver` event. Como todo o tráfego passa por OpenRouter, se o modelo primário (ex: Opus 4.7) falhar, o `fallback_agent_id` em `agents_config` aponta para um fallback dentro da família Anthropic (ex: Sonnet 4.6) — todos via OpenRouter |
 | **Duas subtasks editam o mesmo arquivo** | FileLockManager impede (status `blocked`). Nunca acontece race condition |
 | **Sentinela em loop (mesmo erro)** | Hash de dedup impede criação de tasks duplicadas. Após 3 falhas: `requires_human` |
 | **Compressão de contexto corrompida** | O histórico completo fica em disco (`full_history_path`). Pode ser restaurado manualmente |
-| **Modelo local (Ollama) offline** | ContextCompressionJob faz retry com backoff exponencial. Se Ollama não voltar em 5 min, usa Gemini Flash como fallback para comprimir (mais caro, mas funciona) |
+| **Modelo local (Ollama) offline** | ContextCompressionJob faz retry com backoff exponencial. Se Ollama não voltar em 5 min, usa Haiku 4.5 via OpenRouter como fallback para comprimir (mais caro que local, mas funciona) |
 
 ### 8.3. Limites Explícitos (Circuit Breakers)
 
@@ -1366,8 +1436,8 @@ Para evitar a "síndrome do design perfeito sem código", o projeto será implem
 - [ ] Criar Models + Enums com validação de transições de estado
 - [ ] Implementar Agent classes: `OrchestratorAgent`, `QAAuditorAgent`, `BackendSpecialist`
   - Usar `Promptable` trait + `implements Agent, HasStructuredOutput, HasTools`
-  - Configurar `config/ai.php` com providers Anthropic + Gemini
-- [ ] Implementar 3 Tools SDK: `ShellTool`, `FileTool`, `GitTool` (`implements Tool`)
+  - Configurar `config/ai.php` com provider OpenRouter (família Anthropic — Opus 4.7 / Sonnet 4.6 / Haiku 4.5)
+- [ ] Implementar 6 Tools SDK: `BoostTool`, `DocSearchTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool`, `ShellExecuteTool` (`implements Laravel\Ai\Contracts\Tool`)
 - [ ] Implementar `OrchestratorJob`, `SubagentJob`, `QAAuditJob` (despachados via Laravel Queue)
 - [ ] Configurar Horizon + Supervisor para as 4 filas principais
 - [ ] Teste end-to-end: Criar uma task "Criar Model de Post" e ver o sistema executar sozinho
@@ -1378,7 +1448,10 @@ Para evitar a "síndrome do design perfeito sem código", o projeto será implem
 - [ ] Criar Migrations para: `agent_executions`, `tool_calls_log`, `context_library`
 - [ ] Implementar Filament Resources para Projects, Tasks, AgentConfig
 - [ ] Implementar Dashboard com widgets de métricas (custo, saúde de workers)
-- [ ] Implementar `TestTool` + `DatabaseTool` + `SecurityTool` (SDK Tool contract)
+- [ ] **[Alta prioridade — segurança]** Hardening do `BoostTool.database-query`: migrar de SQL raw para schema estruturado com allowlist de tabelas/colunas/operadores, redação de campos `_token`/`_secret`/`_password`/`_key`, conexão `readonly` e cap de 8 000 chars — ver `FERRAMENTAS.md §1 → Hardening do database-query`
+- [ ] **[Alta prioridade — auditoria]** Implementar listener `Tool::dispatched()` em `AppServiceProvider` para popular `tool_calls_log` automaticamente em cada tool call
+- [ ] **[Alta prioridade — validação]** Implementar `HasStructuredOutput` em `OrchestratorAgent`, `QAAuditorAgent` e `QuotationAgent` para que o SDK valide automaticamente o schema JSON de saída, eliminando parsing manual e falhas silenciosas de formato — ver referência: [Building Multi-Agent Workflows](https://laravel.com/blog/building-multi-agent-workflows-with-the-laravel-ai-sdk)
+- [ ] Estender `ShellExecuteTool` para padrões seguros de teste/segurança (`php artisan test`, `php artisan enlightn`, `composer audit`, `phpstan`) com allowlist de binários
 - [ ] Criar o Sentinela (Exception Handler para projetos alvo)
 - [ ] Implementar Git branching por task + FileLockManager para subtasks paralelas
 - [ ] Implementar circuit breakers (limites de custo, retries, tempo)
@@ -1390,17 +1463,20 @@ Para evitar a "síndrome do design perfeito sem código", o projeto será implem
 - [ ] Implementar `ContextCompressor` Agent (Ollama local) + `ContextCompressionJob`
 - [ ] Implementar RAG vetorial via `whereVectorSimilarTo()` (pgvector nativo — sem ChromaDB)
 - [ ] Implementar `toEmbeddings()` via SDK para vetorizar problemas/soluções
+- [ ] Implementar `SimilaritySearch::usingModel()` como Tool nativa do SDK, registrada nos agents que fazem busca semântica — aproveita a abstração nativa em vez de reimplementar pgvector manualmente: `SimilaritySearch::usingModel(HelpArticle::class, 'embedding')->minSimilarity(0.7)` — ver referência: [Production-Safe Database Tools](https://laravel.com/blog/laravel-ai-sdk-building-production-safe-database-tools-for-agents)
 - [ ] Implementar Prompt Caching (ordem correta: estático → semi-estático → dinâmico)
-- [ ] Implementar `SearchTool` (DuckDuckGo + Firecrawl self-hosted)
+- [ ] Ampliar `DocSearchTool` para busca web externa (DuckDuckGo / Firecrawl self-hosted) como fallback quando Boost não tiver a doc localmente
 - [ ] Implementar `ProblemSolutionRecorder` (auto-alimentação via Listener)
 - [ ] Implementar webhooks de entrada (GitHub, CI/CD)
-- [ ] Implementar `SocialTool` + migration `social_accounts` + Filament Resource
+- [ ] Implementar `SocialPostingAgent` (publicação via `hamzahassanm/laravel-social-auto-post`) + migration `social_accounts` + Filament Resource
 
 ---
 
-## 11. Integração com Redes Sociais (SocialTool)
+## 11. Integração com Redes Sociais — *Fase 3 (planejado)*
 
-O AI-Dev integra publicação em redes sociais via o pacote **`hamzahassanm/laravel-social-auto-post`** (v2.2+). Isso permite que os agentes publiquem conteúdo automaticamente nas plataformas do projeto — lançamentos, relatórios de progresso, notificações de deploy — sem intervenção humana.
+> **Status:** Não implementado. Migration `social_accounts` existe; não há Tool nem Agent. Esta seção descreve o design-alvo.
+
+A publicação em redes sociais usará o pacote **`hamzahassanm/laravel-social-auto-post`** (v2.2+) encapsulado em um **Agent dedicado** (`SocialPostingAgent`), não em uma Tool SDK genérica. Razão: publicação envolve decisão editorial (tom, plataforma, timing) que é responsabilidade de um agente, e o SDK de publicação já fornece a API — uma Tool seria um wrapper fino sem valor.
 
 ### 11.1. Plataformas Suportadas
 
@@ -1458,53 +1534,37 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHANNEL_ID=
 ```
 
-### 11.3. O SocialTool (Tool SDK)
+### 11.3. Design-Alvo: `SocialPostingAgent`
 
 ```php
-// app/Ai/Tools/SocialTool.php
-class SocialTool implements Tool
+// app/Ai/Agents/SocialPostingAgent.php (planejado — não implementado)
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Promptable;
+use Laravel\Ai\Attributes\{Provider, Model};
+
+#[Provider('openrouter')]
+#[Model('anthropic/claude-haiku-4-5-20251001')]
+class SocialPostingAgent implements Agent
 {
-    public function description(): string
+    use Promptable;
+
+    public function __construct(public Project $project) {}
+
+    public function instructions(): string
     {
-        return 'Publish content to social media platforms for the active project.';
-    }
-
-    public function schema(JsonSchema $schema): array
-    {
-        return [
-            'action'    => $schema->string()->enum(['share', 'share_to_all', 'upload_video']),
-            'platforms' => $schema->array()->items($schema->string())->nullable(),
-            'message'   => $schema->string(),
-            'url'       => $schema->string()->nullable(),
-            'media_path'=> $schema->string()->nullable()->description('Absolute path to image/video'),
-        ];
-    }
-
-    public function handle(Request $request): string
-    {
-        $platforms = $request->get('platforms');
-        $message   = $request->get('message');
-        $url       = $request->get('url');
-
-        if ($platforms) {
-            SocialMedia::share($platforms, $message, $url);
-        } else {
-            SocialMedia::shareToAll($message);
-        }
-
-        return json_encode(['success' => true, 'platforms' => $platforms ?? 'all']);
+        return 'Você redige posts curtos para redes sociais a partir de um evento do projeto (deploy, lançamento, relatório). Use o pacote hamzahassanm/laravel-social-auto-post via SocialMedia::share()/shareToAll() com as credenciais de social_accounts do projeto ativo.';
     }
 }
 ```
 
-### 11.4. Casos de Uso Agênticos
+A orquestração decide *quando* chamar este agente; o pacote externo cuida do *como*. Não há camada Tool intermediária.
 
-Os agentes podem usar o `SocialTool` automaticamente nos seguintes contextos:
+### 11.4. Gatilhos Previstos
 
-1. **Deploy concluído** — O `DevOpsSpecialist` após um deploy bem-sucedido pode publicar um anúncio no LinkedIn e Twitter do projeto.
-2. **Feature nova** — O `QAAuditorAgent` após aprovar uma feature pode publicar um post de lançamento.
-3. **Relatório semanal** — Uma task agendada pode gerar e publicar relatório de progresso em todas as redes.
-4. **Notificação de manutenção** — Aviso automático via Telegram antes de manutenções programadas.
+1. **Deploy concluído** — `DevOpsSpecialist` dispara `SocialPostingAgent` para anunciar no LinkedIn/Twitter.
+2. **Feature aprovada** — Ao aprovar uma subtask de release, o `QAAuditorAgent` dispara um post de lançamento.
+3. **Relatório semanal** — Task agendada gera e publica relatório de progresso.
+4. **Notificação de manutenção** — Aviso via Telegram antes de janelas programadas.
 
 ### 11.5. Gerenciamento via Filament UI
 
@@ -1655,103 +1715,103 @@ OrchestratorJob::dispatch($redo);
 
 ---
 
-## 16. Invocação dos LLMs via Proxy
+## 16. Invocação dos LLMs via OpenRouter
 
-### 14.1. Princípio Fundamental: IA Retorna Texto, AI-Dev Executa
+### 16.1. Princípio Fundamental: IA Retorna Texto, AI-Dev Executa
 
-Os LLMs (Gemini e Claude) **não executam nada diretamente** no servidor. Eles recebem um prompt e retornam texto ou tool calls estruturadas. Toda execução real — shell, filesystem, banco, git — passa pelas **Tool classes** do AI-Dev (`ShellTool`, `FileTool`, `DatabaseTool`, etc.), que têm seus próprios controles internos.
+Os LLMs **não executam nada diretamente** no servidor. Eles recebem um prompt e retornam texto ou tool calls estruturadas. Toda execução real — shell, filesystem, banco, git — passa pelas **Tool classes** do AI-Dev (`ShellExecuteTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool`, `BoostTool`, `DocSearchTool`), que têm seus próprios controles internos e operam dentro do `projects.local_path` do Projeto Alvo (ver seção 1.A.1).
 
-O Gemini atua como **orquestrador**: recebe o PRD, planeja e despacha Sub-PRDs. O Claude atua como **auxiliar/agentes specialists**: executa os Sub-PRDs usando as Tools do AI-Dev. Nenhum dos dois usa ferramentas nativas dos seus respectivos CLIs.
+### 16.2. OpenRouter como Gateway Único
 
-### 14.2. Comandos dos Proxies
+Toda inferência externa passa por **um único endpoint HTTPS**: OpenRouter (`https://openrouter.ai/api/v1`). O Laravel AI SDK usa o driver `openai` (compatível com a API OpenAI) para conversar com esse endpoint — não há proxies Python locais, não há CLIs invocados, não há sessões de terminal.
 
-**Proxy Gemini (`infrastructure/proxy/gemini_proxy.py` — porta 8001):**
-```bash
-gemini \
-    -m gemini-3.1-pro-preview \        # Modelo fixo
-    -r <project.gemini_session_id> \   # Resume sessão do projeto para manter contexto
-    -p "<prompt>"                      # Modo headless: sem confirmações, resposta direta
-
-# Uso direto: python3 infrastructure/proxy/gemini_proxy.py "mensagem" [session_id]
+```text
+Laravel AI SDK (config/ai.php: provider 'openrouter')
+      ↓  HTTPS POST /v1/chat/completions
+OpenRouter
+      ↓  roteia para o backend da Anthropic
+anthropic/claude-opus-4.7       → Orchestrator, Specification, Quotation, RefineDescription
+anthropic/claude-sonnet-4-6     → Specialist, QAAuditor
+anthropic/claude-haiku-4-5-20251001 → Docs
 ```
 
-**Proxy Claude (`infrastructure/proxy/claude_proxy.py` — porta 8002):**
-```bash
-claude -p \                                    # Modo não-interativo, sem confirmações
-    --session-id <project.claude_session_id> \ # Resume sessão do projeto
-    "<prompt>"
-# Modelo: auto (Claude Code seleciona conforme disponibilidade e cota)
-
-# Uso direto: python3 infrastructure/proxy/claude_proxy.py "mensagem" [session_id]
-```
-
-**Por que `-p` é suficiente?**
-O `-p` (print/headless) garante que nenhum dos CLIs solicita confirmação ou interação humana. Como ambos os proxies não usam ferramentas nativas dos CLIs (o Gemini não executa `run_shell_command`, o Claude não usa Bash/Edit/Read), não há risco de travamento por prompt de permissão.
-
-### 14.3. Endpoints dos Proxies
-
-Ambos os proxies expõem duas rotas compatíveis com os formatos OpenAI e Anthropic:
-
-| Método | Rota | Porta | Proxy |
-|---|---|---|---|
-| POST | `/v1/chat/completions` | 8001 | Gemini |
-| POST | `/v1/messages` | 8001 | Gemini |
-| POST | `/v1/chat/completions` | 8002 | Claude |
-| POST | `/v1/messages` | 8002 | Claude |
-
-**Formato de request (ambos os proxies aceitam o mesmo esquema):**
-```json
-{
-  "messages": [{"role": "user", "content": "Seu prompt aqui"}],
-  "session_id": "uuid-da-sessao-do-projeto"
-}
-```
-
-**Formato de response:**
-```json
-{
-  "id": "msg-<session_id>",
-  "model": "gemini-3.1-pro-preview",
-  "session_id": "uuid-da-sessao-do-projeto",
-  "content": [{"type": "text", "text": "Resposta do modelo"}],
-  "stop_reason": "end_turn"
-}
-```
-
-### 14.4. Estratégia de Failover
-
-Se o Gemini (orquestrador principal) falhar, o Laravel AI SDK dispara o evento `AgentFailedOver` e tenta o próximo provider no array do PHP Attribute:
+Configuração em `config/ai.php` (resumo — chaves `driver`/`key`/`url` conforme `docs_tecnicos/laravel13-docs/ai-sdk.md` §Custom Base URLs):
 
 ```php
-// Se Gemini falhar → SDK tenta Lab::Anthropic automaticamente
-#[Provider([Lab::Gemini, Lab::Anthropic])]
-class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
+'openrouter' => [
+    'driver' => 'openai',
+    'key'    => env('OPENROUTER_API_KEY'),
+    'url'    => 'https://openrouter.ai/api/v1',
+],
+
+// Chain com fallback local, registrada via FailoverProvider:
+'openrouter_chain' => [
+    'driver'    => 'failover',
+    'providers' => ['openrouter', 'openai'],
+],
 ```
 
-O mesmo vale para os agentes specialists (Claude → Gemini como backup). O SDK não expõe esse failover ao código de negócio — acontece de forma transparente. O `agent_executions` registra qual provider foi efetivamente usado em cada chamada para auditoria.
+### 16.3. Ollama Local (Fase 3 — Compressor)
 
-### 14.5. Session ID Obrigatório por Projeto
+Além do OpenRouter, existe **um** canal local: Ollama, servido em `localhost:11434`, usado exclusivamente pelo `ContextCompressor` com `qwen2.5:0.5b`. Não participa do fluxo principal de geração de código — só comprime histórico longo quando a janela atinge 60% e gera embeddings quando pgvector é consultado.
 
-O conversation ID da sessão SDK é armazenado na tabela `projects`:
+```text
+ContextCompressor → Ollama (qwen2.5:0.5b) → resumo denso ~500-1000 tokens → agent_conversations
+```
 
-- Provider `gemini` → `project.gemini_session_id`
-- Provider `anthropic` → `project.claude_session_id`
+### 16.4. Estratégia de Failover Dentro do OpenRouter
 
-O trait `RemembersConversations` do SDK gerencia automaticamente a continuidade:
+O Laravel AI SDK dispara o evento `AgentFailedOver` quando o provider primário falha. O SDK expõe três formas de declarar failover (ver assinaturas em `vendor/laravel/ai/src/Attributes/Provider.php` e `Model.php`):
+
+1. **Atributo `#[Provider(...)]` com array** — válido (assinatura `Lab|array|string`). Fixa a chain a nível de classe.
+2. **Runtime `->prompt(..., provider: [...])`** — recomendado pela doc oficial `ai-sdk.md §Failover`. Mais flexível; permite variar a chain por chamada.
+3. **Alias `openrouter_chain`** (driver `failover`) — encapsula a chain atrás de um único nome; o agente passa apenas `'openrouter_chain'` e ignora os detalhes.
+
+O atributo `#[Model(...)]` **aceita apenas string** — nunca array. Para rotear entre modelos diferentes use o parâmetro `model:` do `prompt()` em runtime.
+
+```php
+// ❌ Errado — #[Model] não aceita array (assinatura: public string $value)
+#[Provider('openrouter')]
+#[Model(['anthropic/claude-opus-4.7', 'anthropic/claude-sonnet-4-6'])]
+
+// ✅ Correto (forma 2) — array de providers em runtime
+$response = (new OrchestratorAgent)->prompt(
+    $task->prd_payload,
+    provider: ['openrouter', 'openrouter_chain'],
+);
+```
+
+Alternativamente, use o provider alias `openrouter_chain` (driver `failover` — ver `app/Ai/Providers/FailoverProvider.php`), que encadeia `openrouter → openai` de forma transparente sem o agente precisar saber:
+
+```php
+$response = (new OrchestratorAgent)->prompt($prompt, provider: 'openrouter_chain');
+```
+
+A tabela `agent_executions` registra qual provider/model foi efetivamente usado em cada chamada para auditoria.
+
+Caso **todos** os providers da chain estejam fora do ar, a task vai para `escalated` e notifica humano — o SDK repassa a exceção após esgotar a lista.
+
+### 16.5. Session ID por Projeto
+
+O conversation ID da sessão SDK é armazenado na tabela `projects` na coluna `anthropic_session_id` (coluna única — não há mais `gemini_session_id` / `claude_session_id` separadas do modelo antigo de Inferência Dupla).
+
+O trait `RemembersConversations` do SDK gerencia a continuidade:
+
 ```php
 $agent = BackendSpecialist::make();
 
 // Nova conversa (1ª chamada para o projeto)
 $response = $agent->forUser($systemUser)->prompt($prompt);
-$project->update(['gemini_session_id' => $response->conversationId]);
+$project->update(['anthropic_session_id' => $response->conversationId]);
 
 // Continuar conversa (chamadas subsequentes)
-$response = $agent->continue($project->gemini_session_id, as: $systemUser)->prompt($prompt);
+$response = $agent->continue($project->anthropic_session_id, as: $systemUser)->prompt($prompt);
 ```
+
 Isso garante que:
-1. A IA mantém contexto entre chamadas (memória da conversa persistida no PostgreSQL)
-2. Cada projeto tem seu próprio contexto isolado
-3. O contexto da IA complementa a memória vetorial do AI-Dev (dupla camada de memória)
+1. A IA mantém contexto entre chamadas (memória da conversa persistida em `agent_conversations`/`agent_conversation_messages` no banco do ai-dev-core).
+2. Cada projeto tem seu próprio contexto isolado.
+3. O contexto da IA complementa a memória vetorial do AI-Dev (dupla camada de memória).
 
 ---
 
@@ -1775,11 +1835,18 @@ Agente implementa o que recebeu — sem improvisação, sem alucinação de API
 
 **Impacto direto:** Menos retries, menos tokens por task, menos rejeições do QA Auditor. O Boost age como um copiloto que sempre conhece a versão certa do framework — algo que o LLM, por si só, não tem garantia de ter.
 
-### 17.2. Dois Contextos de Uso
+### 17.2. Dois Contextos de Uso — Boost Instalado dos Dois Lados
 
-#### Agentes Autônomos (Fluxo AI-Dev)
+O Boost é instalado **em cada aplicação Laravel do ecossistema** (ai-dev-core e cada Projeto Alvo). A diferença não é *se* ele existe, mas **quem o consome**:
 
-O Specialist Agent não precisa de contexto sobre Filament ou Livewire no seu prompt. O Boost fornece isso sob demanda via MCP, mantendo o contexto do agente focado no problema de negócio:
+| Boost instalado em… | Consumidor | Propósito |
+|---|---|---|
+| `ai-dev-core` | Claude Code (humano) via `.claude/mcp.json` local | Desenvolvimento/manutenção do próprio ai-dev-core |
+| Cada Projeto Alvo (`projects.local_path`) | Agentes do ai-dev-core, via `BoostTool` | Fonte de contexto para gerar e auditar código do alvo — schema, docs, logs |
+
+#### Agentes Autônomos (Fluxo AI-Dev) → Boost do Projeto Alvo
+
+O `SpecialistAgent` não precisa de contexto sobre Filament ou Livewire no seu prompt. O `BoostTool` deve ser instanciado com o `local_path` do Projeto Alvo e rotear `php artisan boost:*` **dentro** daquele path. Assim, o agente recebe schema, docs e exemplos referentes à versão exata instalada **no alvo**, não no ai-dev-core:
 
 ```
 ❌ Sem Boost — agente carrega docs no contexto:
@@ -1788,20 +1855,23 @@ O Specialist Agent não precisa de contexto sobre Filament ou Livewire no seu pr
  Agora crie um Resource para Produto."
 → Contexto inflado, API possivelmente desatualizada, mais erros
 
-✅ Com Boost via MCP — agente só recebe o problema:
+✅ Com Boost MCP do Projeto Alvo — agente só recebe o problema:
 "Crie um Resource Filament para a entidade Produto com campos: nome, preço, estoque."
-→ Agente chama Boost MCP → recebe código completo e correto → implementa
-→ Contexto limpo, zero tokens gastos com documentação
+→ BoostTool(projectPath=/var/www/html/projetos/portal) → executa boost:* dentro do alvo
+→ Retorna scaffold na versão real instalada do alvo → agente implementa no filesystem do alvo
+→ Contexto limpo, zero risco de sugerir API de uma versão que o alvo não tem
 ```
 
-O `SearchTool` (ferramenta #5) inclui a ação `boost_query` para que o agente invoque o Boost sem sair do loop de execução de tools.
+O `DocSearchTool` delega ao `DocsAgent` (Haiku 4.5), que usa o mesmo `BoostTool` escopado ao `local_path` do alvo — logo, a documentação retornada reflete as versões TALL instaladas naquele projeto específico.
 
-#### Desenvolvimento Manual com Claude Code
+> **Implementation status — BoostTool project-path-aware:** A implementação atual do `BoostTool` (`app/Ai/Tools/BoostTool.php`) executa `boost:*` no contexto do ai-dev-core. O alinhamento com a arquitetura descrita aqui — receber `project.local_path` no constructor e rotear os comandos para dentro do alvo — **é trabalho pendente** e está registrado na Fase 1 do roadmap (`README.md`). Até que essa mudança seja feita, o schema/docs retornados refletem o ai-dev-core, não o alvo.
 
-Ao desenvolver funcionalidades do AI-Dev (este sistema) ou dos projetos gerenciados, Claude Code deve estar conectado ao Boost MCP Server. Em vez de gerar código do zero, Claude consulta o Boost e recebe o código correto para a versão instalada:
+#### Desenvolvimento Manual com Claude Code → Boost do próprio projeto que está sendo editado
+
+Quando um humano edita código manualmente (seja no ai-dev-core via Claude Code, seja em um Projeto Alvo durante uma inspeção), o Claude Code dessa janela deve estar conectado ao Boost **daquela** aplicação. A configuração MCP vive no `.claude/mcp.json` do próprio repositório editado:
 
 ```json
-// .claude/mcp.json — configuração do Boost MCP para este projeto
+// ai-dev-core: /var/www/html/projetos/ai-dev/ai-dev-core/.claude/mcp.json
 {
   "mcpServers": {
     "laravel-boost": {
@@ -1811,9 +1881,20 @@ Ao desenvolver funcionalidades do AI-Dev (este sistema) ou dos projetos gerencia
     }
   }
 }
+
+// Projeto Alvo qualquer: /var/www/html/projetos/<alvo>/.claude/mcp.json
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "php",
+      "args": ["artisan", "mcp:serve"],
+      "cwd": "/var/www/html/projetos/<alvo>"
+    }
+  }
+}
 ```
 
-Com isso ativo, basta descrever o que precisa — "crie um Resource Filament para SocialAccount com CRUD" — e o Boost retorna o scaffold completo já adaptado ao Filament v5 e aos padrões do projeto.
+Cada janela de Claude Code consulta apenas o Boost do projeto em que está — sem mistura de contexto entre ai-dev-core e Projetos Alvo.
 
 ### 17.3. O Boost Resolve, Não Só Documenta
 
@@ -1828,6 +1909,8 @@ Esta é a distinção crítica: o Boost não é uma biblioteca de referência qu
 | **Zero contexto de framework no agente** | O prompt do agente fala de negócio, não de sintaxe do framework |
 
 ### 17.4. Registrar Padrões do Projeto como Guidelines no Boost
+
+Guidelines são registradas **no Boost do projeto a que pertencem** — o ai-dev-core tem suas próprias guidelines (padrões internos do Master), e cada Projeto Alvo tem as suas (padrões do alvo consumidos pelos agentes de dev via BoostTool). O exemplo abaixo é o do ai-dev-core.
 
 Todo padrão adotado no AI-Dev **DEVE** ser registrado no Boost como Guideline — não apenas documentado em Markdown. Isso garante que o Boost injete as regras do projeto automaticamente em todo código que gerar, sem que o agente precise conhecê-las:
 
@@ -1865,13 +1948,13 @@ Task recebida pelo Specialist Agent
       ↓
 1. Lê o Sub-PRD (objetivo, entidade, campos, critérios de aceite)
       ↓
-2. Chama SearchTool.boost_query("scaffold Resource Filament para [entidade] com campos [X,Y,Z]")
+2. Chama `BoostTool` (`tool=search-docs`) pedindo "scaffold Resource Filament para [entidade] com campos [X,Y,Z]"
       ↓
-3. Boost retorna: Resource.php + Pages/ + Migration + Model (scaffolds completos)
+3. Boost retorna: Resource.php + Pages/ + Migration + Model (scaffolds completos via search-docs)
       ↓
 4. Agente ajusta apenas a lógica de negócio específica (regras do Sub-PRD)
       ↓
-5. Roda TestTool → QA Auditor valida → GitTool commit
+5. Roda `ShellExecuteTool` (`php artisan test`) → `QAAuditorAgent` valida → `GitOperationTool` commit
 ```
 
 O agente gasta tokens **apenas nas partes únicas** do Sub-PRD — a lógica de negócio específica. O framework boilerplate vem pronto do Boost.
