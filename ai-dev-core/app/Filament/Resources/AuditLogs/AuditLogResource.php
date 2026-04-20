@@ -88,11 +88,11 @@ class AuditLogResource extends Resource
                         Grid::make(2)->schema([
                             Infolists\Components\TextEntry::make('old_values')
                                 ->label('Dados Anteriores')
-                                ->formatStateUsing(fn ($state) => static::formatAuditData($state))
+                                ->getStateUsing(fn (AuditLog $record) => static::formatAuditData($record->old_values))
                                 ->placeholder('Nenhum dado anterior'),
                             Infolists\Components\TextEntry::make('new_values')
                                 ->label('Novos Dados')
-                                ->formatStateUsing(fn ($state) => static::formatAuditData($state))
+                                ->getStateUsing(fn (AuditLog $record) => static::formatAuditData($record->new_values))
                                 ->placeholder('Nenhum dado novo'),
                         ]),
                     ]),
@@ -133,9 +133,8 @@ class AuditLogResource extends Resource
                 Tables\Columns\TextColumn::make('auditable_type')
                     ->label('Módulo')
                     ->formatStateUsing(fn ($state) => str_replace('App\\Models\\', '', $state)),
-                Tables\Columns\TextColumn::make('ip_address')
-                    ->label('IP')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('auditable_id')
+                    ->label('ID do Registro'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('action')
@@ -160,13 +159,12 @@ class AuditLogResource extends Resource
         ];
     }
 
-    protected static function formatAuditData(mixed $data): ?HtmlString
+    protected static function formatAuditData(mixed $data): ?string
     {
         if (empty($data)) {
             return null;
         }
 
-        // Se vier como string (JSON), decodifica
         if (is_string($data)) {
             $data = json_decode($data, true);
         }
@@ -175,7 +173,7 @@ class AuditLogResource extends Resource
             return null;
         }
 
-        $html = '<div class="space-y-1 font-mono text-xs">';
+        $formatted = [];
         foreach ($data as $key => $value) {
             if (in_array($key, ['created_at', 'updated_at', 'id'])) continue;
 
@@ -185,10 +183,9 @@ class AuditLogResource extends Resource
                 $displayValue = mb_substr($displayValue, 0, 50) . '...';
             }
 
-            $html .= "<div><span class='font-bold text-primary-600'>{$key}:</span> <span class='text-gray-600 dark:text-gray-400'>{$displayValue}</span></div>";
+            $formatted[] = "{$key}: {$displayValue}";
         }
-        $html .= '</div>';
 
-        return new HtmlString($html);
+        return implode("\n", $formatted);
     }
 }
