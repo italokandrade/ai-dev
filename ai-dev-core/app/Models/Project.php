@@ -3,15 +3,17 @@
 namespace App\Models;
 
 use App\Enums\ProjectStatus;
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Laravel\Ai\Contracts\RemembersConversations;
+use Laravel\Ai\Traits\HasConversations;
 
-class Project extends Model
+class Project extends Model implements RemembersConversations
 {
-    use HasUuids;
+    use Auditable, HasConversations, HasUuids;
 
     protected $fillable = [
         'name',

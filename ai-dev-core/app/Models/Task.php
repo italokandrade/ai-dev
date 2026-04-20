@@ -4,14 +4,17 @@ namespace App\Models;
 
 use App\Enums\TaskSource;
 use App\Enums\TaskStatus;
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Ai\Contracts\RemembersConversations;
+use Laravel\Ai\Traits\HasConversations;
 
-class Task extends Model
+class Task extends Model implements RemembersConversations
 {
-    use HasUuids;
+    use Auditable, HasConversations, HasUuids;
 
     protected $fillable = [
         'project_id',
