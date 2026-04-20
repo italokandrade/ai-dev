@@ -310,6 +310,7 @@ A estrutura é: **Projeto → Módulos → Submódulos → Tasks**. Cada submód
 | `project_id` | FK → `projects.id` | Projeto associado |
 | `parent_id` | FK → `project_modules.id` / Nullable | Módulo pai (null = módulo raiz; preenchido = submódulo) |
 | `name` | String(255) | Nome do módulo/submódulo |
+| `prd_payload` | JSON | O PRD completo do módulo ou submódulo em formato JSON estruturado |
 | `description` | Text | Descrição do que este módulo abrange |
 | `status` | Enum: `planned`, `in_progress`, `testing`, `completed`, `revision` | Estado atual |
 | `priority` | Enum: `low`, `normal`, `high`, `critical` | Prioridade de desenvolvimento |
@@ -395,6 +396,50 @@ Cada registro é um exemplo de código perfeito que os agentes DEVEM seguir ao g
 - `laravel_migration` — Migrations com best practices
 - `laravel_test` — Testes Pest/PHPUnit
 - `tailwind_pattern` — Padrões de design com Tailwind CSS
+
+---
+
+### 2.2. Tabelas do Core Master (Comuns a TODOS os Projetos)
+
+De acordo com o `STANDARD_MODULES.md`, **TODOS os projetos (inclusive o próprio `ai-dev-core`)** possuem um conjunto de módulos e tabelas pré-fabricadas que gerenciam Segurança, Auditoria e Configurações Globais. Estas tabelas existem em todos os bancos de dados do ecossistema.
+
+**`audit_logs`** — Log de Ações Globais (Activity Log).
+Tabela estritamente de leitura (append-only) que rastreia TODAS as ações executadas no sistema (Insert, Update, Delete) em qualquer módulo.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID / PK | Identificador único do log |
+| `user_id` | FK → `users.id` / Nullable | Quem executou a ação (null se via automação/sistema) |
+| `action` | Enum: `insert`, `update`, `delete`, `login`, `logout` | Ação executada |
+| `table_name` | String(100) | Nome da tabela/módulo afetado |
+| `record_id` | String(100) / Nullable | ID do registro afetado |
+| `old_data` | JSON / Nullable | Estado do registro *antes* da ação |
+| `new_data` | JSON / Nullable | Estado do registro *depois* da ação |
+| `ip_address` | String(45) / Nullable | IP do usuário/requisição |
+| `user_agent` | Text / Nullable | Browser/dispositivo |
+| `created_at` | Timestamp | Quando ocorreu |
+
+**`roles` & `role_permissions`** — Controle de Acesso (ACL) e Perfis de Usuários.
+Gerenciam quais funções do "CRUD" cada perfil está autorizado a acessar ou manipular em cada módulo.
+
+| Tabela | Função principal |
+|---|---|
+| `roles` | `id`, `name`, `description` (ex: Administrador, Editor, Visualizador) |
+| `role_permissions` | `role_id`, `module_name`, `can_create`, `can_read`, `can_update`, `can_delete` |
+| `users` | Tabela padrão do Laravel, expandida com FK `role_id` |
+
+**`system_settings`** — Configurações do Sistema e Configurações de IA.
+Evita hardcoding no `.env` para credenciais das **IAs de interação** e chaves gerais de APIs.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | PK | Identificador único |
+| `key` | String(100) | Chave de configuração (ex: `ai_interaction_provider`, `ai_interaction_key`, `ai_interaction_model`) |
+| `value` | Text / JSON | Valor associado, podendo ser um JSON para objetos complexos |
+| `is_encrypted`| Boolean | Se o valor (como a API Key) está salvo criptografado no banco |
+| `group` | String(50) | Grupo (ex: `ai_settings`, `mail`, `identity`) |
+
+> **Nota sobre a IA Operária vs IA de Interação:** O ai-dev-core utiliza o `openrouter` configurado no `.env` do servidor (coluna `api_key_env_var` em `agents_config`) **apenas** para seus agentes de desenvolvimento (`Orchestrator`, `Specialist`, etc.). Já a IA usada pelas integrações internas do painel administrativo (os "assistants" ou "copilotos" do projeto e de cada projeto alvo) lê suas credenciais e modelos a partir da tabela `system_settings` gerenciada via UI.
 
 ---
 

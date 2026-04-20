@@ -48,9 +48,17 @@ Este documento define a arquitetura dos módulos e submódulos fundamentais que 
 
 ---
 **Regra de Implementação (AI-Dev):**
-Estes módulos **NÃO serão desenvolvidos ou reescritos pela Inteligência Artificial a cada projeto**. Eles formam um "Core Master" pré-fabricado (arquivos e dumps SQL).
-Durante o scaffolding via `instalar_projeto.sh`, todo o código-fonte e o banco de dados base destes módulos são injetados fisicamente no novo Projeto Alvo. Assim, o painel administrativo do cliente nascerá 100% estruturado em segurança, auditoria e gestão.
+TODOS OS PROJETOS (inclusive o projeto Master `ai-dev-core`) devem obrigatoriamente ter este **Módulo de Gerenciamento/Admin Padrão**, garantindo que nunca comecem do zero absoluto. 
 
-**Além do Core Master, `instalar_projeto.sh` também instala o Laravel AI SDK e o Laravel Boost no Projeto Alvo.** O AI SDK serve às **IAs de interação do próprio projeto** (ex: copiloto do usuário, classificador, sumarizador — definidos depois, na spec de cada alvo). O Boost serve de **fonte de contexto** consumida pelos agentes de desenvolvimento do ai-dev-core via `BoostTool` durante a execução de tasks. **Nenhum agente de desenvolvimento (`Orchestrator`, `Specialist`, `QAAuditor`, `DocsAgent`) é instalado no Projeto Alvo** — esses são exclusivos do ai-dev-core.
+Estes submódulos (Cadastro de Perfis de Usuários, Usuários, Auditoria, Segurança Completa, etc.) **NÃO serão desenvolvidos ou reescritos pela Inteligência Artificial a cada projeto**. Eles formam um "Core Master" pré-fabricado (arquivos, configurações e dumps SQL). 
+
+Durante a criação do projeto via `instalar_projeto.sh`, todo o código-fonte e o banco de dados base destes módulos são **copiados** para dentro dos projetos alvo. Uma vez copiados, os agentes de desenvolvimento **NÃO PODEM alterá-los** (a menos que o modelo padrão no repositório Master seja alterado para replicar nos demais). Assim, o painel administrativo nasce 100% estruturado e blindado.
+
+Nas permissões de acesso (Controle de Acesso), elas devem estar rigorosamente vinculadas aos Perfis de Usuários. Para cada perfil, o painel lista todos os módulos do sistema e permite definir individualmente quais funções do "CRUD" aquele perfil está autorizado a acessar ou manipular.
+
+**Atenção sobre as Credenciais de IA:** 
+Como os projetos alvo são desenvolvidos pelo `ai-dev-core`, as credenciais de desenvolvimento da IA operária (via OpenRouter) pertencem apenas ao `ai-dev-core` (no `.env` do servidor). Porém, a credencial e o modelo utilizados pelas *IAs de interação e módulos internos* do projeto alvo (e também dentro do próprio `ai-dev-core` para os seus assistants) devem ser cadastrados no painel administrativo via módulo de **Configurações de IA**, evitando hardcoding em `.env`.
+
+**Além do Core Master, `instalar_projeto.sh` também instala o Laravel AI SDK e o Laravel Boost no Projeto Alvo.** O AI SDK serve às **IAs de interação do próprio projeto**. O Boost serve de **fonte de contexto** consumida pelos agentes de desenvolvimento do ai-dev-core via `BoostTool` durante a execução de tasks. **Nenhum agente de desenvolvimento (`Orchestrator`, `Specialist`, `QAAuditor`, `DocsAgent`) é instalado no Projeto Alvo** — esses são exclusivos do ai-dev-core.
 
 A IA de desenvolvimento do ai-dev-core atuará apenas integrando e marcando esses módulos preexistentes como "Dependencies" (Dependências) para os módulos específicos de negócio que ela de fato irá codificar.

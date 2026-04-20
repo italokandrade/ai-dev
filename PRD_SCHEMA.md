@@ -1,6 +1,6 @@
 # Schema do PRD (Product Requirement Document)
 
-Este documento define o formato **exato** que todo PRD e Sub-PRD deve seguir no ecossistema AI-Dev. Quando um humano insere uma task via Filament UI ou quando o Sentinela gera uma task automática, o campo `tasks.prd_payload` DEVE seguir este JSON Schema. Quando o Orchestrator quebra um PRD em Sub-PRDs para as subtasks, o campo `subtasks.sub_prd_payload` DEVE seguir o schema de Sub-PRD.
+Este documento define o formato **exato** que todo PRD e Sub-PRD deve seguir no ecossistema AI-Dev. O Sistema Inteiro a ser desenvolvido, cada módulo e cada submódulo devem ter um PRD salvo no banco de dados (`projects.prd_payload` e `project_modules.prd_payload`), assim como cada task também deve ter um PRD salvo no banco de dados (`tasks.prd_payload`). Dessa forma, as IAs ou os humanos que irão trabalhar nas atividades sabem exatamente o que devem fazer. Quando o Orchestrator quebra um PRD em Sub-PRDs para as subtasks, o campo `subtasks.sub_prd_payload` DEVE seguir o schema de Sub-PRD.
 
 O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas ANTES de aceitar a task. Se o JSON for inválido, a task é rejeitada com uma mensagem clara do que falta.
 
