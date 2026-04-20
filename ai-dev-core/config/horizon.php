@@ -212,9 +212,9 @@ return [
         ],
 
         // Subagentes: executam subtasks com loop agentic (alta concorrência)
-        'subagent' => [
+        'subtasks' => [
             'connection' => 'redis',
-            'queue' => ['subagent'],
+            'queue' => ['subtasks'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 3,
@@ -261,7 +261,7 @@ return [
             'orchestrator' => [
                 'maxProcesses' => 2,
             ],
-            'subagent' => [
+            'subtasks' => [
                 'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
@@ -278,7 +278,7 @@ return [
             'orchestrator' => [
                 'maxProcesses' => 1,
             ],
-            'subagent' => [
+            'subtasks' => [
                 'maxProcesses' => 3,
             ],
             'qa' => [

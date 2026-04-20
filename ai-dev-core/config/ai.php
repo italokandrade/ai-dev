@@ -124,6 +124,16 @@ return [
             'driver' => 'failover',
             'providers' => ['openrouter', 'openai'],
         ],
+
+        'orchestrator_chain' => [
+            'driver' => 'failover',
+            'providers' => ['openrouter', 'openai'],
+        ],
+
+        'specialist_chain' => [
+            'driver' => 'failover',
+            'providers' => ['openrouter', 'openai'],
+        ],
     ],
 
 ];

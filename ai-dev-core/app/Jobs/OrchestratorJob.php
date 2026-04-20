@@ -8,6 +8,7 @@ use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
 use App\Models\Task;
+use App\Jobs\ProcessSubtaskJob;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -48,13 +49,7 @@ class OrchestratorJob implements ShouldQueue
 
         try {
             $response = OrchestratorAgent::make()->prompt($prompt, provider: 'orchestrator_chain');
-            $raw = trim((string) $response);
-
-            // Strip markdown fences if present
-            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
-            $raw = preg_replace('/\s*```$/', '', $raw);
-
-            $subPrds = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $subPrds = $response->data;
 
             if (! is_array($subPrds) || empty($subPrds)) {
                 throw new \RuntimeException('Orchestrator returned empty or invalid Sub-PRD array.');
@@ -156,7 +151,7 @@ PROMPT;
 
         foreach ($subtasks as $subtask) {
             if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict()) {
-                SubagentJob::dispatch($subtask);
+                ProcessSubtaskJob::dispatch($subtask);
             }
         }
     }

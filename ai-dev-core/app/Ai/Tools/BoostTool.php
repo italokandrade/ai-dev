@@ -15,16 +15,9 @@ use Stringable;
 
 class BoostTool implements Tool
 {
-    /**
-     * Map of tool names to their respective Boost MCP tool classes.
-     */
-    private array $toolMap = [
-        'search-docs' => SearchDocs::class,
-        'database-schema' => DatabaseSchema::class,
-        'database-query' => DatabaseQuery::class,
-        'browser-logs' => BrowserLogs::class,
-        'last-error' => LastError::class,
-    ];
+    public function __construct(
+        private readonly ?string $workingDirectory = null
+    ) {}
 
     public function description(): Stringable|string
     {
@@ -36,45 +29,46 @@ class BoostTool implements Tool
         $toolName = $request['tool'];
         $arguments = $request['arguments'] ?? [];
 
-        if (! isset($this->toolMap[$toolName])) {
+        if (! $this->workingDirectory || ! is_dir($this->workingDirectory)) {
             return json_encode([
                 'success' => false,
-                'error' => "Tool '{$toolName}' not found. Available tools: ".implode(', ', array_keys($this->toolMap)),
+                'error' => "Working directory '{$this->workingDirectory}' not found or not provided.",
             ]);
         }
 
         try {
-            $toolClass = $this->toolMap[$toolName];
-            $toolInstance = app($toolClass);
-
-            // The Boost MCP tools expect a Laravel\Mcp\Request object
-            $mcpRequest = new \Laravel\Mcp\Request($arguments);
-            $result = $toolInstance->handle($mcpRequest);
-
-            // Handle Response objects
-            if ($result instanceof Response) {
-                return (string) $result->content();
-            }
-
-            // Handle Generators (for streaming results)
-            if ($result instanceof \Generator) {
-                $output = '';
-                foreach ($result as $part) {
-                    if ($part instanceof Response) {
-                        $output .= (string) $part->content();
-                    } else {
-                        $output .= (string) $part;
+            // Map tool names to artisan command names
+            $command = "boost:{$toolName}";
+            
+            // Build arguments string
+            $argsString = '';
+            foreach ($arguments as $key => $value) {
+                if (is_array($value)) {
+                    foreach ($value as $item) {
+                        $argsString .= " --{$key}=\"" . addslashes($item) . "\"";
                     }
+                } else {
+                    $argsString .= " --{$key}=\"" . addslashes($value) . "\"";
                 }
-
-                return $output;
             }
 
-            return is_string($result) ? $result : json_encode($result);
+            $process = \Illuminate\Support\Facades\Process::path($this->workingDirectory)
+                ->timeout(60)
+                ->run("php artisan {$command} {$argsString}");
+
+            if ($process->failed()) {
+                return json_encode([
+                    'success' => false,
+                    'error' => "Boost tool '{$toolName}' failed: " . $process->error(),
+                    'output' => $process->output(),
+                ]);
+            }
+
+            return $process->output();
         } catch (\Exception $e) {
             return json_encode([
                 'success' => false,
-                'error' => "Failed to execute Boost tool '{$toolName}': ".$e->getMessage(),
+                'error' => "Failed to execute Boost tool '{$toolName}': " . $e->getMessage(),
             ]);
         }
     }

@@ -645,3 +645,17 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 | Laravel 13 Docs | https://laravel.com/docs/13.x |
 | Pest v4 Docs | https://pestphp.com/docs |
 | Laravel Horizon Docs | https://laravel.com/docs/horizon |
+
+---
+
+## 8. Registro de Implementação (Fase 1 e Início da Fase 2) — 2026-04-20
+
+As seguintes melhorias e correções foram implementadas para alinhar o sistema com o PRD v2.0:
+
+- **✅ Providers de IA Corrigidos:** Configuração dos aliases `orchestrator_chain` e `specialist_chain` no `config/ai.php` com suporte a failover.
+- **✅ BoostTool Project-Path-Aware:** A ferramenta agora é instanciada com o path do projeto alvo e executa comandos artisan diretamente no diretório correto.
+- **✅ Isolamento de Agentes:** `SpecialistAgent`, `QAAuditorAgent`, `DocsAgent` e `DocSearchTool` agora operam estritamente no path do projeto alvo através do BoostTool corrigido.
+- **✅ Renomeação de Jobs e Filas:** `SubagentJob` renomeado para `ProcessSubtaskJob` e fila movida de `agents` para `subtasks` no Horizon para consistência.
+- **✅ Saída Estruturada (HasStructuredOutput):** Implementada nos agentes `Orchestrator`, `QA Auditor`, `Specification` e `Quotation`, eliminando o parsing manual de JSON e aumentando a confiabilidade.
+- **✅ Hardening de QA:** Remoção do auto-approve perigoso no `QAAuditJob` em caso de falha de parse; agora falhas de auditoria resultam em rejeição explícita.
+- **✅ Especialização de Agentes:** `SpecialistAgent` agora adapta suas instruções com base na especialidade atribuída (`assigned_agent`).

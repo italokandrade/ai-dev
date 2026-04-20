@@ -36,13 +36,7 @@ class GenerateProjectSpecificationJob implements ShouldQueue
 
         try {
             $response = SpecificationAgent::make()->prompt($prompt);
-            $raw      = trim((string) $response);
-
-            // Remove possíveis blocos markdown ```json ... ```
-            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
-            $raw = preg_replace('/\s*```$/', '', $raw);
-
-            $aiSpec = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $aiSpec   = $response->data;
 
             Log::info("GenerateProjectSpecificationJob: IA respondeu com sucesso para '{$project->name}'", [
                 'modules' => count($aiSpec['modules'] ?? []),

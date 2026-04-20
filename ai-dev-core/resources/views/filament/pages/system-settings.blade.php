@@ -56,7 +56,7 @@
                 </li>
                 <li class="flex items-start gap-2">
                     <x-filament::icon icon="heroicon-o-information-circle" class="mt-0.5 h-4 w-4 flex-shrink-0 text-warning-500" />
-                    <span><strong>Geração de specs e orçamentos</strong> funciona <em>sempre</em> — independente desta flag. Apenas execução de código (OrchestratorJob, SubagentJob, QAAuditJob) é bloqueada.</span>
+                    <span><strong>Geração de specs e orçamentos</strong> funciona <em>sempre</em> — independente desta flag. Apenas execução de código (OrchestratorJob, ProcessSubtaskJob, QAAuditJob) é bloqueada.</span>
                 </li>
             </ul>
         </div>

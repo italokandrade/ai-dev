@@ -8,15 +8,17 @@ use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
 use Stringable;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 
 #[Provider('openrouter')]
 #[Model('anthropic/claude-opus-4.7')]
 #[Temperature(0.3)]
 #[MaxTokens(8192)]
 #[Timeout(180)]
-class OrchestratorAgent implements Agent
+class OrchestratorAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
 
@@ -41,21 +43,25 @@ Receber o PRD de uma task e decompô-lo em Sub-PRDs independentes e executáveis
 - Frontend: Livewire 4 + Alpine.js v3 + Tailwind CSS v4
 - Admin: Filament v5
 - Banco: PostgreSQL 16
-
-## Formato de saída (APENAS JSON, sem markdown):
-[
-  {
-    "execution_order": 1,
-    "title": "Título curto e descritivo",
-    "assigned_agent": "backend-specialist",
-    "objective": "O que deve ser implementado",
-    "acceptance_criteria": ["Critério 1", "Critério 2"],
-    "constraints": ["Deve usar UUID", "Sem soft deletes"],
-    "context": "Contexto técnico adicional",
-    "files": ["app/Models/Foo.php", "database/migrations/xxx.php"],
-    "dependencies": []
-  }
-]
 INSTRUCTIONS;
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            $schema->array()->items(
+                $schema->object([
+                    'execution_order' => $schema->integer()->description('Order of execution. Independent tasks can have the same order.')->required(),
+                    'title' => $schema->string()->description('Short and descriptive title for the subtask.')->required(),
+                    'assigned_agent' => $schema->string()->description('The specialist agent to assign: backend-specialist, frontend-specialist, fullstack-specialist, devops-specialist.')->required(),
+                    'objective' => $schema->string()->description('Clear implementation goal.')->required(),
+                    'acceptance_criteria' => $schema->array()->items($schema->string())->description('List of criteria for completion.')->required(),
+                    'constraints' => $schema->array()->items($schema->string())->description('Technical constraints.')->required(),
+                    'context' => $schema->string()->description('Additional technical context.')->required(),
+                    'files' => $schema->array()->items($schema->string())->description('List of files to be modified/created.')->required(),
+                    'dependencies' => $schema->array()->items($schema->string())->description('List of subtask titles that this subtask depends on.')->required(),
+                ])
+            )->required(),
+        ];
     }
 }

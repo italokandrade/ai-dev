@@ -7,6 +7,7 @@ use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
+use App\Jobs\ProcessSubtaskJob;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -39,19 +40,17 @@ class QAAuditJob implements ShouldQueue
 
         Log::info("QAAuditJob: Auditing subtask {$this->subtask->id} — {$this->subtask->title}");
 
+        $project = $this->subtask->task->project;
+        $projectPath = $project->local_path;
+
         $prompt = $this->buildPrompt();
 
         try {
-            $response = QAAuditorAgent::make()->prompt($prompt);
-            $raw = trim((string) $response);
-
-            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
-            $raw = preg_replace('/\s*```$/', '', $raw);
-
-            $auditResult = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $response = (new QAAuditorAgent($projectPath))->prompt($prompt);
+            $auditResult = $response->data;
         } catch (\Throwable $e) {
-            Log::warning("QAAuditJob: Failed to get/parse audit response, auto-approving. Error: {$e->getMessage()}");
-            $this->approveSubtask();
+            Log::error("QAAuditJob: Failed to get/parse audit response for subtask {$this->subtask->id}. Error: {$e->getMessage()}");
+            $this->rejectSubtask(['approved' => false, 'issues' => ["Audit parsing failed: {$e->getMessage()}"]]);
 
             return;
         }
@@ -176,7 +175,7 @@ PROMPT;
             ]);
             $this->subtask->increment('retry_count');
 
-            SubagentJob::dispatch($this->subtask);
+            ProcessSubtaskJob::dispatch($this->subtask);
         } else {
             $this->subtask->transitionTo(SubtaskStatus::Error, 'qa-auditor', [
                 'reason' => 'QA rejection, max retries exceeded',
@@ -241,7 +240,7 @@ PROMPT;
 
         foreach ($pendingSubtasks as $subtask) {
             if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict()) {
-                SubagentJob::dispatch($subtask);
+                ProcessSubtaskJob::dispatch($subtask);
             }
         }
     }

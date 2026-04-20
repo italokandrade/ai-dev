@@ -32,12 +32,14 @@ class SpecialistAgent implements Agent, HasTools
 
     public function __construct(
         private readonly string $projectPath,
+        private readonly string $assigned_agent = 'backend-specialist',
     ) {}
 
     public function instructions(): Stringable|string
     {
         return <<<INSTRUCTIONS
 Você é um agente especialista em desenvolvimento Laravel 13 do sistema AI-Dev.
+Sua especialidade atual é: {$this->assigned_agent}.
 Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
 
 ## Stack obrigatória
@@ -77,8 +79,8 @@ INSTRUCTIONS;
     public function tools(): iterable
     {
         return [
-            new BoostTool,
-            new DocSearchTool,
+            new BoostTool($this->projectPath),
+            new DocSearchTool($this->projectPath),
             new ShellExecuteTool($this->projectPath),
             new FileReadTool($this->projectPath),
             new FileWriteTool($this->projectPath),

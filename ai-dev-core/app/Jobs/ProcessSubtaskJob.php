@@ -15,7 +15,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 
-class SubagentJob implements ShouldQueue
+class ProcessSubtaskJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -26,18 +26,18 @@ class SubagentJob implements ShouldQueue
     public function __construct(
         public Subtask $subtask,
     ) {
-        $this->queue = 'agents';
+        $this->queue = 'subtasks';
     }
 
     public function handle(): void
     {
         if (! SystemSetting::isDevelopmentEnabled()) {
-            Log::info("SubagentJob: Development is globally disabled. Skipping subtask {$this->subtask->id}.");
+            Log::info("ProcessSubtaskJob: Development is globally disabled. Skipping subtask {$this->subtask->id}.");
 
             return;
         }
 
-        Log::info("SubagentJob: Processing subtask {$this->subtask->id} — {$this->subtask->title}");
+        Log::info("ProcessSubtaskJob: Processing subtask {$this->subtask->id} — {$this->subtask->title}");
 
         $this->subtask->transitionTo(SubtaskStatus::Running, $this->subtask->assigned_agent);
         $this->subtask->update(['started_at' => now()]);
@@ -54,12 +54,12 @@ class SubagentJob implements ShouldQueue
         $prompt = $this->buildPrompt($workDir);
 
         try {
-            $agent = new SpecialistAgent($workDir);
+            $agent = new SpecialistAgent($workDir, $this->subtask->assigned_agent);
             $response = $agent->prompt($prompt, provider: 'specialist_chain');
 
             $resultLog = (string) $response;
         } catch (\Throwable $e) {
-            Log::error("SubagentJob: Failed for subtask {$this->subtask->id}", ['error' => $e->getMessage()]);
+            Log::error("ProcessSubtaskJob: Failed for subtask {$this->subtask->id}", ['error' => $e->getMessage()]);
             $this->failSubtask("Agent error: {$e->getMessage()}");
 
             return;
@@ -82,7 +82,7 @@ class SubagentJob implements ShouldQueue
 
         QAAuditJob::dispatch($this->subtask);
 
-        Log::info("SubagentJob: Completed subtask {$this->subtask->id}, dispatched QAAuditJob");
+        Log::info("ProcessSubtaskJob: Completed subtask {$this->subtask->id}, dispatched QAAuditJob");
     }
 
     private function buildPrompt(string $workDir): string
@@ -134,7 +134,7 @@ PROMPT;
 
     private function failSubtask(string $reason): void
     {
-        Log::error("SubagentJob: Subtask {$this->subtask->id} failed — {$reason}");
+        Log::error("ProcessSubtaskJob: Subtask {$this->subtask->id} failed — {$reason}");
 
         $this->subtask->update([
             'result_log' => $reason,

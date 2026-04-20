@@ -48,11 +48,7 @@ class GenerateProjectQuotationJob implements ShouldQueue
 
         try {
             $response = QuotationAgent::make()->prompt($prompt);
-            $raw = trim((string) $response);
-
-            $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
-            $raw = preg_replace('/\s*```$/', '', $raw);
-            $hours = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $hours = $response->data;
         } catch (\Throwable $e) {
             Log::error("GenerateProjectQuotationJob: QuotationAgent failed — {$e->getMessage()}. Using zero hours.");
             $hours = [];

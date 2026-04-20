@@ -10,6 +10,10 @@ use Stringable;
 
 class DocSearchTool implements Tool
 {
+    public function __construct(
+        private readonly ?string $workingDirectory = null
+    ) {}
+
     public function description(): Stringable|string
     {
         return 'Searches the official TALL Stack documentation (Laravel 13, Filament 5, Livewire 4, Alpine.js, Tailwind CSS v4, Anime.js). Use this before implementing any feature to get accurate API references and code examples.';
@@ -19,7 +23,8 @@ class DocSearchTool implements Tool
     {
         $query = $request['query'];
 
-        $response = (new DocsAgent)->prompt($query);
+        // DocsAgent should also be project-path-aware if it uses BoostTool
+        $response = (new DocsAgent($this->workingDirectory))->prompt($query);
 
         return $response->text;
     }

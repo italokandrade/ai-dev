@@ -22,6 +22,10 @@ class DocsAgent implements Agent, HasTools
 {
     use Promptable;
 
+    public function __construct(
+        private readonly ?string $projectPath = null,
+    ) {}
+
     public function instructions(): Stringable|string
     {
         return <<<'INSTRUCTIONS'
@@ -40,7 +44,7 @@ INSTRUCTIONS;
     public function tools(): iterable
     {
         return [
-            new BoostTool,
+            new BoostTool($this->projectPath),
         ];
     }
 }

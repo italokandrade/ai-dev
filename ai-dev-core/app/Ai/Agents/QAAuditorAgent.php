@@ -9,18 +9,24 @@ use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 
 #[Provider('openrouter')]
 #[Model('anthropic/claude-sonnet-4-6')]
 #[Temperature(0.1)]
 #[MaxTokens(2048)]
 #[Timeout(120)]
-class QAAuditorAgent implements Agent, HasTools
+class QAAuditorAgent implements Agent, HasTools, HasStructuredOutput
 {
     use Promptable;
+
+    public function __construct(
+        private readonly ?string $projectPath = null,
+    ) {}
 
     public function instructions(): Stringable|string
     {
@@ -40,29 +46,23 @@ Sua função é revisar o trabalho entregue por um agente especialista e decidir
 2. Há erros fatais no log
 3. O diff não contém mudanças (nada foi feito)
 4. O agente declarou falha explicitamente
-
-## Formato de resposta (APENAS JSON, sem markdown):
-{
-  "approved": true,
-  "overall_quality": "good",
-  "issues": [],
-  "summary": "Breve resumo do que foi implementado"
-}
-
-Ou quando rejeitado:
-{
-  "approved": false,
-  "overall_quality": "poor",
-  "issues": ["Descrição específica do problema"],
-  "summary": "O que foi ou não foi feito"
-}
 INSTRUCTIONS;
     }
 
     public function tools(): iterable
     {
         return [
-            new BoostTool,
+            new BoostTool($this->projectPath),
+        ];
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'approved' => $schema->boolean()->description('Whether the work is approved or rejected.')->required(),
+            'overall_quality' => $schema->string()->enum(['excellent', 'good', 'poor', 'unacceptable'])->description('Overall quality of the implementation.')->required(),
+            'issues' => $schema->array()->items($schema->string())->description('List of specific issues found.')->required(),
+            'summary' => $schema->string()->description('Brief summary of what was implemented or why it was rejected.')->required(),
         ];
     }
 }
