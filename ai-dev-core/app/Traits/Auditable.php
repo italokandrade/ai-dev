@@ -10,27 +10,31 @@ trait Auditable
     protected static function bootAuditable(): void
     {
         static::created(function ($model) {
-            static::logAudit($model, 'created');
+            static::logAudit($model, 'created', null, $model->getAttributes());
         });
 
-        static::updated(function ($model) {
-            static::logAudit($model, 'updated');
+        static::updating(function ($model) {
+            $oldValues = array_intersect_key($model->getOriginal(), $model->getDirty());
+            $newValues = $model->getDirty();
+            static::logAudit($model, 'updated', $oldValues, $newValues);
         });
 
         static::deleted(function ($model) {
-            static::logAudit($model, 'deleted');
+            static::logAudit($model, 'deleted', $model->getOriginal());
         });
     }
 
-    protected static function logAudit($model, string $action): void
+    protected static function logAudit($model, string $action, ?array $oldValues = null, ?array $newValues = null): void
     {
+        // For 'created' event, we need the ID which is now available
+        // For 'updating' event, the ID is already there
         AuditLog::create([
             'user_id' => Auth::id(),
             'action' => $action,
             'auditable_type' => get_class($model),
-            'auditable_id' => $model->id,
-            'old_values' => $action === 'updated' ? array_intersect_key($model->getOriginal(), $model->getDirty()) : null,
-            'new_values' => $action !== 'deleted' ? $model->getDirty() : null,
+            'auditable_id' => (string) $model->getKey(),
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
             'ip_address' => request()->ip(),
             'user_agent' => request()->userAgent(),
         ]);
