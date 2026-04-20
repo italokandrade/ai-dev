@@ -364,49 +364,39 @@ $response = BackendSpecialist::make()
 
 O SDK gerencia `agent_conversations` e `agent_conversation_messages` automaticamente.
 
-### 3.6. Multi-Agent: Jobs → Padroes Nativos do SDK
+### 3.6. Multi-Agent: O Padrão Customizado de Orquestração State-Driven
 
-O Laravel 13 documenta oficialmente os **5 padroes de agentes** que mapeiam 1:1 com nosso fluxo:
+O Laravel 13 documenta oficialmente **5 padrões de agentes**, e o AI-Dev adota alguns de forma nativa e diverge de outros **propositalmente por questões de resiliência e recuperação de falhas**.
 
-| Padrao Laravel 13 | Uso no AI-Dev |
+| Padrão Laravel 13 | Uso no AI-Dev |
 |---|---|
 | **Prompt Chaining** | Task → Orchestrator → Subagente → QA (pipeline sequencial) |
-| **Routing** | Classificar task por area e rotear para especialista correto |
-| **Parallelization** | Subtasks independentes rodam via `Concurrency::run()` |
-| **Orchestrator-Workers** | Orchestrator delega para especialistas via Agent-as-Tool |
-| **Evaluator-Optimizer** | QA Auditor avalia → Subagente corrige → QA re-avalia (loop) |
+| **Routing** | Classificador rápido (usando `#[UseCheapestModel]` para economizar tokens) roteia para especialista correto |
+| **Evaluator-Optimizer** | QA Auditor avalia → Subagente corrige → QA re-avalia (loop via jobs) |
+| **Parallelization (Divergência)** | Em vez de rodar subtasks em memória via `Concurrency::run()` (que perde estado se o servidor reiniciar), o AI-Dev despacha jobs paralelos na fila do Horizon. |
+| **Orchestrator-Workers (Divergência)** | Em vez de registrar subagentes como Tools (Agent-as-a-Tool), o Orchestrator escreve um plano estruturado no banco e encerra. O sistema reage aos registros no banco para chamar workers via filas. |
 
-**Exemplo: Pipeline completo com padroes nativos:**
+**Por que a divergência (State-Driven Customizada)?**
+Se o servidor reiniciar ou um worker falhar (ex: rate limit), **nada está perdido**. O estado da orquestração está salvo no banco de dados (`subtasks`), e o AI-Dev sabe exatamente de onde recomeçar. Os padrões nativos síncronos (`Concurrency::run` ou chamadas recursivas `Agent-as-a-Tool`) perderiam todo o progresso em caso de interrupção do processo pai.
+
+**Exemplo: Pipeline com Orquestração Baseada em Banco de Dados:**
 ```php
-use Illuminate\Support\Facades\Pipeline;
-use Illuminate\Support\Facades\Concurrency;
+use Illuminate\Support\Facades\Queue;
 
-// Fase 1: Orchestrator planeja (Prompt Chaining)
+// Fase 1: Orchestrator planeja e retorna o formato estruturado
 $plan = OrchestratorAgent::make(task: $task)
     ->prompt($task->prd_payload, provider: 'openrouter', model: 'anthropic/claude-opus-4.7');
 
-// Fase 2: Subtasks paralelas (Parallelization)
-$results = Concurrency::run(
-    $plan['subtasks']
-        ->filter(fn($s) => empty($s['dependencies']))
-        ->map(fn($subtask) => fn() =>
-            SpecialistAgent::make(subtask: $subtask)
-                ->prompt($subtask['sub_prd'], provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6')
-        )->all()
-);
-
-// Fase 3: QA audita (Evaluator-Optimizer)
-foreach ($results as $result) {
-    $audit = QAAuditorAgent::make()
-        ->prompt("Sub-PRD: {$result->subPrd}\nDiff: {$result->diff}",
-                 provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6');
-
-    if (!$audit['approved']) {
-        // Re-executa com feedback (loop de correcao)
-        $corrected = SpecialistAgent::make(subtask: $result->subtask)
-            ->prompt("Corrija: {$audit['issues']}");
+// Salvamos o estado no banco de dados para garantir a resiliência
+foreach ($plan['subtasks'] as $subtaskData) {
+    $subtask = Subtask::create($subtaskData);
+    
+    // Fase 2: Paralelismo resiliente despachando para as Filas
+    if (empty($subtaskData['dependencies'])) {
+        Queue::push(new ProcessSubtaskJob($subtask));
     }
 }
+// O OrchestratorAgent termina aqui. O Horizon assume a execução dos ProcessSubtaskJob.
 ```
 
 ### 3.7. Queue Routing: Disperso → Centralizado

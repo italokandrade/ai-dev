@@ -50,8 +50,8 @@ As ferramentas que tocam filesystem/shell/git recebem `string $workingDirectory`
 ## 1. BoostTool — Ponte para o Laravel Boost MCP
 
 **Classe:** `App\Ai\Tools\BoostTool`
-**Constructor:** sem argumentos (resolve internamente via `app()`).
-**Responsabilidade:** acesso unificado ao **Laravel Boost MCP** do Projeto Alvo para schema, queries, docs e logs. É a **primeira tool obrigatória** no pipeline do `SpecialistAgent` e do `QAAuditorAgent` — nenhum código é escrito ou auditado sem antes consultar o Boost.
+**Constructor:** `string $workingDirectory` (= `projects.local_path`).
+**Responsabilidade:** acesso unificado ao **Laravel Boost MCP** do Projeto Alvo para schema, queries, docs e logs. É a **primeira tool obrigatória** no pipeline do `SpecialistAgent` e do `QAAuditorAgent` — nenhum código é escrito ou auditado sem antes consultar o Boost. O `$workingDirectory` garante que a tool injete o caminho local correto, conectando-se ao Boost do próprio alvo para evitar *prompt injection* ou vazamento de escopo.
 
 ### Sub-tools disponíveis (campo `tool`)
 
@@ -91,7 +91,7 @@ O artigo [Production-Safe Database Tools](https://laravel.com/blog/laravel-ai-sd
 - **Individual Eloquent Tools (ponto de partida recomendado):** uma classe `Tool` por query de negócio (ex: `GetOrdersTool`, `GetSubscriptionsTool`). Schema fixo, intenção clara, surface de ataque mínima — o LLM passa apenas parâmetros tipados, nunca compõe SQL.
 - **Query Builder Tool (para escala):** uma única tool aceita `table/columns/conditions` estruturados. Recomendado somente quando o número de tools individuais ultrapassa ~10, pois exige camadas extras de segurança (allowlist, redação, readonly).
 
-**Decisão deste projeto:** o `database-query` segue o padrão Query Builder desde o início porque é um wrapper de uso interno do sistema — os agentes inspecionam schema do Projeto Alvo, não consultam dados de negócio do usuário final. Tools de domínio de negócio futuras devem seguir o padrão Individual Eloquent.
+**Decisão deste projeto:** o `database-query` segue o padrão Query Builder apenas porque é um wrapper de uso interno da plataforma de IA (usada pelos agentes para inspecionar schema). **Para todo o desenvolvimento dos módulos do Projeto Alvo, as ferramentas de domínio de negócio criadas DEVEM usar a abordagem "Individual Eloquent Tools"** (Start Simple) como preconiza a Laravel, evitando expor a surface inteira do banco para o agente prematuramente.
 
 ### Hardening do `database-query` *(Fase 2 — a implementar)*
 

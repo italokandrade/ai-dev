@@ -1160,11 +1160,8 @@ Os blocos 1 e 2 (estático + semi-estático) são entregues pelo método `Agent:
 *   **O que salvar:** Sempre que uma `Task` finaliza com sucesso, o PRD original e o *diff* do código vencedor são vetorizados e salvos na tabela `problems_solutions`.
 *   **Como gerar embeddings:** Via Laravel AI SDK (`AI::embeddings()->provider(Lab::OpenAI)->embed(...)`) ou modelo local via Ollama. O SDK suporta múltiplos provedores de embeddings (OpenAI, Gemini, Cohere, Jina, VoyageAI).
 *   **Onde armazenar:** Coluna `vector(1536)` na tabela `problems_solutions` via **pgvector** nativo no PostgreSQL 16. Eliminamos a necessidade de ChromaDB ou SQLite-Vec — busca vetorial nativa no mesmo banco relacional.
-*   **Como usar:** No passo 3 do fluxo, uma busca semântica traz o Top 3 de contextos relevantes:
-    - O PRD atual é vetorizado via `AI::embeddings()`.
-    - O vetor é comparado via `whereVectorSimilarTo()` do Eloquent (pgvector).
-    - Os 3 registros com maior similaridade de cosseno (>0.7) são injetados no prompt como few-shot.
-*   **Exemplo prático:** O Orchestrator recebe um PRD "Criar sistema de notificações em tempo real". O RAG encontra que 2 meses atrás uma task similar ("Criar chat em tempo real") usou WebSocket via Laravel Reverb. Essa solução é injetada, e o agente reutiliza a mesma abordagem validada.
+*   **Como usar:** O Laravel AI SDK fornece a tool nativa `SimilaritySearch`. Em vez de injetar estaticamente no prompt, o agente recebe a ferramenta `SimilaritySearch::usingModel(ProblemSolution::class)` em seu array de tools. O próprio agente decide quando pesquisar por soluções passadas com base na complexidade do problema, delegando a execução vetorial (`whereVectorSimilarTo`) para o SDK de forma transparente.
+*   **Exemplo prático:** O agente backend recebe uma task complexa de WebSockets. Ele chama a tool `SimilaritySearch` com a query "WebSocket Reverb setup". O SDK executa a busca vetorial no pgvector e devolve os exemplos passados diretamente para o agente.
 
 ---
 
