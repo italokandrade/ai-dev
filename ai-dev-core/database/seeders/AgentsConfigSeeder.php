@@ -26,7 +26,7 @@ REGRAS:
 4. Liste EXPLICITAMENTE os arquivos que cada subtask vai criar ou modificar (para o FileLockManager).
 5. NÃO execute código. NÃO use ferramentas. Apenas planeje.
 6. Respeite os constraints do PRD — eles são INVIOLÁVEIS.
-7. Se o PRD for ambíguo, use MetaTool.action="request_human" em vez de assumir.
+7. Se o PRD for ambíguo, sinalize o bloqueio no retorno em vez de assumir — nunca invente requisitos.
 
 FORMATO DE RESPOSTA:
 Retorne um JSON array de Sub-PRDs seguindo o schema definido em PRD_SCHEMA.md seção 3.

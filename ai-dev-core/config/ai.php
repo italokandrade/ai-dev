@@ -13,8 +13,8 @@ return [
     |
     */
 
-    'default' => 'openai',
-    'default_for_images' => 'gemini',
+    'default' => 'openrouter',
+    'default_for_images' => 'openai',
     'default_for_audio' => 'openai',
     'default_for_transcription' => 'openai',
     'default_for_embeddings' => 'openai',
@@ -72,18 +72,6 @@ return [
         'eleven' => [
             'driver' => 'eleven',
             'key' => env('ELEVENLABS_API_KEY'),
-        ],
-
-        'gemini' => [
-            'driver' => 'anthropic',
-            'key' => env('GEMINI_API_KEY', 'proxy-key'),
-            'url' => env('GEMINI_URL', 'http://127.0.0.1:8001/v1'),
-        ],
-
-        'claude' => [
-            'driver' => 'anthropic',
-            'key' => env('CLAUDE_API_KEY', 'proxy-key'),
-            'url' => env('CLAUDE_URL', 'http://127.0.0.1:8002/v1'),
         ],
 
         'groq' => [

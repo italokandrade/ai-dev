@@ -17,8 +17,6 @@ class Project extends Model
         'name',
         'github_repo',
         'local_path',
-        'gemini_session_id',
-        'claude_session_id',
         'status',
     ];
 
