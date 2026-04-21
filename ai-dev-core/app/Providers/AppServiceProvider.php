@@ -8,7 +8,6 @@ use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Gateway\Prism\PrismGateway;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Activitylog\Models\Activity;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -17,27 +16,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Ai::extend('failover', function ($app, array $config) {
-            return new FailoverProvider(
-                new PrismGateway($app['events']),
-                $config,
-                $app['events']
-            );
+            return new FailoverProvider(new PrismGateway($app['events']), $config, $app['events']);
         });
 
         $this->registerGlobalAuditor();
 
-        // Log tool calls for audit - Blindagem Máxima
+        // Auditor de Ferramentas - Blindado contra erro de get_class
         Event::listen(\Laravel\Ai\Events\ToolInvoked::class, function ($event) {
             try {
-                $agentName = 'Unknown';
-                if (isset($event->agent)) {
-                    $agentName = is_object($event->agent) ? get_class($event->agent) : (string)$event->agent;
-                }
-
-                $toolName = 'Unknown';
-                if (isset($event->tool)) {
-                    $toolName = is_object($event->tool) ? get_class($event->tool) : (string)$event->tool;
-                }
+                $agentName = is_object($event->agent ?? null) ? $event->agent::class : (string)($event->agent ?? 'Unknown');
+                $toolName = is_object($event->tool ?? null) ? $event->tool::class : (string)($event->tool ?? 'Unknown');
 
                 \App\Models\ToolCallLog::create([
                     'invocation_id' => $event->invocationId ?? null,
@@ -46,26 +34,20 @@ class AppServiceProvider extends ServiceProvider
                     'arguments' => $event->arguments ?? [],
                     'result' => is_string($event->result ?? '') ? $event->result : json_encode($event->result ?? ''),
                 ]);
-            } catch (\Throwable) {
-                // Auditoria falhou? Vida que segue, não trava o chat.
-            }
+            } catch (\Throwable) {}
         });
     }
 
     protected function registerGlobalAuditor(): void
     {
-        $events = ['eloquent.created: *', 'eloquent.updated: *', 'eloquent.deleted: *'];
-
-        Event::listen($events, function ($eventName, array $data) {
+        Event::listen(['eloquent.created: *', 'eloquent.updated: *', 'eloquent.deleted: *'], function ($eventName, array $data) {
             try {
                 $model = $data[0] ?? null;
                 if (! $model instanceof Model) return;
 
-                $ignoredModels = [Activity::class, \App\Models\ToolCallLog::class];
-                if (in_array(get_class($model), $ignoredModels)) return;
-
-                $ignoredTables = ['sessions', 'cache', 'jobs', 'failed_jobs', 'activity_log'];
-                if (in_array($model->getTable(), $ignoredTables)) return;
+                $table = $model->getTable();
+                // Ignorar tabelas de log e infra para evitar loop e erros
+                if (in_array($table, ['activity_log', 'tool_calls_log', 'sessions', 'cache', 'jobs', 'failed_jobs'])) return;
 
                 $action = str_contains($eventName, 'created') ? 'created' : (str_contains($eventName, 'updated') ? 'updated' : 'deleted');
                 
@@ -77,15 +59,13 @@ class AppServiceProvider extends ServiceProvider
                     $new = $model->getDirty();
                     unset($old['updated_at'], $new['updated_at']);
                     if (empty($new)) return;
-                    $log->withProperties(['old' => $old, 'attributes' => $new])->log("Registro atualizado em {$model->getTable()}");
+                    $log->withProperties(['old' => $old, 'attributes' => $new])->log("Editou {$table}");
                 } elseif ($action === 'created') {
-                    $log->withProperties(['attributes' => $model->getAttributes()])->log("Novo registro em {$model->getTable()}");
+                    $log->withProperties(['attributes' => $model->getAttributes()])->log("Criou em {$table}");
                 } elseif ($action === 'deleted') {
-                    $log->withProperties(['old' => $model->getOriginal()])->log("Registro excluído em {$model->getTable()}");
+                    $log->withProperties(['old' => $model->getOriginal()])->log("Deletou de {$table}");
                 }
-            } catch (\Throwable) {
-                // Silencioso
-            }
+            } catch (\Throwable) {}
         });
     }
 }

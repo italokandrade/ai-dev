@@ -1,42 +1,40 @@
 <x-filament-widgets::widget>
-    <x-filament::section icon="heroicon-o-chat-bubble-left-right" icon-color="primary" class="shadow-md overflow-hidden">
+    <x-filament::section icon="heroicon-o-chat-bubble-left-right" icon-color="primary" class="shadow-xl rounded-3xl border-none">
         <x-slot name="heading">
-            <span class="text-xl font-bold tracking-tight text-gray-800 dark:text-gray-100">Assistente Inteligente do Sistema</span>
+            <span class="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Assistente do Sistema</span>
         </x-slot>
 
         <x-slot name="headerEnd">
-            <x-filament::button wire:click="clearChat" color="gray" size="sm" icon="heroicon-o-trash" variant="ghost" class="hover:bg-gray-100 dark:hover:bg-gray-800">
-                Limpar Conversa
+            <x-filament::button wire:click="clearChat" color="gray" size="sm" icon="heroicon-o-trash" variant="ghost" class="rounded-full">
+                Limpar Histórico
             </x-filament::button>
         </x-slot>
 
-        <div class="flex flex-col h-[700px] w-full">
-            {{-- Área de Mensagens --}}
-            <div id="chat-container" class="flex-1 overflow-y-auto space-y-8 p-8 bg-gray-50/80 dark:bg-gray-900/40 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-inner custom-scrollbar"
-                 x-init="
-                    $nextTick(() => { $el.scrollTop = $el.scrollHeight });
-                 "
+        <div class="flex flex-col h-[750px] w-full gap-8 py-4">
+            {{-- Mensagens --}}
+            <div id="chat-container" class="flex-1 overflow-y-auto space-y-10 p-10 bg-slate-50/50 dark:bg-gray-900/50 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-inner"
+                 x-init="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"
                  x-on:scroll-chat.window="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"
             >
                 @foreach($history as $msg)
                     <div class="flex {{ $msg['role'] === 'user' ? 'justify-end' : 'justify-start' }}">
-                        <div class="max-w-[80%] shadow-md 
+                        <div class="max-w-[80%] shadow-lg 
                             {{ $msg['role'] === 'user' 
-                                ? 'bg-primary-600 text-white rounded-[2rem] rounded-tr-none' 
-                                : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-[2rem] rounded-tl-none border border-gray-100 dark:border-gray-700' 
+                                ? 'bg-primary-600 text-white rounded-[2.5rem] rounded-tr-none' 
+                                : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-[2.5rem] rounded-tl-none border border-gray-100 dark:border-gray-700' 
                             }}">
                             
-                            <div class="px-8 py-5">
-                                <div class="text-[10px] opacity-70 mb-3 font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                            <div class="px-10 py-6">
+                                <div class="text-[11px] opacity-60 mb-4 font-black uppercase tracking-[0.3em] flex items-center gap-3">
                                     @if($msg['role'] === 'user')
-                                        <x-filament::icon icon="heroicon-m-user" class="h-3 w-3" />
+                                        <x-filament::icon icon="heroicon-m-user" class="h-4 w-4" />
                                         <span>VOCÊ</span>
                                     @else
-                                        <x-filament::icon icon="heroicon-m-sparkles" class="h-3 w-3" />
+                                        <x-filament::icon icon="heroicon-m-sparkles" class="h-4 w-4" />
                                         <span>ASSISTENTE AI-DEV</span>
                                     @endif
                                 </div>
-                                <div class="prose dark:prose-invert prose-sm max-w-none leading-relaxed text-lg font-medium">
+                                <div class="prose dark:prose-invert prose-md max-w-none leading-loose text-lg">
                                     {!! nl2br(e($msg['content'])) !!}
                                 </div>
                             </div>
@@ -46,34 +44,32 @@
 
                 @if($isProcessing)
                     <div class="flex justify-start">
-                        <div class="flex items-center gap-4 text-gray-500 bg-white dark:bg-gray-800 px-6 py-3 rounded-full border border-gray-100 dark:border-gray-700 shadow-md animate-pulse">
-                            <x-filament::loading-indicator class="h-5 w-5 text-primary-500" />
-                            <span class="font-bold text-sm uppercase tracking-widest">Investigando o sistema...</span>
+                        <div class="flex items-center gap-5 text-gray-500 bg-white dark:bg-gray-800 px-8 py-4 rounded-full border border-gray-100 dark:border-gray-700 shadow-lg animate-pulse">
+                            <x-filament::loading-indicator class="h-6 w-6 text-primary-500" />
+                            <span class="font-bold text-sm uppercase tracking-widest">Processando sua pergunta...</span>
                         </div>
                     </div>
                 @endif
             </div>
 
-            {{-- Espaçamento --}}
-            <div class="h-8"></div>
-
-            {{-- Área de Input Profissional --}}
-            <div class="w-full bg-white dark:bg-gray-900 rounded-[2.5rem] border-2 border-gray-100 dark:border-gray-800 shadow-xl p-3 focus-within:border-primary-500 transition-all duration-300">
-                <div class="px-4 pt-2">
+            {{-- Caixa de Entrada Grande --}}
+            <div class="w-full flex flex-col gap-6 bg-white dark:bg-gray-900 rounded-[3rem] border-2 border-gray-100 dark:border-gray-800 shadow-2xl p-6 focus-within:border-primary-500 transition-all duration-300">
+                <div class="w-full px-4">
                     <textarea
                         wire:model="message"
                         wire:keydown.enter.prevent="sendMessage"
-                        placeholder="Ex: Como eu posso cadastrar um novo usuário?"
+                        placeholder="Como eu posso te ajudar com o sistema agora?"
                         rows="4"
-                        class="block w-full border-0 bg-transparent p-0 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-0 text-lg leading-relaxed resize-none"
+                        style="width: 100%; min-width: 100%; font-size: 1.125rem;"
+                        class="block w-full border-0 bg-transparent p-0 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-0 leading-relaxed resize-none"
                         :disabled="$isProcessing"
                     ></textarea>
                 </div>
                 
-                <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 dark:border-gray-800 px-2 pb-1">
-                    <div class="flex items-center gap-2 text-[10px] text-gray-400 uppercase font-black tracking-widest pl-4">
-                        <span class="h-1.5 w-1.5 bg-green-500 rounded-full animate-ping"></span>
-                        Status: Conectado à IA do Sistema
+                <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-50 dark:border-gray-800 px-4">
+                    <div class="flex items-center gap-3 text-xs text-gray-400 font-bold tracking-widest">
+                        <span class="h-2 w-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        IA DO SISTEMA ATIVA
                     </div>
                     
                     <x-filament::button 
@@ -82,23 +78,12 @@
                         size="xl"
                         icon="heroicon-m-paper-airplane"
                         icon-position="after"
-                        class="rounded-full px-10 shadow-lg shadow-primary-500/20"
+                        class="rounded-full px-12 shadow-xl shadow-primary-500/20"
                     >
-                        Enviar Pergunta
+                        Enviar
                     </x-filament::button>
                 </div>
             </div>
-            
-            <div class="mt-4 text-center">
-                <span class="text-[9px] text-gray-400 uppercase font-bold tracking-[0.3em]">IA Conectada via OpenRouter • Powered by AI-Dev Master</span>
-            </div>
         </div>
     </x-filament::section>
-
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; }
-    </style>
 </x-filament-widgets::widget>
