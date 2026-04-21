@@ -3,7 +3,6 @@
 namespace App\Filament\Widgets;
 
 use App\Ai\Agents\SystemAssistantAgent;
-use App\Models\SystemSetting;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Log;
 
@@ -19,7 +18,7 @@ class DashboardChat extends Widget
     {
         $this->history[] = [
             'role' => 'assistant',
-            'content' => 'Olá! Sistema pronto. Como posso ajudar?'
+            'content' => 'Olá! Eu sou o Assistente Inteligente do AI-Dev. Como posso ajudar?'
         ];
     }
 
@@ -33,17 +32,8 @@ class DashboardChat extends Widget
         $this->isProcessing = true;
 
         try {
-            $apiKey = SystemSetting::get(SystemSetting::AI_SYSTEM_KEY) ?: env('OPENROUTER_API_KEY');
-            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-3.5-sonnet');
-            
-            $agent = new SystemAssistantAgent();
-            
-            // Força o provider 'openrouter' com as credenciais diretas
-            $response = $agent->prompt($userMessage, [
-                'provider' => 'openrouter',
-                'model' => $model,
-                'api_key' => $apiKey,
-            ]);
+            // Chamada idêntica ao que funciona no ProjectResource
+            $response = SystemAssistantAgent::make()->prompt($userMessage);
 
             $this->history[] = [
                 'role' => 'assistant',
@@ -52,7 +42,7 @@ class DashboardChat extends Widget
         } catch (\Throwable $e) {
             $this->history[] = [
                 'role' => 'assistant',
-                'content' => 'Erro de conexão: ' . $e->getMessage()
+                'content' => 'Lamento, tive um problema técnico: ' . $e->getMessage()
             ];
         }
 
@@ -64,5 +54,6 @@ class DashboardChat extends Widget
     {
         $this->history = [];
         $this->mount();
+        $this->dispatch('scroll-chat');
     }
 }

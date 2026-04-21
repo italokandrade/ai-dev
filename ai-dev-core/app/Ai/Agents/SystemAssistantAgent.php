@@ -3,12 +3,21 @@
 namespace App\Ai\Agents;
 
 use App\Ai\Tools\BoostTool;
-use App\Models\SystemSetting;
+use Laravel\Ai\Attributes\MaxTokens;
+use Laravel\Ai\Attributes\Model;
+use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Attributes\Temperature;
+use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[Provider('openrouter')]
+#[Model('anthropic/claude-3.5-sonnet')]
+#[Temperature(0.3)]
+#[MaxTokens(2048)]
+#[Timeout(120)]
 class SystemAssistantAgent implements Agent, HasTools
 {
     use Promptable;
@@ -24,7 +33,6 @@ class SystemAssistantAgent implements Agent, HasTools
 
     public function tools(): iterable
     {
-        // Se houver path, habilita o boost, senão envia sem tools para estabilidade
         if ($this->projectPath) {
             return [new BoostTool($this->projectPath)];
         }
