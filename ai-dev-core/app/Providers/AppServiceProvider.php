@@ -35,24 +35,27 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerGlobalAuditor();
 
-        // Log tool calls for audit - Blindagem Reforçada
-        Event::listen(\Laravel\Ai\Events\ToolInvoked::class, function (\Laravel\Ai\Events\ToolInvoked $event) {
-            \App\Models\ToolCallLog::create([
-                'invocation_id' => $event->invocationId,
-                'agent_class' => is_object($event->agent) ? get_class($event->agent) : (is_string($event->agent) ? $event->agent : 'UnknownAgent'),
-                'tool_class' => is_object($event->tool) ? get_class($event->tool) : (is_string($event->tool) ? $event->tool : 'UnknownTool'),
-                'arguments' => $event->arguments,
-                'result' => is_string($event->result) ? $event->result : json_encode($event->result),
-            ]);
+        // Log tool calls for audit - Blindagem ABSOLUTA
+        Event::listen(\Laravel\Ai\Events\ToolInvoked::class, function ($event) {
+            try {
+                \App\Models\ToolCallLog::create([
+                    'invocation_id' => $event->invocationId ?? null,
+                    'agent_class' => is_object($event->agent ?? null) ? get_class($event->agent) : (string) ($event->agent ?? 'Unknown'),
+                    'tool_class' => is_object($event->tool ?? null) ? get_class($event->tool) : (string) ($event->tool ?? 'Unknown'),
+                    'arguments' => $event->arguments ?? [],
+                    'result' => is_string($event->result ?? null) ? $event->result : json_encode($event->result ?? ''),
+                ]);
+            } catch (\Throwable) {
+                // Silencioso para não interromper o chat
+            }
         });
     }
 
     /**
-     * Monitora globalmente todas as mudanças no banco de dados sem necessidade de traits nos Models.
+     * Monitora globalmente todas as mudanças no banco de dados.
      */
     protected function registerGlobalAuditor(): void
     {
-        // Eventos que queremos rastrear
         $events = [
             'eloquent.created: *',
             'eloquent.updated: *',
@@ -60,38 +63,33 @@ class AppServiceProvider extends ServiceProvider
         ];
 
         Event::listen($events, function ($eventName, array $data) {
-            $model = $data[0] ?? null;
-
-            if (! $model instanceof Model) {
-                return;
-            }
-
-            // Ignorar modelos de infraestrutura e o próprio log para evitar loop
-            $ignoredModels = [
-                Activity::class,
-                \App\Models\ToolCallLog::class,
-                \Illuminate\Notifications\DatabaseNotification::class,
-            ];
-
-            $modelClass = get_class($model);
-            if (in_array($modelClass, $ignoredModels)) {
-                return;
-            }
-
-            // Ignorar tabelas de cache, sessão e filas
-            $ignoredTables = ['sessions', 'cache', 'jobs', 'failed_jobs', 'job_batches', 'pulse_entries', 'pulse_values', 'pulse_aggregates', 'activity_log'];
-            if (in_array($model->getTable(), $ignoredTables)) {
-                return;
-            }
-
             try {
+                $model = $data[0] ?? null;
+
+                if (! $model instanceof Model) {
+                    return;
+                }
+
+                $ignoredModels = [
+                    Activity::class,
+                    \App\Models\ToolCallLog::class,
+                    \Illuminate\Notifications\DatabaseNotification::class,
+                ];
+
+                if (in_array(get_class($model), $ignoredModels)) {
+                    return;
+                }
+
+                $ignoredTables = ['sessions', 'cache', 'jobs', 'failed_jobs', 'job_batches', 'pulse_entries', 'pulse_values', 'pulse_aggregates', 'activity_log'];
+                if (in_array($model->getTable(), $ignoredTables)) {
+                    return;
+                }
+
                 $actionParts = explode(':', $eventName);
                 $action = str_replace('eloquent.', '', $actionParts[0] ?? '');
                 
                 $user = auth()->user();
-                
-                $log = activity()
-                    ->performedOn($model);
+                $log = activity()->performedOn($model);
                 
                 if ($user) {
                     $log->causedBy($user);
@@ -100,22 +98,15 @@ class AppServiceProvider extends ServiceProvider
                 if ($action === 'updated') {
                     $old = array_intersect_key($model->getOriginal(), $model->getDirty());
                     $new = $model->getDirty();
-                    
                     unset($old['updated_at'], $new['updated_at']);
-                    
                     if (empty($new)) return;
-
-                    $log->withProperties(['old' => $old, 'attributes' => $new])
-                        ->log("Registro atualizado em {$model->getTable()}");
+                    $log->withProperties(['old' => $old, 'attributes' => $new])->log("Registro atualizado em {$model->getTable()}");
                 } elseif ($action === 'created') {
-                    $log->withProperties(['attributes' => $model->getAttributes()])
-                        ->log("Novo registro em {$model->getTable()}");
+                    $log->withProperties(['attributes' => $model->getAttributes()])->log("Novo registro em {$model->getTable()}");
                 } elseif ($action === 'deleted') {
-                    $log->withProperties(['old' => $model->getOriginal()])
-                        ->log("Registro excluído em {$model->getTable()}");
+                    $log->withProperties(['old' => $model->getOriginal()])->log("Registro excluído em {$model->getTable()}");
                 }
             } catch (\Throwable $e) {
-                // Silencioso para não quebrar a aplicação em caso de erro no auditor
                 \Illuminate\Support\Facades\Log::warning("Erro no GlobalAuditor: " . $e->getMessage());
             }
         });
