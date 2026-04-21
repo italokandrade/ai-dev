@@ -9,6 +9,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Schemas\Schema;
 use Filament\Actions\ViewAction;
+use Illuminate\Support\HtmlString;
 
 class ActivityLogResource extends Resource
 {
@@ -85,6 +86,50 @@ class ActivityLogResource extends Resource
                 ViewAction::make(),
             ])
             ->defaultSort('created_at', 'desc');
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema
+            ->schema([
+                \Filament\Schemas\Components\Section::make('Detalhes do Log')
+                    ->schema([
+                        \Filament\Schemas\Components\Grid::make(3)->schema([
+                            \Filament\Infolists\Components\TextEntry::make('created_at')->label('Data/Hora')->dateTime(),
+                            \Filament\Infolists\Components\TextEntry::make('causer.name')->label('Usuário')->placeholder('Sistema'),
+                            \Filament\Infolists\Components\TextEntry::make('event')->label('Evento')->badge(),
+                        ]),
+                        \Filament\Schemas\Components\Grid::make(2)->schema([
+                            \Filament\Infolists\Components\TextEntry::make('subject_type')->label('Módulo'),
+                            \Filament\Infolists\Components\TextEntry::make('description')->label('Descrição'),
+                        ]),
+                    ]),
+                \Filament\Schemas\Components\Section::make('Alterações')
+                    ->schema([
+                        \Filament\Schemas\Components\Grid::make(2)->schema([
+                            \Filament\Infolists\Components\TextEntry::make('properties.old')
+                                ->label('Dados Anteriores')
+                                ->getStateUsing(fn ($record) => static::formatData($record->properties['old'] ?? null))
+                                ->html(),
+                            \Filament\Infolists\Components\TextEntry::make('properties.attributes')
+                                ->label('Novos Dados')
+                                ->getStateUsing(fn ($record) => static::formatData($record->properties['attributes'] ?? null))
+                                ->html(),
+                        ]),
+                    ]),
+            ]);
+    }
+
+    protected static function formatData(?array $data): ?string
+    {
+        if (empty($data)) return null;
+        $html = '<div class="space-y-1 font-mono text-xs">';
+        foreach ($data as $key => $value) {
+            $val = is_array($value) ? json_encode($value) : (string)$value;
+            if (strlen($val) > 50) $val = substr($val, 0, 50) . '...';
+            $html .= "<div><span class='font-bold text-primary-600'>{$key}:</span> <span>{$val}</span></div>";
+        }
+        return $html . '</div>';
     }
 
     public static function getPages(): array
