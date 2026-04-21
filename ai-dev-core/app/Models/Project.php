@@ -3,17 +3,18 @@
 namespace App\Models;
 
 use App\Enums\ProjectStatus;
-use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Project extends Model implements Conversational
 {
-    use Auditable, RemembersConversations, HasUuids;
+    use HasUuids, LogsActivity, RemembersConversations;
 
     protected $fillable = [
         'name',
@@ -21,6 +22,14 @@ class Project extends Model implements Conversational
         'local_path',
         'status',
     ];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['name', 'status', 'github_repo'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 
     protected function casts(): array
     {
@@ -68,13 +77,11 @@ class Project extends Model implements Conversational
     {
         $totalTasks = $this->tasks()->count();
 
-        // Se houver tarefas, o progresso absoluto é medido por elas (melhor precisão)
         if ($totalTasks > 0) {
             $completedTasks = $this->tasks()->where('status', 'completed')->count();
             return round(($completedTasks / $totalTasks) * 100, 1);
         }
 
-        // Se o projeto ainda não tem tarefas, baseia-se no volume de módulos concluídos
         $totalModules = $this->modules()->count();
         
         if ($totalModules > 0) {
@@ -97,9 +104,6 @@ class Project extends Model implements Conversational
             ->orderByDesc('created_at');
     }
 
-    /**
-     * Acumula custos reais de tokens/infra na cotação ativa do projeto.
-     */
     public function addExecutionCost(float $tokenCostUsd, float $infraCostBrl = 0): void
     {
         $quotation = $this->activeQuotation;
