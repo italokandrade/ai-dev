@@ -16,7 +16,7 @@ return [
     */
 
     'shield_resource' => [
-        'resource' => \App\Filament\Resources\Shield\RoleResource::class,
+        'should_register_navigation' => false,
         'slug' => 'shield/roles',
         'show_model_path' => true,
         'cluster' => null,
