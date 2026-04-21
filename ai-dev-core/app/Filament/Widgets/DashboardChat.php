@@ -19,7 +19,7 @@ class DashboardChat extends Widget
     {
         $this->history[] = [
             'role' => 'assistant',
-            'content' => 'Olá! Chat em modo simplificado para diagnóstico. Como posso ajudar?'
+            'content' => 'Olá! Eu sou o Assistente Inteligente do AI-Dev. Tenho acesso ao código e à documentação deste sistema para te ajudar. Como posso ser útil?'
         ];
     }
 
@@ -35,29 +35,28 @@ class DashboardChat extends Widget
         try {
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
             $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-3.5-sonnet');
-            $apiKey = SystemSetting::get(SystemSetting::AI_SYSTEM_KEY);
-
-            if (empty($apiKey)) {
-                $apiKey = env('OPENROUTER_API_KEY');
-            }
-
-            // Agente sem ferramentas e sem path para isolamento
-            $agent = new SystemAssistantAgent();
             
-            $response = $agent->prompt($userMessage, [
-                'provider' => $provider,
-                'model' => $model,
-                'api_key' => $apiKey,
-            ]);
+            // Opcional: configurar chave no .env se ela for necessária globalmente,
+            // mas o provider já pegará do config/ai.php se estiver null
+            
+            $agent = new SystemAssistantAgent(base_path());
+            
+            // Correção: Ordem exata dos parâmetros
+            // 1. Mensagem
+            // 2. Anexos (vazio)
+            // 3. Provider
+            // 4. Modelo
+            $response = $agent->prompt($userMessage, [], $provider, $model);
 
             $this->history[] = [
                 'role' => 'assistant',
                 'content' => (string) $response
             ];
         } catch (\Throwable $e) {
+            Log::error("DashboardChat Error: " . $e->getMessage());
             $this->history[] = [
                 'role' => 'assistant',
-                'content' => 'Lamento, erro: ' . $e->getMessage()
+                'content' => 'Lamento, ocorreu um erro de conexão: ' . $e->getMessage()
             ];
         }
 
