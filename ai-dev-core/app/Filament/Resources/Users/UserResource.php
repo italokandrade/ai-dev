@@ -14,8 +14,8 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
 
 class UserResource extends Resource
 {
@@ -38,11 +38,12 @@ class UserResource extends Resource
                         TextInput::make('password')->label('Senha')->password()
                             ->dehydrated(fn ($state) => filled($state))
                             ->required(fn (string $operation): bool => $operation === 'create'),
-                        Select::make('role')
-                            ->label('Perfil de Acesso')
-                            ->options(collect(UserRole::cases())->mapWithKeys(fn ($case) => [$case->value => $case->label()]))
-                            ->required()
-                            ->native(false),
+                        Select::make('roles')
+                            ->label('Perfis de Acesso')
+                            ->relationship('roles', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable(),
                     ]),
             ]);
     }
@@ -53,16 +54,10 @@ class UserResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Nome')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('email')->label('E-mail')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('role')
-                    ->label('Perfil')
+                Tables\Columns\TextColumn::make('roles.name')
+                    ->label('Perfis')
                     ->badge()
-                    ->formatStateUsing(fn (UserRole $state): string => $state->label())
-                    ->color(fn (UserRole $state): string => match ($state) {
-                        UserRole::Admin => 'danger',
-                        UserRole::Developer => 'info',
-                        UserRole::QA => 'warning',
-                        default => 'gray',
-                    }),
+                    ->color('info'),
                 Tables\Columns\TextColumn::make('created_at')->label('Cadastro')->dateTime()->sortable()->toggleable(),
             ])
             ->actions([EditAction::make(), DeleteAction::make()])
