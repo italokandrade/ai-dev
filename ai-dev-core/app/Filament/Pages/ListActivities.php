@@ -12,5 +12,7 @@ class ListActivities extends BaseListActivities
 
     protected static string|\UnitEnum|null $navigationGroup = 'Administração';
 
-    protected static ?int $navigationSort = 100; // Abaixo de Usuários (80)
+    protected static ?int $navigationSort = 100;
+
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-check';
 }
