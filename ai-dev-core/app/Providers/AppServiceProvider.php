@@ -18,6 +18,6 @@ class AppServiceProvider extends ServiceProvider
             return new FailoverProvider(new PrismGateway($app['events']), $config, $app['events']);
         });
         
-        // Auditores globais removidos para estabilizar o sistema e o chat
+        // Auditores removidos fisicamente
     }
 }
