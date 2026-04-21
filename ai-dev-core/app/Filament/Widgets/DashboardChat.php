@@ -34,7 +34,7 @@ class DashboardChat extends Widget
 
         try {
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
-            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-3.5-sonnet');
+            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-sonnet-4.6');
             
             // Opcional: configurar chave no .env se ela for necessária globalmente,
             // mas o provider já pegará do config/ai.php se estiver null
