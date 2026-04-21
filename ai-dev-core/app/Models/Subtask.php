@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\SubtaskStatus;
-use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Subtask extends Model
 {
-    use Auditable, HasUuids;
+    use HasUuids;
 
     protected $fillable = [
         'task_id',

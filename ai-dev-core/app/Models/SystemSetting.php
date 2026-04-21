@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
 class SystemSetting extends Model
 {
-    use Auditable;
-
     protected $primaryKey = 'key';
     protected $keyType = 'string';
     public $incrementing = false;

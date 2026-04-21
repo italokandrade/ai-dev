@@ -20,9 +20,26 @@ class User extends Authenticatable implements FilamentUser
 {
     use HasFactory, Notifiable, HasRoles, LogsActivity;
 
+    /**
+     * Verifica se o usuário tem permissão total (Super Admin).
+     * O Shield cria por padrão o papel 'super_admin'.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(config('filament-shield.super_admin.name', 'super_admin'));
+    }
+
+    /**
+     * Verifica se o usuário tem permissão de desenvolvimento.
+     */
+    public function isDeveloper(): bool
+    {
+        return $this->hasRole(['super_admin', 'developer']);
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
-        return true; // O Shield controlará as permissões internas
+        return true; 
     }
 
     public function getActivitylogOptions(): LogOptions
