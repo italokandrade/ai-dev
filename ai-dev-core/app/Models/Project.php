@@ -9,12 +9,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
 
 class Project extends Model implements Conversational
 {
-    use HasUuids, LogsActivity, RemembersConversations;
+    use HasUuids, RemembersConversations;
 
     protected $fillable = [
         'name',
@@ -22,14 +20,6 @@ class Project extends Model implements Conversational
         'local_path',
         'status',
     ];
-
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['name', 'status', 'github_repo'])
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
-    }
 
     protected function casts(): array
     {
@@ -76,19 +66,15 @@ class Project extends Model implements Conversational
     public function overallProgress(): float
     {
         $totalTasks = $this->tasks()->count();
-
         if ($totalTasks > 0) {
             $completedTasks = $this->tasks()->where('status', 'completed')->count();
             return round(($completedTasks / $totalTasks) * 100, 1);
         }
-
         $totalModules = $this->modules()->count();
-        
         if ($totalModules > 0) {
             $completedModules = $this->modules()->where('status', 'completed')->count();
             return round(($completedModules / $totalModules) * 100, 1);
         }
-
         return 0;
     }
 
@@ -107,14 +93,9 @@ class Project extends Model implements Conversational
     public function addExecutionCost(float $tokenCostUsd, float $infraCostBrl = 0): void
     {
         $quotation = $this->activeQuotation;
-        if (! $quotation) {
-            return;
-        }
-
+        if (! $quotation) return;
         $quotation->increment('actual_token_cost_usd', $tokenCostUsd);
-        if ($infraCostBrl > 0) {
-            $quotation->increment('actual_infra_cost', $infraCostBrl);
-        }
+        if ($infraCostBrl > 0) $quotation->increment('actual_infra_cost', $infraCostBrl);
         $quotation->recalculate();
         $quotation->save();
     }

@@ -10,12 +10,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
 
 class Task extends Model implements Conversational
 {
-    use HasUuids, LogsActivity, RemembersConversations;
+    use HasUuids, RemembersConversations;
 
     protected $fillable = [
         'project_id',
@@ -37,14 +35,6 @@ class Task extends Model implements Conversational
         'started_at',
         'completed_at',
     ];
-
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['status', 'priority', 'assigned_agent_id'])
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
-    }
 
     protected function casts(): array
     {
