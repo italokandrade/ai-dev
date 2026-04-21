@@ -34,4 +34,14 @@ class RoleResource extends BaseRoleResource
     {
         return 'Perfis de Usuários';
     }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return 'Administração';
+    }
+
+    public static function getNavigationSort(): ?int
+    {
+        return 70;
+    }
 }
