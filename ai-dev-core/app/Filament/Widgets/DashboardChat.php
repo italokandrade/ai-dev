@@ -40,17 +40,12 @@ class DashboardChat extends Widget
             // Pegar configurações da "IA do Sistema"
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
             $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-sonnet-4-6');
-            $apiKey = SystemSetting::get(SystemSetting::AI_SYSTEM_KEY);
 
             // Criar instância do agente
             $agent = new SystemAssistantAgent(base_path());
             
-            // Realizar o prompt passando as opções de conexão
-            $response = $agent->prompt($userMessage, [
-                'provider' => $provider,
-                'model' => $model,
-                'api_key' => $apiKey,
-            ]);
+            // Chamar o prompt usando o provider padrão (que já usa a chave do .env se não houver outra)
+            $response = $agent->prompt($userMessage, provider: $provider);
 
             $this->history[] = [
                 'role' => 'assistant',
