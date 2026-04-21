@@ -34,6 +34,17 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerGlobalAuditor();
+
+        // Log tool calls for audit
+        Event::listen(\Laravel\Ai\Events\ToolInvoked::class, function (\Laravel\Ai\Events\ToolInvoked $event) {
+            \App\Models\ToolCallLog::create([
+                'invocation_id' => $event->invocationId,
+                'agent_class' => is_object($event->agent) ? get_class($event->agent) : (string) $event->agent,
+                'tool_class' => is_object($event->tool) ? get_class($event->tool) : (string) $event->tool,
+                'arguments' => $event->arguments,
+                'result' => is_string($event->result) ? $event->result : json_encode($event->result),
+            ]);
+        });
     }
 
     /**
