@@ -37,15 +37,25 @@ class DashboardChat extends Widget
         $this->dispatch('scroll-chat');
 
         try {
-            // Pegar configurações da "IA do Sistema"
+            // Pegar configurações da "IA do Sistema" do banco de dados
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
-            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-sonnet-4-6');
+            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-3.5-sonnet');
+            $apiKey = SystemSetting::get(SystemSetting::AI_SYSTEM_KEY);
+
+            // Se não houver chave no banco, tenta pegar do .env como fallback
+            if (empty($apiKey)) {
+                $apiKey = env('OPENROUTER_API_KEY');
+            }
 
             // Criar instância do agente
             $agent = new SystemAssistantAgent(base_path());
             
-            // Chamar o prompt usando o provider padrão (que já usa a chave do .env se não houver outra)
-            $response = $agent->prompt($userMessage, provider: $provider);
+            // Realizar o prompt passando as opções de conexão completas
+            $response = $agent->prompt($userMessage, [
+                'provider' => $provider,
+                'model' => $model,
+                'api_key' => $apiKey,
+            ]);
 
             $this->history[] = [
                 'role' => 'assistant',
@@ -53,9 +63,15 @@ class DashboardChat extends Widget
             ];
         } catch (\Throwable $e) {
             Log::error("DashboardChat Error: " . $e->getMessage());
+            
+            $errorMessage = $e->getMessage();
+            if (str_contains($errorMessage, '400')) {
+                $errorMessage = "Erro 400 (Bad Request): Verifique se o modelo '{$model}' é válido no provider '{$provider}' e se a API Key está correta.";
+            }
+
             $this->history[] = [
                 'role' => 'assistant',
-                'content' => 'Lamento, tive um problema técnico ao investigar sua pergunta. Erro: ' . $e->getMessage()
+                'content' => 'Lamento, tive um problema técnico: ' . $errorMessage
             ];
         }
 
