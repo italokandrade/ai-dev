@@ -386,17 +386,26 @@ class ProjectResource extends Resource
                                 })
                                 ->columnSpanFull(),
 
-                            Infolists\Components\TextEntry::make('currentSpecification.user_description')
+                            Infolists\Components\TextEntry::make('description')
                                 ->label('O que este sistema se propõe a fazer?')
                                 ->placeholder('—')
                                 ->columnSpanFull(),
 
 
-                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
+                            Infolists\Components\RepeatableEntry::make('features')
                                 ->label('Funcionalidades Principais')
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->placeholder('—')
+                                ->schema([
+                                    Infolists\Components\TextEntry::make('title')
+                                        ->hiddenLabel()
+                                        ->weight('bold')
+                                        ->bulleted(),
+                                    Infolists\Components\TextEntry::make('description')
+                                        ->hiddenLabel()
+                                        ->color('gray')
+                                        ->visible(fn ($state) => filled($state)),
+                                ])
+                                ->columns(1)
+                                ->grid(1)
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
