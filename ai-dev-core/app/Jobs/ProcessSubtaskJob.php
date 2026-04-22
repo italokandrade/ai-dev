@@ -13,6 +13,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Process;
 
 class ProcessSubtaskJob implements ShouldQueue
@@ -55,7 +56,12 @@ class ProcessSubtaskJob implements ShouldQueue
 
         try {
             $agent = new SpecialistAgent($workDir, $this->subtask->assigned_agent);
-            $response = $agent->prompt($prompt, provider: 'specialist_chain');
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_HIGH);
+            $response = $agent->prompt(
+                $prompt,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
+            );
 
             $resultLog = (string) $response;
         } catch (\Throwable $e) {

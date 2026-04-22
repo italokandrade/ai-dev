@@ -3,7 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Ai\Agents\SystemAssistantAgent;
-use App\Models\SystemSetting;
+use App\Services\AiRuntimeConfigService;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
@@ -57,15 +57,14 @@ class DashboardChat extends Widget
 
 
         try {
-            $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
-            $model    = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-haiku-4-5-20251001');
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_SYSTEM);
 
             $agent = new SystemAssistantAgent(base_path());
 
             $response = $agent->prompt(
                 prompt: $userMessage,
-                provider: $provider,
-                model: $model,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
             );
 
             $responseText = (string) $response;

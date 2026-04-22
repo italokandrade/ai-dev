@@ -26,9 +26,10 @@ O **ai-dev-core** é uma aplicação Laravel 13 cuja missão é orquestrar o cic
 | Filas/Cache | Redis 7 + Laravel Horizon v5 | ✅ |
 | AI SDK | `laravel/ai` v0.5 | ✅ |
 | Boost | `laravel/boost` v2.4 | ✅ |
-| LLM Planejamento | OpenRouter → `anthropic/claude-opus-4.7` | ✅ |
-| LLM Código/QA | OpenRouter → `anthropic/claude-sonnet-4-6` | ✅ |
-| LLM Docs | OpenRouter → `anthropic/claude-haiku-4-5-20251001` | ✅ |
+| **LLM PREMIUM (Planejamento)** | OpenRouter → `anthropic/claude-opus-4.7` | ✅ |
+| **LLM HIGH (Código/QA)** | OpenRouter → `anthropic/claude-sonnet-4-6` | ✅ |
+| **LLM FAST (Docs/Jobs)** | OpenRouter → `anthropic/claude-haiku-4-5` | ✅ |
+| **IA DO SISTEMA (Produção)** | Configurável via System Settings | ✅ |
 | Testes | Pest v4 + PHPUnit v12 | ✅ |
 | Codebase path | `/var/www/html/projetos/ai-dev/ai-dev-core` | ✅ |
 
@@ -101,11 +102,10 @@ pending → blocked → pending
 **O que falta / precisa refatorar:**
 - ❌ Não implementa `HasStructuredOutput` — saída JSON é parseada manualmente com `json_decode()` e `preg_replace` para remover markdown fences. Risco de falha silenciosa de formato.
 - ❌ Não implementa `HasTools` — o PRD arquitetural exige ferramentas para leitura de contexto.
-- ⚠️ O `OrchestratorJob` chama `prompt(..., provider: 'orchestrator_chain')` mas esse provider não existe em `config/ai.php`. Apenas `openrouter_chain` existe. **Isso é um bug ativo.**
+- ✅ O `OrchestratorJob` agora usa `AiRuntimeConfigService::apply(LEVEL_PREMIUM)` para resolver provider/model/key dinamicamente do `SystemSetting`. Não há mais hardcode de provider.
 
 **Refatoração necessária (Fase 1):**
 1. Implementar `HasStructuredOutput` com schema do array de Sub-PRDs.
-2. Corrigir o provider: renomear `orchestrator_chain` → `openrouter_chain` no `OrchestratorJob`, ou adicionar o provider ao `config/ai.php`.
 
 ---
 
@@ -131,12 +131,12 @@ pending → blocked → pending
 **Observação de design:** O PRD arquitetural listava classes separadas por especialidade (BackendSpecialist, FrontendSpecialist, etc.). O código implementou um `SpecialistAgent` genérico que recebe `assigned_agent` como string. Esta é uma decisão válida — agente genérico + specialization via prompt é mais simples e funcional. O PRD passa a documentar este design.
 
 **O que falta:**
-- ⚠️ O `SubagentJob` passa `provider: 'specialist_chain'` ao chamar `prompt()`. Este provider não existe em `config/ai.php`. **Bug ativo.**
+- ✅ O `ProcessSubtaskJob` usa `AiRuntimeConfigService::apply(LEVEL_HIGH)` para resolver provider/model/key dinamicamente do `SystemSetting`. Não há mais hardcode de provider.
 - ⚠️ `instructions()` não diferenciam o tipo de especialista (`assigned_agent`). O agente deveria adaptar seu comportamento ao tipo recebido.
 - ❌ Agente não recebe `assigned_agent` do subtask para adaptar o prompt — recebe apenas `$projectPath`.
 
 **Refatoração necessária (Fase 1):**
-1. Corrigir provider `specialist_chain` → `openrouter_chain` (ou criar o provider).
+1. Fazer `SpecialistAgent` receber o `assigned_agent` slug no constructor e usar no `instructions()`.
 2. Fazer `SpecialistAgent` receber o `assigned_agent` slug no constructor e usar no `instructions()`.
 
 ---
@@ -274,12 +274,12 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 **O que existe:** Implementa `ShouldQueue`. Fila `orchestrator`. Transição `pending → in_progress`, chama `OrchestratorAgent`, cria subtasks, despacha subtasks prontas via `SubagentJob`.
 
 **Problemas:**
-- ⚠️ Passa `provider: 'orchestrator_chain'` ao chamar `OrchestratorAgent::make()->prompt()`. Provider inexistente em `config/ai.php`. **Bug ativo — vai falhar em produção.**
+- ✅ Usa `AiRuntimeConfigService::apply(LEVEL_PREMIUM)` para resolver provider/model/key dinamicamente do `SystemSetting`.
 - ⚠️ Após `HasStructuredOutput` ser implementado no `OrchestratorAgent`, o parse manual de JSON neste Job deve ser removido.
 - ❌ Não cria branch git por task (`task/{uuid_short}`) antes de despachar subtasks. Git branching por task é Fase 2.
 
 **Refatoração necessária (Fase 1):**
-1. Corrigir `provider` para `openrouter_chain` (ou criar `orchestrator_chain` em `config/ai.php`).
+
 2. Remover parse manual após implementar `HasStructuredOutput`.
 
 ---
@@ -291,13 +291,13 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 **Problemas:**
 - ⚠️ **Nome diverge do PRD**: o PRD define `ProcessSubtaskJob`, o código chama `SubagentJob`. Deve ser renomeado para consistência.
 - ⚠️ **Fila diverge**: usa fila `agents`, mas o Horizon está configurado com supervisor para fila `subagent`. **Bug de roteamento de fila.**
-- ⚠️ Passa `provider: 'specialist_chain'` ao chamar `SpecialistAgent`. Provider inexistente. **Bug ativo.**
+- ✅ Usa `AiRuntimeConfigService::apply(LEVEL_HIGH)` para resolver provider/model/key dinamicamente.
 - ❌ Não passa `assigned_agent` ao instanciar `SpecialistAgent` — agente não sabe qual especialidade aplicar.
 
 **Refatoração necessária (Fase 1):**
 1. Renomear para `ProcessSubtaskJob`.
 2. Corrigir fila para `subtasks` (e atualizar Horizon).
-3. Corrigir `provider` para `openrouter_chain`.
+
 4. Passar `assigned_agent` ao construtor do `SpecialistAgent`.
 
 ---
@@ -473,17 +473,10 @@ Não provisionado. Script de criação de usuário `aidev_readonly` com `GRANT S
 
 ---
 
-#### I.2. Providers em config/ai.php ⚠️
+#### I.2. Providers em config/ai.php ✅
 
-**Problema crítico:** OrchestratorJob e SubagentJob chamam providers inexistentes:
-- `OrchestratorJob` → `'orchestrator_chain'` — **não existe**
-- `SubagentJob` → `'specialist_chain'` — **não existe**
-- Existe apenas: `openrouter`, `openrouter_chain` (failover), e outros providers não-Anthropic.
+**Resolvido:** Todos os Jobs e widgets usam `AiRuntimeConfigService` para resolver provider/model/key dinamicamente a partir do `SystemSetting`. Os 4 tiers (Premium, High, Fast, System) são independentes.
 
-**Necessário (Fase 1 — bloqueante):**
-Escolher uma das abordagens:
-- **Opção A:** Renomear as chamadas para `'openrouter_chain'` nos dois Jobs.
-- **Opção B:** Adicionar `orchestrator_chain` e `specialist_chain` como aliases de failover no `config/ai.php`.
 
 ---
 
@@ -521,8 +514,8 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 
 **Critérios de Aceite da Fase 1:**
 
-- [ ] **[Bug #1 — Bloqueante]** Corrigir provider inexistente no `OrchestratorJob` (`orchestrator_chain` → `openrouter_chain` ou criar o provider)
-- [ ] **[Bug #2 — Bloqueante]** Corrigir provider inexistente no `SubagentJob` (`specialist_chain` → `openrouter_chain` ou criar o provider)
+- [x] ✅ **[Bug #1 — Resolvido]** Todos os Jobs usam `AiRuntimeConfigService` para provider dinâmico
+- [x] ✅ **[Bug #2 — Resolvido]** Todos os Jobs usam `AiRuntimeConfigService` para provider dinâmico
 - [ ] **[Bug #3 — Bloqueante]** Alinhar fila do `SubagentJob` com supervisor do Horizon (`agents` → `subtasks`, criar supervisor)
 - [ ] **[Bug #4 — Crítico]** `BoostTool` project-path-aware: adicionar `__construct(private readonly ?string $workingDirectory = null)` e rotear sub-tools para o `workingDirectory`
 - [ ] **[Bug #5 — Crítico]** `SpecialistAgent` passar `new BoostTool($this->projectPath)` em vez de `new BoostTool`
@@ -604,7 +597,7 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 | `openrouter_chain` | failover → [openrouter, openai] | Fallback automático |
 | `ollama` | ollama | Fase 3 — ContextCompressor, embeddings |
 
-**Todos os Jobs devem usar `openrouter_chain`** (com failover) em vez de `openrouter` direto. Os providers `orchestrator_chain` e `specialist_chain` referenciados no código atual não existem e devem ser corrigidos.
+**Todos os Jobs usam `AiRuntimeConfigService`** para resolver provider/model/key em runtime a partir do `SystemSetting`.
 
 ---
 
@@ -652,7 +645,7 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 
 As seguintes melhorias e correções foram implementadas para alinhar o sistema com o PRD v2.0:
 
-- **✅ Providers de IA Corrigidos:** Configuração dos aliases `orchestrator_chain` e `specialist_chain` no `config/ai.php` com suporte a failover.
+- **✅ Providers de IA Dinâmicos:** Todos os Jobs e widgets usam `AiRuntimeConfigService` para resolver provider/model/key em runtime.
 - **✅ BoostTool Project-Path-Aware:** A ferramenta agora é instanciada com o path do projeto alvo e executa comandos artisan diretamente no diretório correto.
 - **✅ Isolamento de Agentes:** `SpecialistAgent`, `QAAuditorAgent`, `DocsAgent` e `DocSearchTool` agora operam estritamente no path do projeto alvo através do BoostTool corrigido.
 - **✅ Renomeação de Jobs e Filas:** `SubagentJob` renomeado para `ProcessSubtaskJob` e fila movida de `agents` para `subtasks` no Horizon para consistência.

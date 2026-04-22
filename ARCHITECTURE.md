@@ -1275,64 +1275,49 @@ Camada 4: CONTEXTO DINÂMICO (montado em runtime pelo SystemContextService)
 
 ### 6.3. Motores de IA e Gestão de Sessão (Contexto Infinito por Projeto)
 
-O AI-Dev concentra **toda a inferência externa em um único gateway — OpenRouter — servindo exclusivamente a família Anthropic**. Três modelos são usados, um para cada classe de trabalho, mais um modelo local para compressão:
+O AI-Dev suporta **múltiplos providers de IA configuráveis dinamicamente** via System Settings UI (`SystemSettingsPage`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime a partir da tabela `system_settings`, eliminando hardcodes. Cada tier (Premium, High, Fast, System) pode usar qualquer provider registrado: OpenRouter, Anthropic, OpenAI, Kimi (Moonshot AI) ou Ollama.
 
-*   **Opus 4.7 (Planejamento — OpenRouter):** `anthropic/claude-opus-4.7` via OpenRouter. Usado por `OrchestratorAgent`, `SpecificationAgent`, `QuotationAgent` e `RefineDescriptionAgent` — toda tarefa que exige raciocínio de alto nível, decomposição de PRD e estimativa.
+*   **Premium (Planejamento):** `OrchestratorAgent`, `SpecificationAgent`, `QuotationAgent` — usam o provider/model configurados em `AI_PREMIUM_*`.
+*   **High (Código/QA):** `SpecialistAgent`, `QAAuditorAgent` — usam o provider/model configurados em `AI_HIGH_*`.
+*   **Fast (Docs):** `DocsAgent` — usa o provider/model configurados em `AI_FAST_*`.
+*   **System (Chat):** `SystemAssistantAgent`, `DashboardChat` — usa o provider/model configurados em `AI_SYSTEM_*`.
 
-*   **Sonnet 4.6 (Código/QA — OpenRouter):** `anthropic/claude-sonnet-4-6` via OpenRouter. Usado por `SpecialistAgent` e todos os specialists de execução (backend, frontend, filament, database, devops, security, performance), além do `QAAuditorAgent`. Escolha padrão para geração e auditoria de código.
+**Providers suportados:**
 
-*   **Haiku 4.5 (Docs — OpenRouter):** `anthropic/claude-haiku-4-5-20251001` via OpenRouter. Usado pelo `DocsAgent` para consultar documentação TALL via `BoostTool.search-docs` — modelo rápido e barato para chamadas de alto volume e baixa complexidade.
+| Provider | Driver | Endpoint | Observação |
+|---|---|---|---|
+| `openrouter` | `openrouter` | `https://openrouter.ai/api/v1` | Gateway universal, família Anthropic |
+| `anthropic` | `anthropic` | `https://api.anthropic.com` | Direto |
+| `openai` | `openai` | `https://api.openai.com/v1` | Direto |
+| `kimi` | `kimi` | `https://api.kimi.com/coding/v1` | Kimi Code (planos de membresia) |
+| `ollama` | `ollama` | `http://localhost:11434` | Local |
+
+O provider `kimi` requer um driver customizado (`App\Ai\Providers\KimiProvider`) porque o Prism v0.100+ usa o endpoint `/responses` (API nova OpenAI) que a Moonshot não suporta. O `KimiProvider` força o driver para `openrouter` no Prism, garantindo o uso do endpoint `/chat/completions` compatível, e injeta um `User-Agent` whitelistado via middleware HTTP global (`AppServiceProvider::boot()`). O model ID aceito é `kimi-k2.6` (ou `kimi-for-coding` — ambos mapeiam para o mesmo modelo no backend).
 
 *   **Ollama (Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (`qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto quando a janela atinge 60% e gerar embeddings — nunca é usado para gerar código ou planejar. Fase 3 do roadmap.
 
 *   **Gestão de Contexto:** O conversation ID ativo é armazenado na tabela `projects` (`anthropic_session_id`) e gerenciado pelo trait `RemembersConversations` do SDK. A cada nova chamada, `AgentClass::make()->continue($conversationId, $user)->prompt(...)` resgata automaticamente o histórico do PostgreSQL.
 
-**Seleção de Motor via Laravel AI SDK + OpenRouter:**
+**Seleção de Motor via Laravel AI SDK + `AiRuntimeConfigService`:**
 
-```text
-SDK default (config/ai.php): provider 'openrouter' — driver 'openai' apontando para https://openrouter.ai/api/v1
-OPENROUTER_API_KEY no .env do ai-dev-core (separada da chave do Projeto Alvo).
+```php
+// Em qualquer Job ou Widget:
+$aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+$response = OrchestratorAgent::make()->prompt(
+    $prompt,
+    provider: $aiConfig['provider'],
+    model: $aiConfig['model'],
+);
+```
 
-Cada Agent class define provider/model via PHP Attributes. O atributo
-`#[Provider(...)]` aceita tanto o enum nativo `Laravel\Ai\Enums\Lab::OpenRouter`
-quanto a string `'openrouter'` — ambos resolvem para a mesma entrada em
-`config/ai.php` (alias com driver `openai` + url custom apontando para
-`https://openrouter.ai/api/v1`). Este projeto adota a forma string para manter
-consistência com `openrouter_chain` (alias customizado que não existe no enum):
+O `AiRuntimeConfigService::apply()`:
+1. Lê provider/model/key do `SystemSetting`
+2. Injeta a key em `config("ai.providers.{$provider}.key")`
+3. Limpa o cache do provider no `AiManager` (`Ai::forgetInstance()`) para garantir que a nova key seja usada
 
-// ORCHESTRATOR — Opus 4.7 via OpenRouter
-#[Provider('openrouter')]
-#[Model('anthropic/claude-opus-4.7')]
-class OrchestratorAgent implements Agent, HasStructuredOutput, HasTools { ... }
-→ Decompõe PRD em Sub-PRDs; exige raciocínio profundo
+Hierarquia de seleção: chamada explícita via `AiRuntimeConfigService` > PHP Attribute > `config('ai.default')`
 
-// SPECIALISTS / QA — Sonnet 4.6 via OpenRouter
-#[Provider('openrouter')]
-#[Model('anthropic/claude-sonnet-4-6')]
-class BackendSpecialist implements Agent, Conversational, HasTools { ... }
-→ Gera e audita código; equilíbrio preço/qualidade
-
-// DOCS — Haiku 4.5 via OpenRouter
-#[Provider('openrouter')]
-#[Model('anthropic/claude-haiku-4-5-20251001')]
-class DocsAgent implements Agent, HasTools { ... }
-→ Alta frequência, baixa complexidade — search-docs via BoostTool
-
-// CONTEXT COMPRESSOR — Ollama local, zero custo de API (Fase 3)
-#[Provider('ollama')]
-#[Model('qwen2.5:0.5b')]
-class ContextCompressor implements Agent { ... }
-→ Modelo leve local, ~500MB RAM
-
-O provider/modelo pode ser sobrescrito em runtime:
-  $agent->prompt($prompt, provider: 'openrouter', model: 'anthropic/claude-opus-4.7')
-
-Failover (per ai-sdk.md §Failover) é feito EM RUNTIME, não no atributo, passando
-um array para o parâmetro `provider:` do método `prompt()` — o atributo aceita
-apenas um provider/model único:
-  $agent->prompt($prompt, provider: ['openrouter', 'openrouter_chain'])
-
-Hierarquia de seleção: chamada explícita > PHP Attribute > agents_config > config('ai.default')
+Os PHP Attributes `#[Provider]` e `#[Model]` nas classes Agent existem como fallback, mas **todos os Jobs e widgets do sistema usam `AiRuntimeConfigService` em runtime**, tornando a configuração 100% dinâmica.
 ```
 
 ---

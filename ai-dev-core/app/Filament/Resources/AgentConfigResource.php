@@ -160,6 +160,7 @@ class AgentConfigResource extends Resource
                     ->color(fn (AgentProvider $state) => match ($state) {
                         AgentProvider::Anthropic => 'warning',
                         AgentProvider::Gemini => 'info',
+                        AgentProvider::Kimi => 'success',
                         AgentProvider::Ollama => 'gray',
                     })
                     ->sortable(),

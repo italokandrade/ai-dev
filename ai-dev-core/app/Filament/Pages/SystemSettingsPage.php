@@ -100,6 +100,7 @@ class SystemSettingsPage extends Page implements HasForms
                             'openrouter' => 'OpenRouter',
                             'anthropic' => 'Anthropic',
                             'openai' => 'OpenAI',
+                            'kimi' => 'Kimi (Moonshot AI)',
                             'ollama' => 'Ollama (Local)',
                         ])->required(),
                     TextInput::make("{$prefix}_key")

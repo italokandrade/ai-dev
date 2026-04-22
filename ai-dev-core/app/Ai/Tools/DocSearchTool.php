@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use App\Ai\Agents\DocsAgent;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -23,8 +24,15 @@ class DocSearchTool implements Tool
     {
         $query = $request['query'];
 
+        $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_FAST);
+
         // DocsAgent should also be project-path-aware if it uses BoostTool
-        $response = (new DocsAgent($this->workingDirectory))->prompt($query);
+        $response = (new DocsAgent($this->workingDirectory))->prompt(
+            $query,
+            [],
+            $aiConfig['provider'],
+            $aiConfig['model'],
+        );
 
         return $response->text;
     }

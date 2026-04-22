@@ -14,6 +14,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Process;
 
 class QAAuditJob implements ShouldQueue
@@ -46,7 +47,13 @@ class QAAuditJob implements ShouldQueue
         $prompt = $this->buildPrompt();
 
         try {
-            $response = (new QAAuditorAgent($projectPath))->prompt($prompt);
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_HIGH);
+
+            $response = (new QAAuditorAgent($projectPath))->prompt(
+                $prompt,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
+            );
             $auditResult = $response->data;
         } catch (\Throwable $e) {
             Log::error("QAAuditJob: Failed to get/parse audit response for subtask {$this->subtask->id}. Error: {$e->getMessage()}");

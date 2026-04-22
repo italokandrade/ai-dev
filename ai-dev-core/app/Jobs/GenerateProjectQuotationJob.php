@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Log;
 
 class GenerateProjectQuotationJob implements ShouldQueue
@@ -47,7 +48,13 @@ class GenerateProjectQuotationJob implements ShouldQueue
         $prompt = $this->buildPrompt($aiSpec);
 
         try {
-            $response = QuotationAgent::make()->prompt($prompt);
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
+            $response = QuotationAgent::make()->prompt(
+                $prompt,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
+            );
             $hours = $response->data;
         } catch (\Throwable $e) {
             Log::error("GenerateProjectQuotationJob: QuotationAgent failed — {$e->getMessage()}. Using zero hours.");

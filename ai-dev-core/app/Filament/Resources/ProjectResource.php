@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Ai\Agents\RefineDescriptionAgent;
 use App\Enums\ProjectStatus;
+use App\Services\AiRuntimeConfigService;
 use App\Filament\Resources\ProjectResource\Pages;
 use App\Models\Project;
 use App\Models\ProjectModule;
@@ -132,11 +133,17 @@ class ProjectResource extends Resource
                                                                 }
 
                                                                 try {
+                                                                    $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
                                                                     $refined = RefineDescriptionAgent::make()
-                                                                        ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n".
-                                                                                $currentText.
-                                                                                "\n\nInstrução de modificação do usuário:\n".
-                                                                                $query);
+                                                                        ->prompt(
+                                                                            "Ajuste o seguinte texto de descrição de projeto:\n\n".
+                                                                            $currentText.
+                                                                            "\n\nInstrução de modificação do usuário:\n".
+                                                                            $query,
+                                                                            provider: $aiConfig['provider'],
+                                                                            model: $aiConfig['model'],
+                                                                        );
 
                                                                     $set('suggested_description', (string) $refined);
                                                                     $set('refinement_query', ''); // Limpa o campo de entrada
@@ -163,8 +170,14 @@ class ProjectResource extends Resource
                                                 }
 
                                                 try {
+                                                    $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
                                                     $refined = RefineDescriptionAgent::make()
-                                                        ->prompt("Refine a seguinte descrição de projeto: \n\n".$state);
+                                                        ->prompt(
+                                                            "Refine a seguinte descrição de projeto: \n\n".$state,
+                                                            provider: $aiConfig['provider'],
+                                                            model: $aiConfig['model'],
+                                                        );
 
                                                     $form->fill([
                                                         'suggested_description' => (string) $refined,

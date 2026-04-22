@@ -9,6 +9,7 @@ use App\Models\Subtask;
 use App\Models\SystemSetting;
 use App\Models\Task;
 use App\Jobs\ProcessSubtaskJob;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -48,7 +49,13 @@ class OrchestratorJob implements ShouldQueue
         $prompt = $this->buildPrompt();
 
         try {
-            $response = OrchestratorAgent::make()->prompt($prompt, provider: 'orchestrator_chain');
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
+            $response = OrchestratorAgent::make()->prompt(
+                $prompt,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
+            );
             $subPrds = $response->data;
 
             if (! is_array($subPrds) || empty($subPrds)) {

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProjectQuotationResource\Pages;
 use App\Ai\Agents\QuotationAgent;
 use App\Filament\Resources\ProjectQuotationResource;
 use App\Models\ProjectQuotation;
+use App\Services\AiRuntimeConfigService;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -32,7 +33,12 @@ class ViewProjectQuotation extends ViewRecord
 
                     try {
                         $prompt = $this->buildEstimationPrompt($record);
-                        $response = QuotationAgent::make()->prompt($prompt);
+                        $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+                        $response = QuotationAgent::make()->prompt(
+                            $prompt,
+                            provider: $aiConfig['provider'],
+                            model: $aiConfig['model'],
+                        );
                         $raw = trim((string) $response);
                         $raw = preg_replace('/^```(?:json)?\s*/i', '', $raw);
                         $raw = preg_replace('/\s*```$/', '', $raw);

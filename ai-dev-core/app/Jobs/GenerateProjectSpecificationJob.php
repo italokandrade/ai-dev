@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Log;
 
 class GenerateProjectSpecificationJob implements ShouldQueue
@@ -35,7 +36,13 @@ class GenerateProjectSpecificationJob implements ShouldQueue
         $prompt = $this->buildPrompt($userDescription);
 
         try {
-            $response = SpecificationAgent::make()->prompt($prompt);
+            $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
+            $response = SpecificationAgent::make()->prompt(
+                $prompt,
+                provider: $aiConfig['provider'],
+                model: $aiConfig['model'],
+            );
             $aiSpec   = $response->data;
 
             Log::info("GenerateProjectSpecificationJob: IA respondeu com sucesso para '{$project->name}'", [

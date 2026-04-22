@@ -85,6 +85,12 @@ return [
             'key' => env('JINA_API_KEY'),
         ],
 
+        'kimi' => [
+            'driver' => 'kimi',
+            'key' => env('KIMI_API_KEY'),
+            'url' => env('KIMI_URL', 'https://api.kimi.com/coding/v1'),
+        ],
+
         'mistral' => [
             'driver' => 'mistral',
             'key' => env('MISTRAL_API_KEY'),
@@ -104,7 +110,7 @@ return [
         ],
 
         'openrouter' => [
-            'driver' => 'openai',
+            'driver' => 'openrouter',
             'key' => env('OPENROUTER_API_KEY'),
             'url' => 'https://openrouter.ai/api/v1',
         ],
