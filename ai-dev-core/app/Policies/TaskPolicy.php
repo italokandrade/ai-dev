@@ -4,63 +4,69 @@ namespace App\Policies;
 
 use App\Models\Task;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
+use Illuminate\Auth\Access\HandlesAuthorization;
 
 class TaskPolicy
 {
-    /**
-     * Determine whether the user can view any models.
-     */
+    use HandlesAuthorization;
+
     public function viewAny(User $user): bool
     {
-        return false;
+        return $user->can('ViewAny:Task');
     }
 
-    /**
-     * Determine whether the user can view the model.
-     */
     public function view(User $user, Task $task): bool
     {
-        return false;
+        return $user->can('View:Task');
     }
 
-    /**
-     * Determine whether the user can create models.
-     */
     public function create(User $user): bool
     {
-        return false;
+        return $user->can('Create:Task');
     }
 
-    /**
-     * Determine whether the user can update the model.
-     */
     public function update(User $user, Task $task): bool
     {
-        return false;
+        return $user->can('Update:Task');
     }
 
-    /**
-     * Determine whether the user can delete the model.
-     */
     public function delete(User $user, Task $task): bool
     {
-        return false;
+        return $user->can('Delete:Task');
     }
 
-    /**
-     * Determine whether the user can restore the model.
-     */
+    public function deleteAny(User $user): bool
+    {
+        return $user->can('DeleteAny:Task');
+    }
+
     public function restore(User $user, Task $task): bool
     {
-        return false;
+        return $user->can('Restore:Task');
     }
 
-    /**
-     * Determine whether the user can permanently delete the model.
-     */
+    public function restoreAny(User $user): bool
+    {
+        return $user->can('RestoreAny:Task');
+    }
+
     public function forceDelete(User $user, Task $task): bool
     {
-        return false;
+        return $user->can('ForceDelete:Task');
+    }
+
+    public function forceDeleteAny(User $user): bool
+    {
+        return $user->can('ForceDeleteAny:Task');
+    }
+
+    public function replicate(User $user, Task $task): bool
+    {
+        return $user->can('Replicate:Task');
+    }
+
+    public function reorder(User $user): bool
+    {
+        return $user->can('Reorder:Task');
     }
 }
