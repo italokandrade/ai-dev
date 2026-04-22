@@ -73,7 +73,8 @@
 
         {{-- Input Area --}}
         <div style="padding: 16px 20px; border-top: 1px solid #f1f5f9; background: #ffffff;" class="dark:border-white/5 dark:bg-gray-900">
-            <div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
+            <div wire:loading.remove wire:target="sendMessage"
+                 style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
                  class="dark:bg-gray-800/50 dark:border-gray-700"
                  x-data
                  @focusin="$el.style.borderColor='#6366f1'; $el.style.boxShadow='0 0 0 3px rgba(99,102,241,0.12), inset 0 1px 3px rgba(0,0,0,0.04)';"

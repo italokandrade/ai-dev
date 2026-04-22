@@ -18,8 +18,8 @@ class DashboardChat extends Widget
     public function mount()
     {
         $this->history[] = [
-            'role' => 'assistant',
-            'content' => 'Olá! Eu sou o Assistente Inteligente do AI-Dev. Tenho acesso ao código e à documentação deste sistema para te ajudar. Como posso ser útil?'
+            'role'    => 'assistant',
+            'content' => 'Olá! Sou o Assistente do AI-Dev. Posso te ajudar com informações sobre projetos, tarefas, módulos e como usar o sistema. Como posso ser útil?'
         ];
     }
 
@@ -29,34 +29,31 @@ class DashboardChat extends Widget
 
         $userMessage = $this->message;
         $this->history[] = ['role' => 'user', 'content' => $userMessage];
-        $this->message = '';
+        $this->message    = '';
         $this->isProcessing = true;
 
         try {
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
-            $model = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-sonnet-4.6');
-            
-            // Opcional: configurar chave no .env se ela for necessária globalmente,
-            // mas o provider já pegará do config/ai.php se estiver null
-            
-            $agent = new SystemAssistantAgent(base_path());
-            
-            // Correção: Ordem exata dos parâmetros
-            // 1. Mensagem
-            // 2. Anexos (vazio)
-            // 3. Provider
-            // 4. Modelo
-            $response = $agent->prompt($userMessage, [], $provider, $model);
+            $model    = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-haiku-4-5-20251001');
+
+            $agent = new SystemAssistantAgent();
+
+            // Laravel AI SDK: prompt(string $prompt, ?string $provider = null, ?string $model = null)
+            $response = $agent->prompt(
+                prompt: $userMessage,
+                provider: $provider,
+                model: $model,
+            );
 
             $this->history[] = [
-                'role' => 'assistant',
-                'content' => (string) $response
+                'role'    => 'assistant',
+                'content' => (string) $response,
             ];
         } catch (\Throwable $e) {
-            Log::error("DashboardChat Error: " . $e->getMessage());
+            Log::error('DashboardChat Error: ' . $e->getMessage());
             $this->history[] = [
-                'role' => 'assistant',
-                'content' => 'Lamento, ocorreu um erro de conexão: ' . $e->getMessage()
+                'role'    => 'assistant',
+                'content' => 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em instantes.',
             ];
         }
 
