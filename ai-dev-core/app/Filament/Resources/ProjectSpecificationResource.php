@@ -259,11 +259,7 @@ class ProjectSpecificationResource extends Resource
                                 ->bulleted()
                                 ->columnSpanFull(),
 
-                            Infolists\Components\TextEntry::make('ai_specification.non_functional_requirements')
-                                ->label('Requisitos Não-Funcionais')
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->columnSpanFull(),
+
                         ]),
 
                     Section::make('Stack Técnica')

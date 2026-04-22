@@ -84,7 +84,7 @@ Retorne EXATAMENTE este JSON (sem markdown):
     "database": "PostgreSQL 16",
     "extras": []
   },
-  "non_functional_requirements": ["NFR 1", "NFR 2"],
+
   "modules": [
     {
       "name": "Nome do Módulo Pai",
@@ -120,7 +120,7 @@ PROMPT;
                 'database' => 'PostgreSQL 16',
                 'extras'   => [],
             ],
-            'non_functional_requirements' => [],
+
             'modules'                   => [],
             'estimated_modules'         => 0,
             'estimated_complexity'      => 'moderate',

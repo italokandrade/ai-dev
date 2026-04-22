@@ -126,7 +126,6 @@ class GenerateProjectQuotationJob implements ShouldQueue
         };
 
         $features = collect($aiSpec['core_features'] ?? [])->map(fn ($f) => "- {$f}")->implode("\n");
-        $nfrs = collect($aiSpec['non_functional_requirements'] ?? [])->map(fn ($f) => "- {$f}")->implode("\n");
         $moduleCount = count($aiSpec['modules'] ?? []);
         $subCount = collect($aiSpec['modules'] ?? [])
             ->sum(fn ($m) => count($m['submodules'] ?? []));
@@ -144,9 +143,6 @@ OBJETIVO: {$objective}
 
 FUNCIONALIDADES PRINCIPAIS:
 {$features}
-
-REQUISITOS NÃO-FUNCIONAIS:
-{$nfrs}
 
 Retorne APENAS este JSON com os valores inteiros de horas estimadas (use 0 se a área não se aplica):
 {

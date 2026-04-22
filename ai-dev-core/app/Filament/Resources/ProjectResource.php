@@ -462,12 +462,7 @@ class ProjectResource extends Resource
                                 ])
                                 ->columnSpanFull(),
 
-                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')
-                                ->label('Requisitos Não-Funcionais')
-                                ->listWithLineBreaks()
-                                ->bulleted()
-                                ->placeholder('—')
-                                ->columnSpanFull(),
+
                         ])
                         ->collapsible(),
 
