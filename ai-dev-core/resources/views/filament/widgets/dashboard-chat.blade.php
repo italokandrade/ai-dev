@@ -90,18 +90,28 @@
                     x-data="{ resize() { $el.style.height = '24px'; $el.style.height = Math.min($el.scrollHeight, 100) + 'px' } }"
                     x-init="resize()"
                     @input="resize()"
+                    @keydown.enter.prevent="$wire.sendMessage()"
                 ></textarea>
                 <button
                     wire:click="sendMessage"
                     :disabled="$isProcessing"
-                    style="flex-shrink: 0; width: 34px; height: 34px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 2px 6px rgba(99,102,241,0.35);"
-                    onmouseover="if(!this.disabled){ this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 10px rgba(99,102,241,0.4)'; }"
+                    style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 2px 6px rgba(99,102,241,0.35); opacity: 1;"
+                    onmouseover="if(!this.disabled){ this.style.transform='scale(1.08)'; this.style.boxShadow='0 4px 12px rgba(99,102,241,0.5)'; }"
                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(99,102,241,0.35)';"
-                    x-bind:style="$isProcessing ? 'opacity: 0.5; cursor: not-allowed;' : ''"
+                    x-bind:class="$isProcessing ? 'opacity-50 cursor-not-allowed' : ''"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;transform:rotate(90deg)">
-                        <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
-                    </svg>
+                    {{-- When processing: show a spinning indicator instead of arrow --}}
+                    <template x-if="!$isProcessing">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
+                            <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
+                        </svg>
+                    </template>
+                    <template x-if="$isProcessing">
+                        <svg style="width:16px;height:16px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" stroke-width="3"/>
+                            <path d="M12 2a10 10 0 0 1 10 10" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                        </svg>
+                    </template>
                 </button>
             </div>
         </div>
@@ -116,6 +126,10 @@
         @keyframes typingBounce {
             0%, 60%, 100% { transform: translateY(0); }
             30% { transform: translateY(-5px); }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
     </style>
 </x-filament-widgets::widget>
