@@ -87,3 +87,9 @@ Se você encontrar erros ao operar o sistema, consulte esta seção de lições 
 - **Problema:** IA não responde ou erro de autenticação.
 - **Causa:** Chaves API não são versionadas por segurança.
 - **Solução:** Verifique o arquivo `.env` local. Provider único: `OPENROUTER_API_KEY`. Todos os agentes usam OpenRouter com família Anthropic.
+
+### 5. Configuração do MCP na IDE (Remoto via VPN)
+- **Problema:** Conectar a IDE local (Cursor, Windsurf, Claude Desktop) ao servidor MCP do projeto rodando em um servidor remoto.
+- **Solução:** Adicione um novo servidor MCP do tipo `command` nas configurações da IDE. O comando deve criar um túnel SSH e executar o boost silenciosamente.
+- **Requisito:** A máquina local DEVE ter acesso via chave pública (SSH Keys) ao servidor remoto (ex: `ssh-copy-id root@10.1.1.86`). Se o SSH pedir senha, a IDE não conseguirá iniciar o MCP.
+- **Comando de Exemplo:** `ssh root@10.1.1.86 "cd /var/www/html/projetos/ai-dev/ai-dev-core && php artisan boost:mcp"`

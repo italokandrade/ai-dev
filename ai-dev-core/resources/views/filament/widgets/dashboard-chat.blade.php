@@ -13,7 +13,7 @@
         </div>
 
         <div class="p-6">
-            <div class="flex flex-col gap-6" style="max-height: 400px;">
+            <div class="flex flex-col gap-6" style="height: 500px;">
                 {{-- Chat Area --}}
                 <div id="chat-container" class="flex-1 overflow-y-auto space-y-6 p-6 bg-gray-50 dark:bg-gray-950/50 rounded-xl border border-gray-100 dark:border-white/5 custom-scrollbar"
                      x-init="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"
