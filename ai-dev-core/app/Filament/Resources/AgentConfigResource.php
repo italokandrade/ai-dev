@@ -30,7 +30,7 @@ class AgentConfigResource extends Resource
 
     protected static ?int $navigationSort = 5;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Configuracao';
+    protected static string | \UnitEnum | null $navigationGroup = 'Configuração';
 
     public static function form(Schema $schema): Schema
     {

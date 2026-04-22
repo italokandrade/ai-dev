@@ -21,9 +21,9 @@ class SystemSettingsPage extends Page implements HasForms
     use InteractsWithForms;
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-cog-6-tooth';
-    protected static ?string $navigationLabel = 'Configurações';
+    protected static ?string $navigationLabel = 'Sistema';
     protected static ?string $title = 'Configurações do Sistema';
-    protected static string|\UnitEnum|null $navigationGroup = 'Configuracao';
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuração';
     protected static ?int $navigationSort = 10;
     protected string $view = 'filament.pages.system-settings-page';
 
@@ -75,7 +75,7 @@ class SystemSettingsPage extends Page implements HasForms
                 $this->getAiSection('IA Nível PREMIUM (Planejamento)', 'Configurações para o nível mais alto de inteligência.', 'ai_premium'),
                 $this->getAiSection('IA Nível HIGH (Desenvolvimento/QA)', 'Configurações para o motor principal de codificação.', 'ai_high'),
                 $this->getAiSection('IA Nível FAST (Documentação/Jobs)', 'Configurações para tarefas rápidas e menor custo.', 'ai_fast'),
-                $this->getAiSection('IA DO SISTEMA (Produção/Interação)', 'Modelo utilizado pelos usuários finais da aplicação.', 'ai_system'),
+                $this->getAiSection('IA do Sistema (Produção/Interação)', 'Modelo utilizado pelos usuários finais da aplicação.', 'ai_system'),
 
                 Section::make('Controle Operacional')
                     ->schema([

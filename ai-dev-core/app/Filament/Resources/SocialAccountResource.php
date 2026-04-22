@@ -30,7 +30,7 @@ class SocialAccountResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Configuracao';
+    protected static string|\UnitEnum|null $navigationGroup = 'Configuração';
 
     /** Campos de credencial exigidos por plataforma */
     private static array $credentialFields = [
