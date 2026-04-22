@@ -188,21 +188,16 @@ class ProjectResource extends Resource
                                     ),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Principais Funcionalidades')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
                             ->schema([
-                                Forms\Components\Repeater::make('features')
+                                Forms\Components\Repeater::make('backendFeatures')
                                     ->relationship()
-                                    ->label('Funcionalidades')
+                                    ->label('')
+                                    ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
+                                        $data['type'] = 'backend';
+                                        return $data;
+                                    })
                                     ->schema([
-                                        Forms\Components\Select::make('type')
-                                            ->label('Tipo')
-                                            ->options([
-                                                'backend' => 'Backend',
-                                                'frontend' => 'Frontend',
-                                            ])
-                                            ->default('backend')
-                                            ->required()
-                                            ->native(false),
                                         Forms\Components\TextInput::make('title')
                                             ->label('Título')
                                             ->required()
@@ -212,7 +207,32 @@ class ProjectResource extends Resource
                                             ->rows(3),
                                     ])
                                     ->columns(1)
-                                    ->addActionLabel('Adicionar Funcionalidade')
+                                    ->addActionLabel('Adicionar Funcionalidade Backend')
+                                    ->reorderableWithButtons()
+                                    ->collapsible()
+                                    ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
+                            ]),
+
+                        \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
+                            ->schema([
+                                Forms\Components\Repeater::make('frontendFeatures')
+                                    ->relationship()
+                                    ->label('')
+                                    ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
+                                        $data['type'] = 'frontend';
+                                        return $data;
+                                    })
+                                    ->schema([
+                                        Forms\Components\TextInput::make('title')
+                                            ->label('Título')
+                                            ->required()
+                                            ->maxLength(255),
+                                        Forms\Components\Textarea::make('description')
+                                            ->label('Descrição')
+                                            ->rows(3),
+                                    ])
+                                    ->columns(1)
+                                    ->addActionLabel('Adicionar Funcionalidade Frontend')
                                     ->reorderableWithButtons()
                                     ->collapsible()
                                     ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
@@ -401,29 +421,45 @@ class ProjectResource extends Resource
                                 ->columnSpanFull(),
 
 
-                            Infolists\Components\RepeatableEntry::make('features')
-                                ->label('Funcionalidades Principais')
-                                ->schema([
-                                    Infolists\Components\TextEntry::make('title')
-                                        ->hiddenLabel()
-                                        ->weight('bold')
-                                        ->bulleted(),
-                                    Infolists\Components\TextEntry::make('type')
-                                        ->hiddenLabel()
-                                        ->badge()
-                                        ->color(fn (string $state): string => match ($state) {
-                                            'backend' => 'info',
-                                            'frontend' => 'success',
-                                            default => 'gray',
-                                        })
-                                        ->formatStateUsing(fn (string $state): string => ucfirst($state)),
-                                    Infolists\Components\TextEntry::make('description')
-                                        ->hiddenLabel()
-                                        ->color('gray')
-                                        ->visible(fn ($state) => filled($state)),
+                            \Filament\Schemas\Components\Tabs::make('Funcionalidades Principais')
+                                ->tabs([
+                                    \Filament\Schemas\Components\Tabs\Tab::make('Backend')
+                                        ->schema([
+                                            Infolists\Components\RepeatableEntry::make('backendFeatures')
+                                                ->label('')
+                                                ->schema([
+                                                    Infolists\Components\TextEntry::make('title')
+                                                        ->hiddenLabel()
+                                                        ->weight('bold')
+                                                        ->bulleted(),
+                                                    Infolists\Components\TextEntry::make('description')
+                                                        ->hiddenLabel()
+                                                        ->color('gray')
+                                                        ->visible(fn ($state) => filled($state)),
+                                                ])
+                                                ->columns(1)
+                                                ->grid(1)
+                                                ->columnSpanFull(),
+                                        ]),
+                                    \Filament\Schemas\Components\Tabs\Tab::make('Frontend')
+                                        ->schema([
+                                            Infolists\Components\RepeatableEntry::make('frontendFeatures')
+                                                ->label('')
+                                                ->schema([
+                                                    Infolists\Components\TextEntry::make('title')
+                                                        ->hiddenLabel()
+                                                        ->weight('bold')
+                                                        ->bulleted(),
+                                                    Infolists\Components\TextEntry::make('description')
+                                                        ->hiddenLabel()
+                                                        ->color('gray')
+                                                        ->visible(fn ($state) => filled($state)),
+                                                ])
+                                                ->columns(1)
+                                                ->grid(1)
+                                                ->columnSpanFull(),
+                                        ]),
                                 ])
-                                ->columns(1)
-                                ->grid(1)
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.ai_specification.non_functional_requirements')

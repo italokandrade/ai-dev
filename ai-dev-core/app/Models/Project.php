@@ -37,6 +37,16 @@ class Project extends Model implements Conversational
         return $this->hasMany(ProjectFeature::class);
     }
 
+    public function backendFeatures(): HasMany
+    {
+        return $this->hasMany(ProjectFeature::class)->where('type', 'backend');
+    }
+
+    public function frontendFeatures(): HasMany
+    {
+        return $this->hasMany(ProjectFeature::class)->where('type', 'frontend');
+    }
+
     protected function casts(): array
     {
         return [
