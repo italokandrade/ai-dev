@@ -60,7 +60,7 @@ class DashboardChat extends Widget
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');
             $model    = SystemSetting::get(SystemSetting::AI_SYSTEM_MODEL, 'anthropic/claude-haiku-4-5-20251001');
 
-            $agent = new SystemAssistantAgent();
+            $agent = new SystemAssistantAgent(base_path());
 
             $response = $agent->prompt(
                 prompt: $userMessage,
