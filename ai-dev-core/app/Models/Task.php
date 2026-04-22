@@ -10,10 +10,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Task extends Model implements Conversational
 {
-    use HasUuids, RemembersConversations;
+    use HasUuids, RemembersConversations, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Tarefa {$eventName}");
+    }
 
     protected $fillable = [
         'project_id',

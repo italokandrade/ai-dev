@@ -42,6 +42,55 @@ class ActivityLogResource extends Resource
         return false;
     }
 
+    /**
+     * Mapa de tradução de Models para nomes amigáveis em PT-BR.
+     * Utilizado no filtro dinâmico e na coluna "Módulo".
+     */
+    protected static function modelLabelMap(): array
+    {
+        return [
+            'App\Models\Project'              => 'Projeto',
+            'App\Models\ProjectModule'        => 'Módulo',
+            'App\Models\ProjectSpecification' => 'Especificação',
+            'App\Models\ProjectQuotation'     => 'Orçamento',
+            'App\Models\Task'                 => 'Tarefa',
+            'App\Models\Subtask'              => 'Subtarefa',
+            'App\Models\AgentConfig'          => 'Agente',
+            'App\Models\SocialAccount'        => 'Conta Social',
+            'App\Models\SystemSetting'        => 'Config. Sistema',
+            'App\Models\User'                 => 'Usuário',
+        ];
+    }
+
+    /**
+     * Traduz o FQCN do Model para nome amigável.
+     */
+    protected static function translateModel(?string $fqcn): string
+    {
+        if (empty($fqcn)) return '—';
+        return static::modelLabelMap()[$fqcn]
+            ?? class_basename($fqcn); // fallback: nome curto do Model
+    }
+
+    /**
+     * Carrega DINAMICAMENTE os subject_types existentes na tabela activity_log,
+     * montando o dropdown de filtro a partir dos dados reais — sem hardcode.
+     */
+    protected static function dynamicSubjectTypes(): array
+    {
+        try {
+            return Activity::query()
+                ->distinct('subject_type')
+                ->whereNotNull('subject_type')
+                ->pluck('subject_type')
+                ->mapWithKeys(fn (string $fqcn) => [$fqcn => static::translateModel($fqcn)])
+                ->sort()
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([]);
@@ -60,10 +109,12 @@ class ActivityLogResource extends Resource
                     ->placeholder('Sistema'),
                 Tables\Columns\TextColumn::make('description')
                     ->label('Descrição')
-                    ->searchable(),
+                    ->searchable()
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('subject_type')
                     ->label('Módulo')
-                    ->formatStateUsing(fn ($state) => str_replace('App\\Models\\', '', (string)$state)),
+                    ->formatStateUsing(fn ($state) => static::translateModel($state))
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('event')
                     ->label('Evento')
                     ->badge()
@@ -75,12 +126,23 @@ class ActivityLogResource extends Resource
                     }),
             ])
             ->filters([
+                // Filtro de evento (estático — as opções não mudam)
                 Tables\Filters\SelectFilter::make('event')
+                    ->label('Evento')
                     ->options([
                         'created' => 'Criação',
                         'updated' => 'Atualização',
                         'deleted' => 'Exclusão',
                     ]),
+                // Filtro de módulo — DINÂMICO: carrega os subject_types
+                // presentes na tabela activity_log em tempo real
+                Tables\Filters\SelectFilter::make('subject_type')
+                    ->label('Módulo')
+                    ->options(fn () => static::dynamicSubjectTypes()),
+                // Filtro de usuário causador
+                Tables\Filters\SelectFilter::make('causer_id')
+                    ->label('Usuário')
+                    ->relationship('causer', 'name'),
             ])
             ->actions([
                 ViewAction::make(),
@@ -100,7 +162,9 @@ class ActivityLogResource extends Resource
                             \Filament\Infolists\Components\TextEntry::make('event')->label('Evento')->badge(),
                         ]),
                         \Filament\Schemas\Components\Grid::make(2)->schema([
-                            \Filament\Infolists\Components\TextEntry::make('subject_type')->label('Módulo'),
+                            \Filament\Infolists\Components\TextEntry::make('subject_type')
+                                ->label('Módulo')
+                                ->getStateUsing(fn ($record) => static::translateModel($record->subject_type)),
                             \Filament\Infolists\Components\TextEntry::make('description')->label('Descrição'),
                         ]),
                     ]),

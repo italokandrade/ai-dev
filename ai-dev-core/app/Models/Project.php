@@ -9,10 +9,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class Project extends Model implements Conversational
 {
-    use HasUuids, RemembersConversations;
+    use HasUuids, RemembersConversations, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logAll()
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Projeto {$eventName}");
+    }
 
     protected $fillable = [
         'name',

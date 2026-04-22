@@ -61,8 +61,118 @@ O ambiente web e os projetos gerados contam com a biblioteca **Anime.js v4** int
 - **Acesso Global:** Disponível via `window.anime` em qualquer componente Livewire ou Script Alpine.js.
 - **Uso no Refinamento:** O Agente de IA está instruído a considerar o Anime.js para propostas de interfaces modernas e dinâmicas.
 
+## 8. Assistente IA-Dev (Chat do Dashboard)
+O widget `DashboardChat` é um componente Livewire embarcado na página inicial do painel administrativo. Ele oferece um chat com IA para os usuários do sistema.
+
+### 8.1 Arquitetura
+- **Componente:** `App\Filament\Widgets\DashboardChat` + blade `filament.widgets.dashboard-chat`
+- **Agente:** Utiliza o `SystemAssistantAgent`, que possui instruções de sistema (system prompt) rígidas em português.
+- **Modelo:** Configurado via `SystemSetting` (chaves `ai_system_provider` e `ai_system_model`), com fallback para `anthropic/claude-haiku-4-5-20251001`.
+
+### 8.2 Persistência da Conversa
+- O histórico é salvo na **sessão PHP** (não no banco), sobrevivendo à navegação entre páginas.
+- Limitado a **40 mensagens** (20 trocas) para controlar o tamanho do contexto enviado ao agente.
+- O botão "Limpar" reseta a sessão e reinicia do zero.
+
+### 8.3 Controle de Interface (Alpine.js + wire:loading)
+- O textarea usa **Alpine `x-model`** (variável `localMsg`), desacoplado do `wire:model` do Livewire. Isso permite limpeza instantânea do campo ao enviar, sem race conditions.
+- O envio é feito via `$wire.sendMessage(localMsg)` — a mensagem é passada como parâmetro direto.
+- O indicador de digitação (bouncing dots) é controlado por `wire:loading wire:target="sendMessage"`, usando um wrapper duplo (div externo `display:none`/`block`, div interno `display:flex`).
+- O scroll automático usa `setTimeout(80ms)` para garantir que o `wire:loading` já renderizou os pontinhos antes do scroll.
+
+### 8.4 Segurança (Sandboxing)
+O `SystemAssistantAgent` possui restrições explícitas no system prompt:
+- **Proibido:** revelar estrutura do banco de dados, caminhos de arquivos, configurações `.env`, chaves API, credenciais ou detalhes de arquitetura.
+- **Permitido:** informações sobre projetos, módulos, tarefas, dados cadastrados e uso funcional do sistema.
+
+## 9. Administração
+
+### 9.1 Perfis de Usuários (Roles)
+Módulo baseado no **Filament Shield** (`BezhanSalleh\FilamentShield`). Permite criar e gerenciar perfis de acesso (roles) com permissões granulares por Resource/Page/Widget.
+
+- **Resource:** `App\Filament\Resources\RoleResource` (estende `BaseRoleResource` do Shield)
+- **Rótulos:** Exibido como "Perfis de Usuários" na navegação, grupo "Administração"
+- **Roles padrão:** `super_admin` (acesso total), `developer` (desenvolvimento), demais criados conforme necessidade
+
+### 9.2 Usuários
+Gerencia os usuários com acesso ao painel administrativo.
+
+- **Resource:** `App\Filament\Resources\Users\UserResource`
+- **Funcionalidades:**
+  - CRUD de usuários (nome, e-mail, senha)
+  - Atribuição de múltiplos Perfis de Acesso (roles) via select searchable
+  - Senha com `dehydrated(fn ($state) => filled($state))` — só atualiza se preenchida na edição
+  - Coluna de roles exibida como badges na listagem
+- **Model:** `App\Models\User` — implementa `FilamentUser`, `HasRoles` (Spatie Permission)
+- **Controle de Acesso:** `canAccessPanel()` retorna `true` para todos, com permissões granulares via Shield
+
+### 9.3 Logs de Atividades
+Módulo de auditoria que registra automaticamente todas as ações CRUD em todos os Models do sistema.
+
+- **Resource:** `App\Filament\Resources\ActivityLogs\ActivityLogResource`
+- **Pacote:** `spatie/laravel-activitylog` v4.12
+- **Somente leitura:** `canCreate()`, `canEdit()` e `canDelete()` retornam `false`
+
+#### 9.3.1 Registro Automático (LogsActivity)
+Todos os Models principais usam a trait `LogsActivity` do Spatie, que registra automaticamente operações `created`, `updated` e `deleted`:
+
+| Model | Log Name | Descrição gerada |
+|---|---|---|
+| `Project` | default | "Projeto created/updated/deleted" |
+| `Task` | default | "Tarefa created/updated/deleted" |
+| `ProjectModule` | default | "Módulo created/updated/deleted" |
+| `ProjectSpecification` | default | "Especificação created/updated/deleted" |
+| `ProjectQuotation` | default | "Orçamento created/updated/deleted" |
+| `AgentConfig` | default | "Agente created/updated/deleted" |
+| `SocialAccount` | default | "Conta social created/updated/deleted" |
+| `User` | default | Registrado via Spatie |
+
+Configuração em cada Model:
+```php
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
+
+public function getActivitylogOptions(): LogOptions
+{
+    return LogOptions::defaults()
+        ->logAll()          // Loga todos os atributos
+        ->logOnlyDirty()   // Só registra campos que mudaram
+        ->setDescriptionForEvent(fn (string $eventName) => "Projeto {$eventName}");
+}
+```
+
+#### 9.3.2 Filtros Dinâmicos
+Os filtros da listagem são **dinâmicos**, carregados direto do banco:
+- **Módulo (subject_type):** `SELECT DISTINCT subject_type FROM activity_log` — qualquer novo Model adicionado aparece automaticamente
+- **Evento:** Criação, Atualização, Exclusão
+- **Usuário:** Select do relacionamento `causer`
+
+#### 9.3.3 Tradução de Models
+Os FQCNs (`App\Models\Project`) são traduzidos para nomes amigáveis em PT-BR via mapa estático no Resource:
+```php
+'App\Models\Project' => 'Projeto',
+'App\Models\Task'    => 'Tarefa',
+// ... fallback: class_basename() para Models não mapeados
+```
+
+## 10. Configurações do Sistema
+Página Filament (`SystemSettingsPage`) localizada em **Configuração > Sistema**.
+
+### 10.1 Seções
+| Seção | Campos | Descrição |
+|---|---|---|
+| Identidade do Sistema | Nome, Logotipo, Favicon | Identidade visual do painel |
+| IA Nível PREMIUM | Provider, API Key, Modelo | Planejamento (ex: Claude Opus 4.7) |
+| IA Nível HIGH | Provider, API Key, Modelo | Desenvolvimento/QA (ex: Claude Sonnet 4.6) |
+| IA Nível FAST | Provider, API Key, Modelo | Documentação/Jobs (ex: Claude Haiku 4.5) |
+| IA do Sistema | Provider, API Key, Modelo | Chat do dashboard (produção/interação) |
+| Controle Operacional | Habilitar Agentes, Modo Manutenção | Controles de operação |
+
+### 10.2 Persistência
+Os valores são armazenados na tabela `system_settings` (chave-valor) com cache de 60 segundos. Model: `App\Models\SystemSetting`.
+
 ---
-*Este manual reflete a versão 1.2 do sistema, com foco em ciência de contexto e interfaces ricas.*
+*Este manual reflete a versão 1.3 do sistema, com foco em auditoria, assistente IA e ciência de contexto.*
 
 ## 🛠 Histórico de Ajustes e Solução de Problemas
 
@@ -93,3 +203,4 @@ Se você encontrar erros ao operar o sistema, consulte esta seção de lições 
 - **Solução:** Adicione um novo servidor MCP do tipo `command` nas configurações da IDE. O comando deve criar um túnel SSH e executar o boost silenciosamente.
 - **Requisito:** A máquina local DEVE ter acesso via chave pública (SSH Keys) ao servidor remoto (ex: `ssh-copy-id root@10.1.1.86`). Se o SSH pedir senha, a IDE não conseguirá iniciar o MCP.
 - **Comando de Exemplo:** `ssh root@10.1.1.86 "cd /var/www/html/projetos/ai-dev/ai-dev-core && php artisan boost:mcp"`
+
