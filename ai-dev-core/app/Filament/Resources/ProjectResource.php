@@ -249,12 +249,12 @@ class ProjectResource extends Resource
             ->schema([
                 // Coluna esquerda — dados do projeto e roadmap
                 Group::make([
-                    Section::make('Visão Geral')
+                    Section::make('Dados do Projeto')
                         ->schema([
                             Grid::make(3)
                                 ->schema([
                                     Infolists\Components\TextEntry::make('name')
-                                        ->label('Projeto')
+                                        ->label('Nome do Projeto')
                                         ->weight('bold'),
 
                                     Infolists\Components\TextEntry::make('status')
@@ -274,7 +274,7 @@ class ProjectResource extends Resource
                             Grid::make(2)
                                 ->schema([
                                     Infolists\Components\TextEntry::make('local_path')
-                                        ->label('Caminho Local')
+                                        ->label('Caminho Local no Servidor')
                                         ->placeholder('Não configurado')
                                         ->copyable(),
 
@@ -349,7 +349,7 @@ class ProjectResource extends Resource
 
                 // Coluna direita — especificação da IA
                 Group::make([
-                    Section::make('Especificação Técnica (gerada pela IA)')
+                    Section::make('Descrição do Sistema')
                         ->schema([
                             Infolists\Components\TextEntry::make('currentSpecification.approved_at')
                                 ->label('Status da Especificação')
@@ -366,7 +366,7 @@ class ProjectResource extends Resource
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.user_description')
-                                ->label('Descrição Original')
+                                ->label('O que este sistema se propõe a fazer?')
                                 ->placeholder('—')
                                 ->columnSpanFull(),
 
