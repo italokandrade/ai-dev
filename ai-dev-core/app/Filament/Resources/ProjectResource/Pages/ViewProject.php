@@ -19,40 +19,6 @@ class ViewProject extends ViewRecord
         return [
             Actions\EditAction::make(),
 
-            // Gerar nova especificação via IA
-            Actions\Action::make('generate_spec')
-                ->label('Gerar Especificação com IA')
-                ->icon('heroicon-o-sparkles')
-                ->color('primary')
-                ->modalHeading('Gerar Especificação Técnica')
-                ->modalDescription('A IA irá analisar a descrição do projeto e propor uma arquitetura completa com módulos e submódulos.')
-                ->modalSubmitActionLabel('Enviar para IA')
-                ->form([
-                    Forms\Components\Textarea::make('user_description')
-                        ->label('Descrição do Sistema')
-                        ->helperText('Pode copiar da descrição já cadastrada ou reescrever livremente.')
-                        ->default(fn () => $this->record->currentSpecification?->user_description ?? '')
-                        ->rows(6)
-                        ->required(),
-                ])
-                ->action(function (array $data) {
-                    $lastVersion = ProjectSpecification::where('project_id', $this->record->id)
-                        ->max('version') ?? 0;
-
-                    $spec = ProjectSpecification::create([
-                        'project_id' => $this->record->id,
-                        'user_description' => $data['user_description'],
-                        'version' => $lastVersion + 1,
-                    ]);
-
-                    GenerateProjectSpecificationJob::dispatch($spec);
-
-                    Notification::make()
-                        ->title('Especificação enviada para geração')
-                        ->body('A IA está processando. Aguarde e recarregue a página para ver o resultado.')
-                        ->info()
-                        ->send();
-                }),
 
             // Aprovar especificação atual → cria módulos/submódulos
             Actions\Action::make('approve_spec')
