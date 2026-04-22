@@ -43,9 +43,9 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Forms\Components\Tabs::make('Project Tabs')
+                \Filament\Schemas\Components\Tabs::make('Project Tabs')
                     ->tabs([
-                        Forms\Components\Tabs\Tab::make('Dados do Projeto')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Dados do Projeto')
                             ->schema([
                                 Forms\Components\TextInput::make('name')
                                     ->label('Nome do Projeto')
@@ -87,7 +87,7 @@ class ProjectResource extends Resource
                             ])
                             ->columns(1),
 
-                        Forms\Components\Tabs\Tab::make('Descrição do Sistema')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Descrição do Sistema')
                             ->schema([
                                 Forms\Components\Textarea::make('description')
                                     ->label('O que este sistema se propõe a fazer?')
@@ -188,7 +188,7 @@ class ProjectResource extends Resource
                                     ),
                             ]),
 
-                        Forms\Components\Tabs\Tab::make('Principais Funcionalidades')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Principais Funcionalidades')
                             ->schema([
                                 Forms\Components\Repeater::make('features')
                                     ->relationship()
