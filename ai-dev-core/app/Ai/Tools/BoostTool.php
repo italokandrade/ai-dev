@@ -75,10 +75,19 @@ class BoostTool implements Tool
         $colsString = implode(', ', array_map(fn($c) => '"' . str_replace('"', '', $c) . '"', $columns));
         $query = "SELECT {$colsString} FROM \"{$table}\" LIMIT {$limit}";
 
-        // We still execute via artisan to stay within the target project's environment
-        $result = $this->executeArtisanCommand('database-query', ['query' => $query]);
+        try {
+            $records = \Illuminate\Support\Facades\DB::select($query);
+            $resultArray = array_map(function ($record) {
+                return (array) $record;
+            }, $records);
 
-        return $this->processResult($result);
+            return $this->processResult(json_encode($resultArray));
+        } catch (\Exception $e) {
+            return json_encode([
+                'success' => false,
+                'error' => 'Database query failed: ' . $e->getMessage()
+            ]);
+        }
     }
 
     /**

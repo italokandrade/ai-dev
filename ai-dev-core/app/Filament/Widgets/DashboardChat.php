@@ -68,9 +68,12 @@ class DashboardChat extends Widget
                 model: $model,
             );
 
+            $responseText = (string) $response;
+            \Illuminate\Support\Facades\Log::info("DashboardChat Response: ", ['text' => $responseText]);
+
             $this->history[] = [
                 'role'    => 'assistant',
-                'content' => (string) $response,
+                'content' => $responseText,
             ];
         } catch (\Throwable $e) {
             Log::error('DashboardChat Error: ' . $e->getMessage());
