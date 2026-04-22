@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10" style="margin-bottom: 2rem;">
+    <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 flex flex-col h-full">
         <div class="fi-section-header flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-white/5">
             <div class="flex flex-1 items-center gap-3">
                 <x-filament::icon icon="heroicon-o-chat-bubble-left-right" class="h-6 w-6 text-primary-500" />
@@ -13,7 +13,7 @@
         </div>
 
         <div class="p-6">
-            <div class="flex flex-col gap-6" style="height: 600px;">
+            <div class="flex flex-col gap-6" style="max-height: 400px;">
                 {{-- Chat Area --}}
                 <div id="chat-container" class="flex-1 overflow-y-auto space-y-6 p-6 bg-gray-50 dark:bg-gray-950/50 rounded-xl border border-gray-100 dark:border-white/5 custom-scrollbar"
                      x-init="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 class DashboardChat extends Widget
 {
     protected string $view = 'filament.widgets.dashboard-chat';
+    protected static ?int $sort = 10;
     protected int|string|array $columnSpan = 'full';
     public string $message = '';
     public array $history = [];
