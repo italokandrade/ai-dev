@@ -15,11 +15,10 @@ class CreateProject extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Guardar campos temporários e removê-los do data do Project
-        $this->userDescription = $data['user_description'] ?? '';
+        // Guardar a senha e remover do data (a descrição agora fica no Projeto)
         $this->dbPassword = $data['db_password'] ?? '';
 
-        unset($data['user_description'], $data['db_password']);
+        unset($data['db_password']);
 
         $data['local_path'] = '/var/www/html/projetos/' . $data['name'];
 
@@ -33,7 +32,7 @@ class CreateProject extends CreateRecord
         // 1. Criar especificação com a descrição do usuário
         $specification = ProjectSpecification::create([
             'project_id' => $project->id,
-            'user_description' => $this->userDescription,
+            'user_description' => $project->description ?? '',
             'version' => 1,
         ]);
 
@@ -51,6 +50,5 @@ class CreateProject extends CreateRecord
             ->send();
     }
 
-    private string $userDescription = '';
     private string $dbPassword = '';
 }

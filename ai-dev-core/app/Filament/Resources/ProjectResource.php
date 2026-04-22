@@ -43,152 +43,173 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Section::make('Dados do Projeto')
-                    ->schema([
-                        Forms\Components\TextInput::make('name')
-                            ->label('Nome do Projeto')
-                            ->helperText('Nome técnico (sem espaços, lowercase). Ex: portal-italoandrde, meu-saas')
-                            ->required()
-                            ->maxLength(255)
-                            ->scopedUnique(ignoreRecord: true)
-                            ->rules(['regex:/^[a-z0-9\-_]+$/'])
-                            ->validationMessages([
-                                'regex' => 'Apenas letras minúsculas, números, hífens e underscores.',
+                Forms\Components\Tabs::make('Project Tabs')
+                    ->tabs([
+                        Forms\Components\Tabs\Tab::make('Dados do Projeto')
+                            ->schema([
+                                Forms\Components\TextInput::make('name')
+                                    ->label('Nome do Projeto')
+                                    ->helperText('Nome técnico (sem espaços, lowercase). Ex: portal-italoandrde, meu-saas')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->scopedUnique(ignoreRecord: true)
+                                    ->rules(['regex:/^[a-z0-9\-_]+$/'])
+                                    ->validationMessages([
+                                        'regex' => 'Apenas letras minúsculas, números, hífens e underscores.',
+                                    ]),
+
+                                Forms\Components\TextInput::make('github_repo')
+                                    ->label('Repositório GitHub')
+                                    ->placeholder('usuario/repositorio')
+                                    ->maxLength(255),
+
+                                Forms\Components\TextInput::make('local_path')
+                                    ->label('Caminho Local no Servidor')
+                                    ->placeholder('/var/www/html/projetos/nome-do-projeto')
+                                    ->helperText('Caminho absoluto onde o projeto será criado/está localizado.')
+                                    ->maxLength(500),
+
+                                Forms\Components\Select::make('status')
+                                    ->label('Status')
+                                    ->options(ProjectStatus::class)
+                                    ->default('active')
+                                    ->required(),
+
+                                Forms\Components\TextInput::make('db_password')
+                                    ->label('Senha do Banco de Dados')
+                                    ->helperText('Senha para o usuário PostgreSQL que será criado para este projeto.')
+                                    ->password()
+                                    ->revealable()
+                                    ->required()
+                                    ->minLength(6)
+                                    ->default(fn () => Str::random(16))
+                                    ->visibleOn('create'),
+                            ])
+                            ->columns(1),
+
+                        Forms\Components\Tabs\Tab::make('Descrição do Sistema')
+                            ->schema([
+                                Forms\Components\Textarea::make('description')
+                                    ->label('O que este sistema se propõe a fazer?')
+                                    ->helperText('Escreva livremente — pode ser informal, curta ou detalhada. A IA vai estruturar tudo.')
+                                    ->placeholder('Ex: Quero um site profissional com portfolio dos meus projetos, blog pra postar artigos técnicos, área de admin pra gerenciar tudo, formulário de contato e que seja bonito com animações modernas. Precisa ser rápido e ter SEO bom.')
+                                    ->rows(12)
+                                    ->required()
+                                    ->columnSpanFull()
+                                    ->hintAction(
+                                        Action::make('refineWithAi')
+                                            ->label('Refinar com IA')
+                                            ->icon('heroicon-o-sparkles')
+                                            ->color('primary')
+                                            ->modalHeading('Refinar Descrição com IA')
+                                            ->modalDescription('A IA irá reescrever sua descrição seguindo os padrões do Laravel 13 e TALL Stack.')
+                                            ->modalSubmitActionLabel('Usar esta sugestão')
+                                            ->form([
+                                                Forms\Components\Textarea::make('suggested_description')
+                                                    ->label('Sugestão da IA')
+                                                    ->helperText('Você pode editar esta sugestão livremente.')
+                                                    ->rows(8)
+                                                    ->required(),
+
+                                                Forms\Components\TextInput::make('refinement_query')
+                                                    ->label('O que deseja adicionar ou modificar?')
+                                                    ->placeholder('Ex: Adicione um módulo de chat, ou mude o tom para mais formal...')
+                                                    ->helperText('Digite suas alterações e clique no botão circular ao lado para atualizar.')
+                                                    ->suffixAction(
+                                                        Action::make('applyRefinement')
+                                                            ->icon('heroicon-o-arrow-path')
+                                                            ->action(function (Set $set, Get $get) {
+                                                                $query = $get('refinement_query');
+                                                                $currentText = $get('suggested_description');
+
+                                                                if (blank($query)) {
+                                                                    Notification::make()
+                                                                        ->title('Informe o que deseja alterar')
+                                                                        ->warning()
+                                                                        ->send();
+
+                                                                    return;
+                                                                }
+
+                                                                try {
+                                                                    $refined = RefineDescriptionAgent::make()
+                                                                        ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n".
+                                                                                $currentText.
+                                                                                "\n\nInstrução de modificação do usuário:\n".
+                                                                                $query);
+
+                                                                    $set('suggested_description', (string) $refined);
+                                                                    $set('refinement_query', ''); // Limpa o campo de entrada
+
+                                                                    Notification::make()
+                                                                        ->title('Sugestão atualizada')
+                                                                        ->success()
+                                                                        ->send();
+                                                                } catch (\Exception $e) {
+                                                                    Notification::make()
+                                                                        ->title('Erro ao processar alteração')
+                                                                        ->body($e->getMessage())
+                                                                        ->danger()
+                                                                        ->send();
+                                                                }
+                                                            })
+                                                    ),
+                                            ])
+                                            ->mountUsing(function (Schema $form, Forms\Components\Textarea $component) {
+                                                $state = $component->getState();
+
+                                                if (blank($state)) {
+                                                    return;
+                                                }
+
+                                                try {
+                                                    $refined = RefineDescriptionAgent::make()
+                                                        ->prompt("Refine a seguinte descrição de projeto: \n\n".$state);
+
+                                                    $form->fill([
+                                                        'suggested_description' => (string) $refined,
+                                                    ]);
+                                                } catch (\Exception $e) {
+                                                    Notification::make()
+                                                        ->title('Erro ao refinar com IA')
+                                                        ->body($e->getMessage())
+                                                        ->danger()
+                                                        ->send();
+                                                }
+                                            })
+                                            ->action(function (array $data, Forms\Components\Textarea $component) {
+                                                $component->state($data['suggested_description']);
+
+                                                Notification::make()
+                                                    ->title('Descrição atualizada')
+                                                    ->success()
+                                                    ->send();
+                                            })
+                                    ),
                             ]),
 
-                        Forms\Components\TextInput::make('github_repo')
-                            ->label('Repositório GitHub')
-                            ->placeholder('usuario/repositorio')
-                            ->maxLength(255),
-
-                        Forms\Components\TextInput::make('local_path')
-                            ->label('Caminho Local no Servidor')
-                            ->placeholder('/var/www/html/projetos/nome-do-projeto')
-                            ->helperText('Caminho absoluto onde o projeto será criado/está localizado.')
-                            ->maxLength(500),
-
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options(ProjectStatus::class)
-                            ->default('active')
-                            ->required(),
-                    ])
-                    ->columns(1),
-
-                Section::make('Descrição do Sistema')
-                    ->description('Descreva o que este sistema deve fazer. A IA irá reescrever sua descrição em uma especificação técnica completa e sugerir os módulos do sistema.')
-                    ->schema([
-                        Forms\Components\Textarea::make('user_description')
-                            ->label('O que este sistema se propõe a fazer?')
-                            ->helperText('Escreva livremente — pode ser informal, curta ou detalhada. A IA vai estruturar tudo.')
-                            ->placeholder('Ex: Quero um site profissional com portfolio dos meus projetos, blog pra postar artigos técnicos, área de admin pra gerenciar tudo, formulário de contato e que seja bonito com animações modernas. Precisa ser rápido e ter SEO bom.')
-                            ->rows(6)
-                            ->required()
-                            ->columnSpanFull()
-                            ->hintAction(
-                                Action::make('refineWithAi')
-                                    ->label('Refinar com IA')
-                                    ->icon('heroicon-o-sparkles')
-                                    ->color('primary')
-                                    ->modalHeading('Refinar Descrição com IA')
-                                    ->modalDescription('A IA irá reescrever sua descrição seguindo os padrões do Laravel 13 e TALL Stack.')
-                                    ->modalSubmitActionLabel('Usar esta sugestão')
-                                    ->form([
-                                        Forms\Components\Textarea::make('suggested_description')
-                                            ->label('Sugestão da IA')
-                                            ->helperText('Você pode editar esta sugestão livremente.')
-                                            ->rows(8)
-                                            ->required(),
-
-                                        Forms\Components\TextInput::make('refinement_query')
-                                            ->label('O que deseja adicionar ou modificar?')
-                                            ->placeholder('Ex: Adicione um módulo de chat, ou mude o tom para mais formal...')
-                                            ->helperText('Digite suas alterações e clique no botão circular ao lado para atualizar.')
-                                            ->suffixAction(
-                                                Action::make('applyRefinement')
-                                                    ->icon('heroicon-o-arrow-path')
-                                                    ->action(function (Set $set, Get $get) {
-                                                        $query = $get('refinement_query');
-                                                        $currentText = $get('suggested_description');
-
-                                                        if (blank($query)) {
-                                                            Notification::make()
-                                                                ->title('Informe o que deseja alterar')
-                                                                ->warning()
-                                                                ->send();
-
-                                                            return;
-                                                        }
-
-                                                        try {
-                                                            $refined = RefineDescriptionAgent::make()
-                                                                ->prompt("Ajuste o seguinte texto de descrição de projeto:\n\n".
-                                                                        $currentText.
-                                                                        "\n\nInstrução de modificação do usuário:\n".
-                                                                        $query);
-
-                                                            $set('suggested_description', (string) $refined);
-                                                            $set('refinement_query', ''); // Limpa o campo de entrada
-
-                                                            Notification::make()
-                                                                ->title('Sugestão atualizada')
-                                                                ->success()
-                                                                ->send();
-                                                        } catch (\Exception $e) {
-                                                            Notification::make()
-                                                                ->title('Erro ao processar alteração')
-                                                                ->body($e->getMessage())
-                                                                ->danger()
-                                                                ->send();
-                                                        }
-                                                    })
-                                            ),
+                        Forms\Components\Tabs\Tab::make('Principais Funcionalidades')
+                            ->schema([
+                                Forms\Components\Repeater::make('features')
+                                    ->relationship()
+                                    ->label('Funcionalidades')
+                                    ->schema([
+                                        Forms\Components\TextInput::make('title')
+                                            ->label('Título')
+                                            ->required()
+                                            ->maxLength(255),
+                                        Forms\Components\Textarea::make('description')
+                                            ->label('Descrição')
+                                            ->rows(3),
                                     ])
-                                    ->mountUsing(function (Schema $form, Forms\Components\Textarea $component) {
-                                        $state = $component->getState();
-
-                                        if (blank($state)) {
-                                            return;
-                                        }
-
-                                        try {
-                                            $refined = RefineDescriptionAgent::make()
-                                                ->prompt("Refine a seguinte descrição de projeto: \n\n".$state);
-
-                                            $form->fill([
-                                                'suggested_description' => (string) $refined,
-                                            ]);
-                                        } catch (\Exception $e) {
-                                            Notification::make()
-                                                ->title('Erro ao refinar com IA')
-                                                ->body($e->getMessage())
-                                                ->danger()
-                                                ->send();
-                                        }
-                                    })
-                                    ->action(function (array $data, Forms\Components\Textarea $component) {
-                                        $component->state($data['suggested_description']);
-
-                                        Notification::make()
-                                            ->title('Descrição atualizada')
-                                            ->success()
-                                            ->send();
-                                    })
-                            ),
-                    ]),
-
-                Section::make('Senha do Banco de Dados')
-                    ->description('Senha para o usuário PostgreSQL que será criado para este projeto.')
-                    ->schema([
-                        Forms\Components\TextInput::make('db_password')
-                            ->label('Senha do Banco')
-                            ->password()
-                            ->revealable()
-                            ->required()
-                            ->minLength(6)
-                            ->default(fn () => Str::random(16)),
+                                    ->columns(1)
+                                    ->addActionLabel('Adicionar Funcionalidade')
+                                    ->reorderableWithButtons()
+                                    ->collapsible()
+                                    ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
+                            ]),
                     ])
-                    ->visibleOn('create'),
+                    ->columnSpanFull(),
             ]);
     }
 

@@ -26,10 +26,16 @@ class Project extends Model implements Conversational
 
     protected $fillable = [
         'name',
+        'description',
         'github_repo',
         'local_path',
         'status',
     ];
+
+    public function features(): HasMany
+    {
+        return $this->hasMany(ProjectFeature::class);
+    }
 
     protected function casts(): array
     {
