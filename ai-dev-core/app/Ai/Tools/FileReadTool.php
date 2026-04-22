@@ -22,6 +22,26 @@ class FileReadTool implements Tool
     {
         $path = $request['path'];
 
+        // Hard block for sensitive files
+        $blockedPatterns = [
+            '/.env', 
+            '.key', 
+            '.pem', 
+            'config/database.php', 
+            'config/services.php',
+            'auth.json',
+            'storage/oauth'
+        ];
+        
+        foreach ($blockedPatterns as $pattern) {
+            if (str_contains(strtolower($path), strtolower($pattern))) {
+                return json_encode([
+                    'success' => false, 
+                    'error' => "Acesso negado: Este arquivo contém informações sensíveis e não pode ser lido pela IA."
+                ]);
+            }
+        }
+
         if (! str_starts_with($path, '/')) {
             $path = rtrim($this->workingDirectory, '/').'/'.$path;
         }
