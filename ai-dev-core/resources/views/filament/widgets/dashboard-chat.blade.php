@@ -96,10 +96,13 @@
                      sendAndScroll() {
                          if (this.$wire.message.trim() === '') return;
                          this.$wire.sendMessage();
-                         // Scroll imediato (antes da resposta)
+                         // Limpa o campo imediatamente no cliente,
+                         // sem aguardar o retorno do servidor
+                         this.$wire.message = '';
+                         const ta = this.$el.querySelector('textarea');
+                         if (ta) ta.style.height = '24px';
+                         // Scroll imediato + scroll após wire:loading ativar os pontinhos
                          this.scrollChat();
-                         // Scroll novamente após 80ms para garantir que o wire:loading
-                         // já ativou os pontinhos no DOM antes de scrollar
                          setTimeout(() => this.scrollChat(), 80);
                      }
                  }"
