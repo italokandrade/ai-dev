@@ -96,11 +96,11 @@
                      sendAndScroll() {
                          if (this.$wire.message.trim() === '') return;
                          this.$wire.sendMessage();
-                         // Limpa o campo imediatamente no cliente,
-                         // sem aguardar o retorno do servidor
-                         this.$wire.message = '';
+                         // Limpa visualmente o textarea diretamente no DOM,
+                         // SEM tocar em $wire.message para evitar race condition
+                         // (atribuir $wire.message dispara outro request que cancela o envio)
                          const ta = this.$el.querySelector('textarea');
-                         if (ta) ta.style.height = '24px';
+                         if (ta) { ta.value = ''; ta.style.height = '24px'; }
                          // Scroll imediato + scroll após wire:loading ativar os pontinhos
                          this.scrollChat();
                          setTimeout(() => this.scrollChat(), 80);
