@@ -89,13 +89,18 @@
             <div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
                  class="dark:bg-gray-800/50 dark:border-gray-700"
                  x-data="{
+                     scrollChat() {
+                         const chat = document.getElementById('chat-messages');
+                         if (chat) chat.scrollTop = chat.scrollHeight;
+                     },
                      sendAndScroll() {
                          if (this.$wire.message.trim() === '') return;
                          this.$wire.sendMessage();
-                         this.$nextTick(() => {
-                             const chat = document.getElementById('chat-messages');
-                             if (chat) chat.scrollTop = chat.scrollHeight;
-                         });
+                         // Scroll imediato (antes da resposta)
+                         this.scrollChat();
+                         // Scroll novamente após 80ms para garantir que o wire:loading
+                         // já ativou os pontinhos no DOM antes de scrollar
+                         setTimeout(() => this.scrollChat(), 80);
                      }
                  }"
                  @focusin="$el.style.borderColor='#6366f1'; $el.style.boxShadow='0 0 0 3px rgba(99,102,241,0.12), inset 0 1px 3px rgba(0,0,0,0.04)';"
