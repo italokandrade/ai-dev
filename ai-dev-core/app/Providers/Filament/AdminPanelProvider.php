@@ -29,7 +29,13 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                'primary' => Color::Blue,
+                'primary'   => Color::Indigo,   // #6366f1 — alinhado com o gradient do chat
+                'secondary' => Color::Violet,   // #8b5cf6 — complement
+                'success'   => Color::Emerald,  // Status: ativo, concluído
+                'warning'   => Color::Amber,    // Status: pausado, atenção
+                'danger'    => Color::Rose,     // Status: erro, exclusão
+                'info'      => Color::Sky,      // Status: informativo
+                'gray'      => Color::Slate,    // Neutrals — tom frio coerente
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
