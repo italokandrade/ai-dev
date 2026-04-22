@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10 flex flex-col h-full">
+    <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
         <div class="fi-section-header flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-white/5">
             <div class="flex flex-1 items-center gap-3">
                 <x-filament::icon icon="heroicon-o-chat-bubble-left-right" class="h-6 w-6 text-primary-500" />
