@@ -87,10 +87,10 @@ class ProjectResource extends Resource
                             ])
                             ->columns(1),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Descrição do Sistema')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Descrição do Projeto')
                             ->schema([
                                 Forms\Components\Textarea::make('description')
-                                    ->label('O que este sistema se propõe a fazer?')
+                                    ->label('O que este projeto se propõe a fazer?')
                                     ->helperText('Escreva livremente — pode ser informal, curta ou detalhada. A IA vai estruturar tudo.')
                                     ->placeholder('Ex: Quero um site profissional com portfolio dos meus projetos, blog pra postar artigos técnicos, área de admin pra gerenciar tudo, formulário de contato e que seja bonito com animações modernas. Precisa ser rápido e ter SEO bom.')
                                     ->rows(12)
@@ -399,7 +399,7 @@ class ProjectResource extends Resource
 
                 // Coluna direita — especificação da IA
                 Group::make([
-                    Section::make('Descrição do Sistema')
+                    Section::make('Descrição do Projeto')
                         ->schema([
                             Infolists\Components\TextEntry::make('currentSpecification.approved_at')
                                 ->label('Status da Especificação')
@@ -416,14 +416,14 @@ class ProjectResource extends Resource
                                 ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('description')
-                                ->label('O que este sistema se propõe a fazer?')
+                                ->label('O que este projeto se propõe a fazer?')
                                 ->placeholder('—')
                                 ->columnSpanFull(),
 
 
                             \Filament\Schemas\Components\Tabs::make('Funcionalidades Principais')
                                 ->tabs([
-                                    \Filament\Schemas\Components\Tabs\Tab::make('Backend')
+                                    \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
                                         ->schema([
                                             Infolists\Components\RepeatableEntry::make('backendFeatures')
                                                 ->label('')
@@ -441,7 +441,7 @@ class ProjectResource extends Resource
                                                 ->grid(1)
                                                 ->columnSpanFull(),
                                         ]),
-                                    \Filament\Schemas\Components\Tabs\Tab::make('Frontend')
+                                    \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
                                         ->schema([
                                             Infolists\Components\RepeatableEntry::make('frontendFeatures')
                                                 ->label('')
