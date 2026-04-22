@@ -57,7 +57,7 @@
             @endforeach
 
             {{-- Typing indicator: shown instantly via wire:loading when sendMessage is running --}}
-            <div wire:loading wire:target="sendMessage" style="display: none; align-items: flex-start; gap: 10px;">
+            <div wire:loading wire:target="sendMessage" class="chat-typing-row" style="display: none;">
                 <div style="flex-shrink: 0; width: 30px; height: 30px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" style="width:15px;height:15px">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
@@ -122,6 +122,13 @@
         .custom-chat-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-chat-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-chat-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* wire:loading muda display para 'block'; esta classe force 'flex' para o indicador de digitação */
+        .chat-typing-row {
+            display: flex !important;
+            align-items: flex-start;
+            gap: 10px;
+        }
 
         @keyframes typingBounce {
             0%, 60%, 100% { transform: translateY(0); }
