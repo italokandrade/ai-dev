@@ -44,14 +44,17 @@ class DashboardChat extends Widget
         }
     }
 
-    public function sendMessage(): void
+    public function sendMessage(string $messageText = ''): void
     {
-        if (empty(trim($this->message))) return;
+        // Recebe a mensagem diretamente do Alpine (x-model local, sem wire:model)
+        $userMessage = trim($messageText ?: $this->message);
 
-        $userMessage = $this->message;
-        $this->history[]  = ['role' => 'user', 'content' => $userMessage];
-        $this->message    = '';
+        if (empty($userMessage)) return;
+
+        $this->history[]    = ['role' => 'user', 'content' => $userMessage];
+        $this->message      = '';
         $this->isProcessing = true;
+
 
         try {
             $provider = SystemSetting::get(SystemSetting::AI_SYSTEM_PROVIDER, 'openrouter');

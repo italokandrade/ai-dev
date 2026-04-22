@@ -80,28 +80,29 @@
         </div>
 
         {{--
-            Input Area — SEMPRE VISÍVEL, SEM NENHUM ESTADO DE LOADING.
-            O envio é controlado pelo Alpine.js via sendAndScroll() que:
-            1. Chama $wire.sendMessage()
-            2. Imediatamente rola a conversa para o fundo (mostrando os pontinhos)
+            Input Area — SEMPRE VISÍVEL.
+            Usa Alpine x-model (localMsg) em vez de wire:model para
+            ter controle total sobre a limpeza imediata do campo.
         --}}
         <div style="padding: 16px 20px; border-top: 1px solid #f1f5f9; background: #ffffff;" class="dark:border-white/5 dark:bg-gray-900">
             <div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
                  class="dark:bg-gray-800/50 dark:border-gray-700"
                  x-data="{
+                     localMsg: '',
                      scrollChat() {
                          const chat = document.getElementById('chat-messages');
                          if (chat) chat.scrollTop = chat.scrollHeight;
                      },
+                     resizeTextarea(el) {
+                         el.style.height = '24px';
+                         el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+                     },
                      sendAndScroll() {
-                         if (this.$wire.message.trim() === '') return;
-                         this.$wire.sendMessage();
-                         // Limpa visualmente o textarea diretamente no DOM,
-                         // SEM tocar em $wire.message para evitar race condition
-                         // (atribuir $wire.message dispara outro request que cancela o envio)
+                         if (!this.localMsg.trim()) return;
+                         this.$wire.sendMessage(this.localMsg);
+                         this.localMsg = '';
                          const ta = this.$el.querySelector('textarea');
-                         if (ta) { ta.value = ''; ta.style.height = '24px'; }
-                         // Scroll imediato + scroll após wire:loading ativar os pontinhos
+                         if (ta) ta.style.height = '24px';
                          this.scrollChat();
                          setTimeout(() => this.scrollChat(), 80);
                      }
@@ -110,14 +111,12 @@
                  @focusout="$el.style.borderColor='#e2e8f0'; $el.style.boxShadow='inset 0 1px 3px rgba(0,0,0,0.04)';"
             >
                 <textarea
-                    wire:model="message"
+                    x-model="localMsg"
                     placeholder="Pergunte sobre o projeto, código ou documentação..."
                     rows="1"
                     class="dark:text-white dark:placeholder-gray-500"
                     style="flex: 1; border: none; background: transparent; resize: none; outline: none; font-size: 14px; line-height: 1.5; color: #111827; min-height: 24px; max-height: 100px; padding: 0;"
-                    x-data="{ resize() { $el.style.height = '24px'; $el.style.height = Math.min($el.scrollHeight, 100) + 'px' } }"
-                    x-init="resize()"
-                    @input="resize()"
+                    @input="resizeTextarea($el)"
                     @keydown.enter.prevent="sendAndScroll()"
                 ></textarea>
                 <button
