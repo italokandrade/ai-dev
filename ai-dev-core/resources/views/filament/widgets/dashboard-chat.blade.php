@@ -80,20 +80,29 @@
         </div>
 
         {{--
-            Input Area — SEMPRE VISÍVEL.
-            Não tem nenhum wire:loading.remove aqui.
-            O botão de envio usa wire:loading para trocar ícone (seta <-> spinner),
-            mas o wrapper do input nunca some.
+            Input Area — SEMPRE VISÍVEL, SEM NENHUM ESTADO DE LOADING.
+            O envio é controlado pelo Alpine.js via sendAndScroll() que:
+            1. Chama $wire.sendMessage()
+            2. Imediatamente rola a conversa para o fundo (mostrando os pontinhos)
         --}}
         <div style="padding: 16px 20px; border-top: 1px solid #f1f5f9; background: #ffffff;" class="dark:border-white/5 dark:bg-gray-900">
             <div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
                  class="dark:bg-gray-800/50 dark:border-gray-700"
-                 x-data
+                 x-data="{
+                     sendAndScroll() {
+                         if (this.$wire.message.trim() === '') return;
+                         this.$wire.sendMessage();
+                         this.$nextTick(() => {
+                             const chat = document.getElementById('chat-messages');
+                             if (chat) chat.scrollTop = chat.scrollHeight;
+                         });
+                     }
+                 }"
                  @focusin="$el.style.borderColor='#6366f1'; $el.style.boxShadow='0 0 0 3px rgba(99,102,241,0.12), inset 0 1px 3px rgba(0,0,0,0.04)';"
-                 @focusout="$el.style.borderColor='#e2e8f0'; $el.style.boxShadow='inset 0 1px 3px rgba(0,0,0,0.04)';">
+                 @focusout="$el.style.borderColor='#e2e8f0'; $el.style.boxShadow='inset 0 1px 3px rgba(0,0,0,0.04)';"
+            >
                 <textarea
                     wire:model="message"
-                    wire:keydown.enter.prevent="sendMessage"
                     placeholder="Pergunte sobre o projeto, código ou documentação..."
                     rows="1"
                     class="dark:text-white dark:placeholder-gray-500"
@@ -101,26 +110,16 @@
                     x-data="{ resize() { $el.style.height = '24px'; $el.style.height = Math.min($el.scrollHeight, 100) + 'px' } }"
                     x-init="resize()"
                     @input="resize()"
+                    @keydown.enter.prevent="sendAndScroll()"
                 ></textarea>
                 <button
-                    wire:click="sendMessage"
-                    wire:loading.attr="disabled"
-                    wire:target="sendMessage"
+                    @click="sendAndScroll()"
                     style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 2px 6px rgba(99,102,241,0.35);"
-                    onmouseover="if(!this.disabled){ this.style.transform='scale(1.08)'; this.style.boxShadow='0 4px 12px rgba(99,102,241,0.5)'; }"
+                    onmouseover="this.style.transform='scale(1.08)'; this.style.boxShadow='0 4px 12px rgba(99,102,241,0.5)';"
                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(99,102,241,0.35)';"
                 >
-                    {{-- Seta: visível quando NÃO está carregando --}}
-                    <svg wire:loading.remove wire:target="sendMessage"
-                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
                         <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
-                    </svg>
-                    {{-- Spinner: visível enquanto carrega --}}
-                    <svg wire:loading wire:target="sendMessage"
-                         style="width:16px;height:16px;animation:spin 1s linear infinite;display:none;"
-                         viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" stroke-width="3"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="white" stroke-width="3" stroke-linecap="round"/>
                     </svg>
                 </button>
             </div>
