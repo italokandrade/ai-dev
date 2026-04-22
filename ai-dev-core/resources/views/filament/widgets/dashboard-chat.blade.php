@@ -56,20 +56,19 @@
                 @endif
             @endforeach
 
-            @if($isProcessing)
-                <div style="display: flex; align-items: flex-start; gap: 10px;">
-                    <div style="flex-shrink: 0; width: 30px; height: 30px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" style="width:15px;height:15px">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-                        </svg>
-                    </div>
-                    <div style="background: white; padding: 10px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; display: flex; gap: 4px; align-items: center;" class="dark:bg-gray-800 dark:border-white/10">
-                        <span style="width:6px;height:6px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s infinite 0s;display:inline-block;"></span>
-                        <span style="width:6px;height:6px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s infinite 0.2s;display:inline-block;"></span>
-                        <span style="width:6px;height:6px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s infinite 0.4s;display:inline-block;"></span>
-                    </div>
+            {{-- Typing indicator: shown instantly via wire:loading when sendMessage is running --}}
+            <div wire:loading wire:target="sendMessage" style="display: none; align-items: flex-start; gap: 10px;">
+                <div style="flex-shrink: 0; width: 30px; height: 30px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" style="width:15px;height:15px">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                    </svg>
                 </div>
-            @endif
+                <div style="background: white; padding: 12px 18px; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; display: flex; gap: 5px; align-items: center;" class="dark:bg-gray-800 dark:border-white/10">
+                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0s;display:inline-block;"></span>
+                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.25s;display:inline-block;"></span>
+                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.5s;display:inline-block;"></span>
+                </div>
+            </div>
         </div>
 
         {{-- Input Area --}}
@@ -94,24 +93,24 @@
                 ></textarea>
                 <button
                     wire:click="sendMessage"
-                    :disabled="$isProcessing"
-                    style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 2px 6px rgba(99,102,241,0.35); opacity: 1;"
+                    wire:loading.attr="disabled"
+                    wire:target="sendMessage"
+                    style="flex-shrink: 0; width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; box-shadow: 0 2px 6px rgba(99,102,241,0.35);"
                     onmouseover="if(!this.disabled){ this.style.transform='scale(1.08)'; this.style.boxShadow='0 4px 12px rgba(99,102,241,0.5)'; }"
                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(99,102,241,0.35)';"
-                    x-bind:class="$isProcessing ? 'opacity-50 cursor-not-allowed' : ''"
                 >
-                    {{-- When processing: show a spinning indicator instead of arrow --}}
-                    <template x-if="!$isProcessing">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
-                            <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
-                        </svg>
-                    </template>
-                    <template x-if="$isProcessing">
-                        <svg style="width:16px;height:16px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" stroke-width="3"/>
-                            <path d="M12 2a10 10 0 0 1 10 10" stroke="white" stroke-width="3" stroke-linecap="round"/>
-                        </svg>
-                    </template>
+                    {{-- Arrow icon — hidden while loading --}}
+                    <svg wire:loading.remove wire:target="sendMessage"
+                         xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
+                        <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
+                    </svg>
+                    {{-- Spinner — shown while loading --}}
+                    <svg wire:loading wire:target="sendMessage"
+                         style="width:16px;height:16px;animation:spin 1s linear infinite;display:none;"
+                         viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" stroke-width="3"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
                 </button>
             </div>
         </div>
