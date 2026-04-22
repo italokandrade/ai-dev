@@ -56,25 +56,37 @@
                 @endif
             @endforeach
 
-            {{-- Typing indicator: shown instantly via wire:loading when sendMessage is running --}}
-            <div wire:loading wire:target="sendMessage" class="chat-typing-row" style="display: none;">
-                <div style="flex-shrink: 0; width: 30px; height: 30px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" style="width:15px;height:15px">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-                    </svg>
-                </div>
-                <div style="background: white; padding: 12px 18px; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; display: flex; gap: 5px; align-items: center;" class="dark:bg-gray-800 dark:border-white/10">
-                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0s;display:inline-block;"></span>
-                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.25s;display:inline-block;"></span>
-                    <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.5s;display:inline-block;"></span>
+            {{--
+                Indicador de digitação.
+                O div EXTERNO é controlado pelo wire:loading (fica display:block quando carregando).
+                O div INTERNO tem display:flex fixo — assim o layout fica correto independente
+                do que o wire:loading defina no elemento pai.
+                SEM !important em CSS para não conflitar com o display:none do wire:loading.
+            --}}
+            <div wire:loading wire:target="sendMessage" style="display: none;">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                    <div style="flex-shrink: 0; width: 30px; height: 30px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" style="width:15px;height:15px">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                        </svg>
+                    </div>
+                    <div style="background: white; padding: 12px 18px; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; display: flex; gap: 5px; align-items: center;" class="dark:bg-gray-800 dark:border-white/10">
+                        <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0s;display:inline-block;"></span>
+                        <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.25s;display:inline-block;"></span>
+                        <span style="width:7px;height:7px;background:#6366f1;border-radius:50%;animation:typingBounce 1.2s ease-in-out infinite 0.5s;display:inline-block;"></span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        {{-- Input Area --}}
+        {{--
+            Input Area — SEMPRE VISÍVEL.
+            Não tem nenhum wire:loading.remove aqui.
+            O botão de envio usa wire:loading para trocar ícone (seta <-> spinner),
+            mas o wrapper do input nunca some.
+        --}}
         <div style="padding: 16px 20px; border-top: 1px solid #f1f5f9; background: #ffffff;" class="dark:border-white/5 dark:bg-gray-900">
-            <div wire:loading.remove wire:target="sendMessage"
-                 style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
+            <div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; transition: border-color 0.15s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);"
                  class="dark:bg-gray-800/50 dark:border-gray-700"
                  x-data
                  @focusin="$el.style.borderColor='#6366f1'; $el.style.boxShadow='0 0 0 3px rgba(99,102,241,0.12), inset 0 1px 3px rgba(0,0,0,0.04)';"
@@ -86,11 +98,9 @@
                     rows="1"
                     class="dark:text-white dark:placeholder-gray-500"
                     style="flex: 1; border: none; background: transparent; resize: none; outline: none; font-size: 14px; line-height: 1.5; color: #111827; min-height: 24px; max-height: 100px; padding: 0;"
-                    :disabled="$isProcessing"
                     x-data="{ resize() { $el.style.height = '24px'; $el.style.height = Math.min($el.scrollHeight, 100) + 'px' } }"
                     x-init="resize()"
                     @input="resize()"
-                    @keydown.enter.prevent="$wire.sendMessage()"
                 ></textarea>
                 <button
                     wire:click="sendMessage"
@@ -100,12 +110,12 @@
                     onmouseover="if(!this.disabled){ this.style.transform='scale(1.08)'; this.style.boxShadow='0 4px 12px rgba(99,102,241,0.5)'; }"
                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(99,102,241,0.35)';"
                 >
-                    {{-- Arrow icon — hidden while loading --}}
+                    {{-- Seta: visível quando NÃO está carregando --}}
                     <svg wire:loading.remove wire:target="sendMessage"
                          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="width:16px;height:16px;">
                         <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />
                     </svg>
-                    {{-- Spinner — shown while loading --}}
+                    {{-- Spinner: visível enquanto carrega --}}
                     <svg wire:loading wire:target="sendMessage"
                          style="width:16px;height:16px;animation:spin 1s linear infinite;display:none;"
                          viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -122,13 +132,6 @@
         .custom-chat-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-chat-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-chat-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        /* wire:loading muda display para 'block'; esta classe force 'flex' para o indicador de digitação */
-        .chat-typing-row {
-            display: flex !important;
-            align-items: flex-start;
-            gap: 10px;
-        }
 
         @keyframes typingBounce {
             0%, 60%, 100% { transform: translateY(0); }
