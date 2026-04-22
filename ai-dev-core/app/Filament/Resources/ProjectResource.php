@@ -194,6 +194,15 @@ class ProjectResource extends Resource
                                     ->relationship()
                                     ->label('Funcionalidades')
                                     ->schema([
+                                        Forms\Components\Select::make('type')
+                                            ->label('Tipo')
+                                            ->options([
+                                                'backend' => 'Backend',
+                                                'frontend' => 'Frontend',
+                                            ])
+                                            ->default('backend')
+                                            ->required()
+                                            ->native(false),
                                         Forms\Components\TextInput::make('title')
                                             ->label('Título')
                                             ->required()
@@ -399,6 +408,15 @@ class ProjectResource extends Resource
                                         ->hiddenLabel()
                                         ->weight('bold')
                                         ->bulleted(),
+                                    Infolists\Components\TextEntry::make('type')
+                                        ->hiddenLabel()
+                                        ->badge()
+                                        ->color(fn (string $state): string => match ($state) {
+                                            'backend' => 'info',
+                                            'frontend' => 'success',
+                                            default => 'gray',
+                                        })
+                                        ->formatStateUsing(fn (string $state): string => ucfirst($state)),
                                     Infolists\Components\TextEntry::make('description')
                                         ->hiddenLabel()
                                         ->color('gray')

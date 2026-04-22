@@ -12,6 +12,7 @@ class ProjectFeature extends Model
 
     protected $fillable = [
         'project_id',
+        'type',
         'title',
         'description',
     ];
