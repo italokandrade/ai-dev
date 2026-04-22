@@ -1,5 +1,30 @@
 # Guia do Painel Administrativo AI-Dev (Filament v5)
 
+---
+
+> [!NOTE]
+> **📝 RASCUNHO — Ajustes de Menu (2025-04-22)**
+>
+> Alterações realizadas na estrutura de navegação do painel:
+>
+> 1. **Bloco de desenvolvimento autônomo (menu raiz)** — ordem definitiva:
+>    - `Projetos` (sort=1) — ponto de entrada de tudo
+>    - `Módulos` (sort=2) — submódulos e hierarquia de projeto
+>    - `Tarefas` (sort=3) — renomeado de "Tasks" para PT-BR completo
+>
+> 2. **`Especificações` removida do menu lateral** (`$shouldRegisterNavigation = false`).
+>    - Justificativa: o recurso de Especificações é parte interna do fluxo de um Projeto e deve ser acessado pela aba/view do próprio Projeto, não diretamente pelo menu.
+>    - O resource ainda existe, a URL direta ainda funciona, apenas o link do sidebar foi suprimido.
+>
+> 3. **Pendências a revisar** (próximas sessões):
+>    - [ ] Avaliar se `Especificações` deve ser integrada como relação visível na view do Projeto (aba)
+>    - [ ] Revisar o bloco "Configuração" e reorganizar os itens Agentes, Orçamentos, Redes Sociais
+>    - [ ] Rever se o módulo `Orçamentos` deve ser acessível pelo menu ou apenas via Projeto
+>    - [ ] Documentar fluxo completo de desenvolvimento autônomo (Projeto → Módulo → Tarefa → Agente → Task execution)
+
+---
+
+
 Este documento descreve o funcionamento do **Admin Panel do ai-dev-core** (Master), localizado em `/ai-dev-core/public/admin`. É daqui que o humano cadastra Projetos Alvo, cria tasks, dispara cotações e acompanha execução dos agentes.
 
 > **Dois Admin Panels coexistem no ecossistema — não confundir:**

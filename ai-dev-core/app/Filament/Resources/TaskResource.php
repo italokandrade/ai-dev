@@ -23,13 +23,13 @@ class TaskResource extends Resource
 
     protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-clipboard-document-list';
 
-    protected static ?string $navigationLabel = 'Tasks';
+    protected static ?string $navigationLabel = 'Tarefas';
 
-    protected static ?string $modelLabel = 'Task';
+    protected static ?string $modelLabel = 'Tarefa';
 
-    protected static ?string $pluralModelLabel = 'Tasks';
+    protected static ?string $pluralModelLabel = 'Tarefas';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema
     {

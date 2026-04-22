@@ -28,7 +28,8 @@ class ProjectSpecificationResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Especificações';
 
-    protected static ?int $navigationSort = 2;
+    // Oculto do menu: acessível apenas via aba na tela do Projeto
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Schema $schema): Schema
     {
