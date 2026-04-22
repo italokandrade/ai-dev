@@ -75,7 +75,6 @@ DIRETRIZ DE ARQUITETURA E GRANULARIDADE (MUITO IMPORTANTE):
 Retorne EXATAMENTE este JSON (sem markdown):
 {
   "system_name": "Nome do Sistema",
-  "objective": "Descrição técnica detalhada",
   "target_audience": "Quem usa o sistema",
   "core_features": ["Feature 1", "Feature 2"],
   "technical_stack": {
@@ -112,7 +111,6 @@ PROMPT;
     {
         return [
             'system_name'               => $projectName,
-            'objective'                 => $userDescription,
             'target_audience'           => 'A ser definido',
             'core_features'             => ['Geração pela IA falhou — verifique os logs'],
             'technical_stack'           => [

@@ -231,9 +231,6 @@ class ProjectSpecificationResource extends Resource
                                 ->weight('bold')
                                 ->columnSpanFull(),
 
-                            Infolists\Components\TextEntry::make('ai_specification.objective')
-                                ->label('Objetivo')
-                                ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('ai_specification.target_audience')
                                 ->label('Público-Alvo')

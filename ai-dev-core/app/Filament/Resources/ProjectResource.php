@@ -370,10 +370,6 @@ class ProjectResource extends Resource
                                 ->placeholder('—')
                                 ->columnSpanFull(),
 
-                            Infolists\Components\TextEntry::make('currentSpecification.ai_specification.objective')
-                                ->label('Objetivo (IA)')
-                                ->placeholder('Aguardando geração')
-                                ->columnSpanFull(),
 
                             Infolists\Components\TextEntry::make('currentSpecification.ai_specification.core_features')
                                 ->label('Funcionalidades Principais')
