@@ -139,10 +139,20 @@ class ActivityLogResource extends Resource
                 Tables\Filters\SelectFilter::make('subject_type')
                     ->label('Módulo')
                     ->options(fn () => static::dynamicSubjectTypes()),
-                // Filtro de usuário causador
+                // Filtro de usuário causador — carregado via query manual
+                // (causer é morphTo, ->relationship() não funciona com morphTo)
                 Tables\Filters\SelectFilter::make('causer_id')
                     ->label('Usuário')
-                    ->relationship('causer', 'name'),
+                    ->options(function () {
+                        try {
+                            return \App\Models\User::query()
+                                ->whereIn('id', Activity::query()->distinct('causer_id')->whereNotNull('causer_id')->pluck('causer_id'))
+                                ->pluck('name', 'id')
+                                ->all();
+                        } catch (\Throwable) {
+                            return [];
+                        }
+                    }),
             ])
             ->actions([
                 ViewAction::make(),
