@@ -342,6 +342,23 @@ O sistema adota **granularidade progressiva**: cada módulo/submódulo possui se
 
 ---
 
+**`project_features`** — Funcionalidades geradas por IA para cada projeto, separadas por camada.
+Geradas automaticamente pelo `GenerateFeaturesAgent` (via `GenerateProjectFeaturesJob`) a partir do PRD Master e da descrição do projeto. Cada feature pode ser refinada individualmente pelo `RefineFeatureAgent` diretamente no painel Filament. Servem como contexto adicional durante o fluxo de especificação.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID / PK | Identificador único |
+| `project_id` | FK → `projects.id` | Projeto associado |
+| `type` | Enum: `backend`, `frontend` | Camada da funcionalidade |
+| `title` | String(255) | Título curto da funcionalidade |
+| `description` | Text | O que a funcionalidade faz e qual valor entrega |
+| `created_at` | Timestamp | Data de criação |
+| `updated_at` | Timestamp | Última modificação |
+
+**Fluxo de geração:** o usuário, dentro do `ProjectResource` no Filament, dispara via botão de ação a geração de features para a camada desejada (`backend` ou `frontend`). O job usa o `GenerateFeaturesAgent` com o nível Premium de IA, parseia o JSON retornado e insere os registros. Features individuais podem ser refinadas com o `RefineFeatureAgent`.
+
+---
+
 **`project_quotations`** — Orçamentos e análise de ROI por projeto.
 Compara o custo de desenvolvimento humano vs. AI-Dev para demonstrar o valor da automação.
 
@@ -497,7 +514,7 @@ Essencial para controle de custo, debugging e otimização.
 
 ---
 
-**`tool_calls_log`** *(Fase 2 — não implementado ainda)* — Registro de cada ferramenta executada pelos agentes.
+**`tool_calls_log`** *(Fase 2 — migration existe; listener `Tool::dispatched()` pendente)* — Registro de cada ferramenta executada pelos agentes.
 A camada de segurança e auditoria — permite investigar exatamente quais comandos foram rodados, quais arquivos foram alterados, e por quem.
 
 **Listener de auditoria (`Tool::dispatched()`):** O Laravel AI SDK expõe o evento `Tool::dispatched()` que deve ser usado para popular esta tabela de forma transparente, sem poluir o `handle()` de cada tool:
@@ -586,8 +603,8 @@ $response = BackendSpecialist::make()->continue($conversationId, as: $user)->pro
 
 ---
 
-**`social_accounts`** *(Fase 3 — migration existe, integração não implementada)* — Credenciais de redes sociais vinculadas a cada projeto.
-Planejado para permitir publicação multi-plataforma via `hamzahassanm/laravel-social-auto-post`. As credenciais ficam armazenadas criptografadas. **Não existe tool dedicada no código atual** — quando a feature for implementada, será um Agent dedicado chamando o pacote diretamente, não um Tool SDK genérico.
+**`social_accounts`** *(Fase 1 — CRUD implementado; `SocialPostingAgent` e integração de postagem pendentes)* — Credenciais de redes sociais vinculadas a cada projeto.
+O `SocialAccountResource` no Filament está implementado e permite cadastro, edição e visualização de contas. As credenciais ficam armazenadas criptografadas. **A integração de postagem automática** (`SocialPostingAgent` + `hamzahassanm/laravel-social-auto-post`) ainda não foi implementada — quando a feature for completa, será um Agent dedicado chamando o pacote diretamente, não um Tool SDK genérico.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -630,11 +647,13 @@ projects ──┬── 1:N ── project_modules ──┬── 1:N ── p
             │   (tasks avulsas) ├── 1:N ── task_transitions
             │                  └── N:1 ── project_modules (module_id)
             │
+            ├── 1:N ── project_features ✅ (Fase 1 — implementado, type: backend|frontend)
             ├── 1:N ── project_quotations (orçamentos e ROI)
+            ├── 1:N ── project_specifications (legado — retrocompatibilidade)
             ├── 1:N ── agent_conversations (SDK — RemembersConversations)
-            ├── 1:N ── social_accounts ⚙️ (Fase 1 — migration criada)
+            ├── 1:N ── social_accounts ✅ (Fase 1 — CRUD Filament implementado; postagem pendente)
             ├── 1:N ── agent_executions 🔜 (Fase 2 — pendente)
-            │          └── 1:N ── tool_calls_log 🔜 (Fase 2 — pendente)
+            │          └── 1:N ── tool_calls_log ⚠️ (Fase 2 — migration existe, listener pendente)
             ├── 1:N ── problems_solutions 🔜 (Fase 3 — RAG vetorial)
             └── 1:N ── webhooks_config 🔜 (Fase 2 — pendente)
 
@@ -737,6 +756,8 @@ app/
 │   ├── Agents/
 │   │   ├── ProjectPrdAgent.php          ← implements Agent — Gera PRD Master do projeto (apenas módulos)
 │   │   ├── ModulePrdAgent.php           ← implements Agent — Gera PRD Técnico de um módulo (decide submódulos)
+│   │   ├── GenerateFeaturesAgent.php    ← implements Agent — Gera lista de features por camada (backend|frontend) em JSON
+│   │   ├── RefineFeatureAgent.php       ← implements Agent, HasTools, MaxSteps(10) — Refina feature individual via BoostTool
 │   │   ├── OrchestratorAgent.php        ← implements Agent, HasStructuredOutput, HasTools — Planner
 │   │   ├── QAAuditorAgent.php           ← implements Agent, HasStructuredOutput — Judge
 │   │   ├── SpecialistAgent.php          ← implements Agent, Conversational, HasTools — Executor genérico
@@ -746,6 +767,7 @@ app/
 │   │   ├── SpecificationAgent.php       ← implements Agent — Gera especificação técnica (legado)
 │   │   ├── QuotationAgent.php           ← implements Agent — Gera orçamento
 │   │   ├── DocsAgent.php                ← implements Agent, HasTools — Busca documentação
+│   │   ├── SystemAssistantAgent.php     ← implements Agent, HasTools, MaxSteps(10) — Assistente do painel (chat com DB + FileRead)
 │   │   └── ContextCompressor.php        ← implements Agent (usa Ollama) — Compressão
 │   └── Tools/
 │       ├── BoostTool.php                ← implements Laravel\Ai\Contracts\Tool — Boost MCP do Projeto Alvo
@@ -760,6 +782,7 @@ app/
 │   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva em project_modules.prd_payload
 │   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo
 │   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha
+│   ├── GenerateProjectFeaturesJob.php   ← Gera project_features via GenerateFeaturesAgent (type: backend|frontend)
 │   ├── OrchestratorJob.php              ← Despacha OrchestratorAgent → grava subtasks → enfileira workers
 │   ├── ProcessSubtaskJob.php            ← Executa um SpecialistAgent para uma Subtask específica
 │   ├── QAAuditJob.php                   ← Executa QAAuditorAgent sobre o diff de uma subtask
@@ -767,6 +790,7 @@ app/
 │   ├── PerformanceAnalysisJob.php       ← Executa PerformanceAnalyst após Security aprovar
 │   ├── ContextCompressionJob.php        ← Comprime sessão quando atinge threshold 0.6
 │   ├── GenerateProjectSpecificationJob.php ← Gera spec técnica (legado)
+│   ├── GenerateTasksFromSpecJob.php     ← Cria tasks a partir de uma ProjectSpecification aprovada (legado)
 │   ├── GenerateProjectQuotationJob.php  ← Gera orçamento
 │   └── ScaffoldProjectJob.php           ← Scaffolding inicial do Projeto Alvo
 │
@@ -797,17 +821,20 @@ app/
 ├── Models/
 │   ├── Project.php
 │   ├── ProjectModule.php
+│   ├── ProjectFeature.php            ← features geradas por IA (backend|frontend)
 │   ├── ProjectSpecification.php
 │   ├── ProjectQuotation.php
 │   ├── Task.php
 │   ├── Subtask.php
 │   ├── AgentConfig.php
-│   ├── ContextLibrary.php
 │   ├── TaskTransition.php
-│   ├── AgentExecution.php
-│   ├── ToolCallLog.php
-│   ├── ProblemSolution.php
-│   └── WebhookConfig.php
+│   ├── SocialAccount.php             ← credenciais de redes sociais (CRUD implementado)
+│   ├── SystemSetting.php             ← configurações do sistema via UI (AI providers, modelos, flags)
+│   ├── ToolCallLog.php               ← migration existe; listener pendente
+│   ├── ContextLibrary.php            ← 🔜 Fase 3 — não implementado ainda
+│   ├── AgentExecution.php            ← 🔜 Fase 2 — não implementado ainda
+│   ├── ProblemSolution.php           ← 🔜 Fase 3 — não implementado ainda
+│   └── WebhookConfig.php             ← 🔜 Fase 2 — não implementado ainda
 │
 ├── Enums/
 │   ├── TaskStatus.php               ← pending, in_progress, qa_audit, testing, completed, etc.
@@ -819,10 +846,15 @@ app/
 │
 └── Filament/
     └── Resources/
-        ├── ProjectResource.php       ← CRUD de projetos
-        ├── TaskResource.php          ← CRUD de tasks + visualização de status em tempo real
-        ├── AgentConfigResource.php   ← Configuração de agentes (system prompts, modelos)
-        ├── ContextLibraryResource.php ← Gestão dos padrões de código TALL
+        ├── ProjectResource.php              ← CRUD de projetos + ações de geração de PRD, features, modules
+        ├── ProjectModuleResource.php        ← CRUD de módulos/submódulos + ações de geração de PRD
+        ├── ProjectSpecificationResource.php ← CRUD de especificações (legado)
+        ├── ProjectQuotationResource.php     ← CRUD de orçamentos
+        ├── TaskResource.php                 ← CRUD de tasks + visualização de status em tempo real
+        ├── AgentConfigResource.php          ← Configuração de agentes (system prompts, modelos)
+        ├── SocialAccountResource.php        ← CRUD de contas sociais por projeto (postagem pendente)
+        ├── RoleResource.php                 ← Gestão de roles Spatie (FilamentShield)
+        ├── ContextLibraryResource.php       ← 🔜 Fase 3 — Gestão dos padrões de código TALL
         └── Widgets/
             ├── TaskBoardWidget.php    ← Dashboard Kanban com status das tasks
             ├── CostTrackerWidget.php  ← Gráfico de custo por agente/período
@@ -1624,11 +1656,14 @@ A orquestração decide *quando* chamar este agente; o pacote externo cuida do *
 
 ### 11.5. Gerenciamento via Filament UI
 
-Um `SocialAccountResource` no Filament permitirá:
-- Cadastrar e testar credenciais por plataforma por projeto
+O `SocialAccountResource` no Filament está **implementado** e já permite:
+- Cadastrar e editar credenciais por plataforma por projeto
+- Visualizar contas registradas por projeto
+- Ativar/desativar plataformas
+
+Pendente (quando o `SocialPostingAgent` for implementado):
 - Visualizar histórico de publicações (tabela `social_posts_log`)
-- Ativar/desativar plataformas por projeto
-- Preview e agendamento de posts
+- Preview e agendamento de posts automatizados
 
 ---
 

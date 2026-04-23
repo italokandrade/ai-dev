@@ -15,7 +15,7 @@ O ecossistema tem **duas classes de aplicações Laravel**, cada uma com respons
 | Repositório GitHub | `ai-dev` (próprio) | Repositório próprio, independente |
 | Codebase | `/var/www/html/projetos/ai-dev/ai-dev-core` | `/var/www/html/projetos/<nome>` |
 | Banco de dados | `ai_dev_core` (projects, tasks, subtasks, agents_config…) | Banco próprio com tabelas do domínio de negócio |
-| Dependências Composer | `laravel/ai`, `laravel/mcp`, `laravel/boost` (dev), Filament v5, Horizon | Mesma base TALL + pacotes específicos ao negócio |
+| Dependências Composer | `laravel/ai`, `laravel/boost` (dev), Filament v5, Horizon (`laravel/mcp` é dependência transitiva de `laravel/ai`) | Mesma base TALL + pacotes específicos ao negócio |
 | Boost MCP | Instalado (usado pelo Claude Code no desenvolvimento do próprio ai-dev-core) | Instalado (consumido pelos agentes do ai-dev-core durante execução de tasks) |
 | Admin Panel (Filament) | Gerencia projetos, tasks, quotations, agents_config | Gerencia as entidades de negócio do projeto |
 | **IAs de Interação com o Sistema** *(falam com o usuário no Admin Panel)* | `RefineDescriptionAgent`, `SpecificationAgent`, `QuotationAgent` | AIs específicas do negócio (ex: copiloto do usuário final, classificação, sumarização — definidas na spec de cada projeto) |
@@ -40,7 +40,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 | **Banco Relacional** | PostgreSQL 16 + pgvector (busca vetorial nativa) |
 | **Filas/Cache** | Redis 7.0 |
 | **AI SDK** | Laravel AI SDK (`laravel/ai` v0.5) — Agents, Tools, Structured Output, Conversations |
-| **MCP** | Laravel MCP (`laravel/mcp` v0.6) — Model Context Protocol |
+| **MCP** | Laravel MCP (`laravel/mcp` v0.6) — Model Context Protocol (dependência transitiva de `laravel/ai`; não declarada diretamente no `composer.json`) |
 | **Boost** | Laravel Boost (`laravel/boost` v2.4) — instalado em **cada** aplicação: no ai-dev-core para o desenvolvimento via Claude Code, e em cada Projeto Alvo como fonte de contexto consumida pelos agentes do ai-dev-core |
 | **Planejamento (ai-dev-core)** | OpenRouter → `anthropic/claude-opus-4.7` — OrchestratorAgent, SpecificationAgent, QuotationAgent, RefineDescriptionAgent |
 | **Código/QA (ai-dev-core)** | OpenRouter → `anthropic/claude-sonnet-4-6` — SpecialistAgent, QAAuditorAgent |
@@ -137,6 +137,7 @@ O sistema adota **granularidade progressiva**:
 | `projects` | Cadastro de Projetos Alvo (repo, `local_path`, stack, env, com PRD do Sistema Inteiro em JSON) |
 | `project_specifications` | Especificação técnica legada (mantida para retrocompatibilidade); o fluxo ativo usa `projects.prd_payload` |
 | `project_modules` | Módulos e submódulos (hierárquico via `parent_id`), cada um com seu próprio `prd_payload` JSON técnico |
+| `project_features` | Funcionalidades geradas por IA por camada (`backend` ou `frontend`) via `GenerateFeaturesAgent`; refinadas individualmente via `RefineFeatureAgent` |
 | `project_quotations` | Orçamentos com comparativo de custo humano vs. AI-Dev e cálculo de ROI |
 | `tasks` | Tarefas vinculadas a módulos folha (sem filhos), com PRD em JSON |
 | `subtasks` | Decomposição granular feita pelo Orchestrator (sub-PRDs por especialista) |
@@ -144,7 +145,7 @@ O sistema adota **granularidade progressiva**:
 | `task_transitions` | Log de auditoria de toda mudança de estado |
 | `agent_conversations` | Conversas persistidas automaticamente pelo Laravel AI SDK |
 | `agent_conversation_messages` | Mensagens das conversas (gerenciado pelo SDK) |
-| `social_accounts` | Credenciais de redes sociais por Projeto Alvo (criptografadas) |
+| `social_accounts` | Credenciais de redes sociais por Projeto Alvo (criptografadas) — CRUD Filament implementado; `SocialPostingAgent` pendente |
 
 **Tabelas do Core Master (injetadas em TODOS os Projetos, incluindo o ai-dev-core):**
 
@@ -176,7 +177,7 @@ O sistema adota **granularidade progressiva**:
 | Tabela | Fase | Propósito |
 |---|---|---|
 | `agent_executions` | Fase 2 | Log de cada chamada LLM (tokens, custo, latência) |
-| `tool_calls_log` | Fase 2 ⚠️ alta prioridade | Registro de cada ferramenta executada — populado via `Tool::dispatched()` listener (auditoria de segurança) |
+| `tool_calls_log` | Fase 2 ⚠️ alta prioridade | Registro de cada ferramenta executada — migration existe; listener `Tool::dispatched()` pendente (auditoria de segurança) |
 | `webhooks_config` | Fase 2 | Configuração de webhooks de entrada (GitHub, CI/CD) |
 | `context_library` | Fase 3 | Padrões de código TALL obrigatórios (few-shot fixo) |
 | `problems_solutions` | Fase 3 | Base de conhecimento auto-alimentada (RAG vetorial via pgvector) |
