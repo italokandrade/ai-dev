@@ -64,7 +64,7 @@ class ViewProjectSpecification extends ViewRecord
             Actions\Action::make('regenerate')
                 ->label('Regenerar com IA')
                 ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading('Regenerar Especificação')
                 ->modalDescription('A IA irá reprocessar a descrição original e substituir a especificação atual. Use quando o resultado não estiver satisfatório.')

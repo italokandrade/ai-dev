@@ -42,25 +42,19 @@ class ProjectModulesRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('progress_percentage')
                     ->label('Progresso')
                     ->formatStateUsing(fn ($state) => $state . '%')
-                    ->color(fn ($state) => match (true) {
-                        $state >= 80 => 'success',
-                        $state >= 40 => 'info',
-                        $state > 0 => 'warning',
-                        default => 'gray',
-                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('children_count')
                     ->label('Submódulos')
                     ->counts('children')
                     ->badge()
-                    ->color('info'),
+                    ->color('gray'),
 
                 Tables\Columns\TextColumn::make('tasks_count')
                     ->label('Tasks')
                     ->counts('tasks')
                     ->badge()
-                    ->color('success'),
+                    ->color('gray'),
             ])
             ->defaultSort('created_at', 'asc')
             ->headerActions([

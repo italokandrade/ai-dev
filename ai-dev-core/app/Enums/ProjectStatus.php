@@ -3,9 +3,10 @@
 namespace App\Enums;
 
 use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasIcon;
 use Filament\Support\Contracts\HasLabel;
 
-enum ProjectStatus: string implements HasLabel, HasColor
+enum ProjectStatus: string implements HasLabel, HasColor, HasIcon
 {
     case Active = 'active';
     case Paused = 'paused';
@@ -14,8 +15,8 @@ enum ProjectStatus: string implements HasLabel, HasColor
     public function getLabel(): string
     {
         return match ($this) {
-            self::Active => 'Ativo',
-            self::Paused => 'Pausado',
+            self::Active   => 'Ativo',
+            self::Paused   => 'Pausado',
             self::Archived => 'Arquivado',
         };
     }
@@ -23,9 +24,18 @@ enum ProjectStatus: string implements HasLabel, HasColor
     public function getColor(): string|array|null
     {
         return match ($this) {
-            self::Active => 'success',
-            self::Paused => 'warning',
+            self::Active   => 'primary',
+            self::Paused   => 'gray',
             self::Archived => 'gray',
+        };
+    }
+
+    public function getIcon(): ?string
+    {
+        return match ($this) {
+            self::Active   => 'heroicon-o-bolt',
+            self::Paused   => 'heroicon-o-pause-circle',
+            self::Archived => 'heroicon-o-archive-box',
         };
     }
 }

@@ -29,6 +29,8 @@ class TaskResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Tarefas';
 
+    protected static \UnitEnum|string|null $navigationGroup = 'Projetos';
+
     protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema

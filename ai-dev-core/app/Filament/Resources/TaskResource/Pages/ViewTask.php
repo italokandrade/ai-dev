@@ -230,7 +230,7 @@ class ViewTask extends ViewRecord
             Actions\Action::make('redo')
                 ->label('Refazer Task')
                 ->icon('heroicon-o-arrow-path')
-                ->color('warning')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading('Refazer esta Task')
                 ->modalDescription('Será criada uma nova task vinculada a esta, com o mesmo PRD. Use quando a IA falhou ou o resultado precisa ser refeito.')

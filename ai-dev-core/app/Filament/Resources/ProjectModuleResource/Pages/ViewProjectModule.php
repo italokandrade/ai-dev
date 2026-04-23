@@ -74,12 +74,7 @@ class ViewProjectModule extends ViewRecord
                             ->schema([
                                 Infolists\Components\TextEntry::make('progress_percentage')
                                     ->label('Progresso')
-                                    ->formatStateUsing(fn ($state) => $state . '%')
-                                    ->color(fn ($state) => match (true) {
-                                        $state >= 80 => 'success',
-                                        $state >= 40 => 'warning',
-                                        default => 'gray',
-                                    }),
+                                    ->formatStateUsing(fn ($state) => $state . '%'),
 
                                 Infolists\Components\TextEntry::make('started_at')
                                     ->label('Iniciado em')
@@ -175,7 +170,7 @@ class ViewProjectModule extends ViewRecord
             Actions\Action::make('transition_in_progress')
                 ->label('Iniciar')
                 ->icon('heroicon-o-play')
-                ->color('info')
+                ->color('primary')
                 ->requiresConfirmation()
                 ->action(function () {
                     try {
@@ -207,7 +202,7 @@ class ViewProjectModule extends ViewRecord
             Actions\Action::make('generateModulePrd')
                 ->label('Gerar PRD do Módulo')
                 ->icon('heroicon-o-sparkles')
-                ->color('warning')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->modalHeading('Gerar PRD Técnico do Módulo')
                 ->modalDescription('A IA irá gerar um PRD detalhado e técnico para este módulo. Isso pode levar alguns minutos.')
@@ -226,7 +221,7 @@ class ViewProjectModule extends ViewRecord
             Actions\Action::make('viewFullModulePrd')
                 ->label('Ver PRD Completo')
                 ->icon('heroicon-o-document-text')
-                ->color('info')
+                ->color('gray')
                 ->modalHeading(fn () => "PRD Técnico — {$this->record->name}")
                 ->modalContent(fn () => view('filament.module-prd-viewer', ['prd' => $this->record->prd_payload]))
                 ->modalWidth('7xl')

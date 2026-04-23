@@ -182,13 +182,11 @@ class ProjectQuotationResource extends Resource
                 Tables\Columns\TextColumn::make('ai_dev_price')
                     ->label('Preço AI-Dev')
                     ->money('BRL')
-                    ->color('success')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('savings_percentage')
                     ->label('Economia')
                     ->suffix('%')
-                    ->color('success')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('created_at')
@@ -213,7 +211,7 @@ class ProjectQuotationResource extends Resource
                 Action::make('recalculate')
                     ->label('Calcular')
                     ->icon('heroicon-o-calculator')
-                    ->color('info')
+                    ->color('gray')
                     ->action(function (ProjectQuotation $record) {
                         $record->recalculate();
                         $record->save();
@@ -354,18 +352,15 @@ class ProjectQuotationResource extends Resource
 
                                 Infolists\Components\TextEntry::make('ai_dev_price')
                                     ->label('Preço AI-Dev')
-                                    ->money('BRL')
-                                    ->color('success'),
+                                    ->money('BRL'),
 
                                 Infolists\Components\TextEntry::make('savings_amount')
                                     ->label('Economia para o Cliente')
-                                    ->money('BRL')
-                                    ->color('success'),
+                                    ->money('BRL'),
 
                                 Infolists\Components\TextEntry::make('savings_percentage')
                                     ->label('% de Economia')
-                                    ->suffix('%')
-                                    ->color('success'),
+                                    ->suffix('%'),
                             ]),
                     ]),
 
@@ -386,8 +381,7 @@ class ProjectQuotationResource extends Resource
 
                                 Infolists\Components\TextEntry::make('ai_dev_cost')
                                     ->label('Custo Total Real (BRL)')
-                                    ->money('BRL')
-                                    ->color('info'),
+                                    ->money('BRL'),
                             ]),
                     ])
                     ->collapsible(),

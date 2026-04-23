@@ -31,6 +31,8 @@ class ProjectModuleResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Módulos';
 
+    protected static \UnitEnum|string|null $navigationGroup = 'Projetos';
+
     protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
@@ -142,12 +144,6 @@ class ProjectModuleResource extends Resource
                 Tables\Columns\TextColumn::make('progress_percentage')
                     ->label('Progresso')
                     ->formatStateUsing(fn ($state) => $state . '%')
-                    ->color(fn ($state) => match (true) {
-                        $state >= 80 => 'success',
-                        $state >= 40 => 'info',
-                        $state > 0 => 'warning',
-                        default => 'gray',
-                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('completed_tasks_count')
@@ -175,7 +171,7 @@ class ProjectModuleResource extends Resource
                     ->label(fn (ProjectModule $record) => (string) ($record->children_count ?? 0))
                     ->icon('heroicon-m-folder-open')
                     ->action(fn (ProjectModule $record, Pages\ListProjectModules $livewire) => $livewire->setActiveModule($record->id))
-                    ->color('info')
+                    ->color('gray')
                     ->link()
                     ->visible(fn (ProjectModule $record) => ($record->children_count ?? 0) > 0),
                 \Filament\Actions\ViewAction::make()->label(''),
@@ -183,7 +179,7 @@ class ProjectModuleResource extends Resource
                 Action::make('generatePrd')
                     ->label('')
                     ->icon('heroicon-o-sparkles')
-                    ->color('warning')
+                    ->color('gray')
                     ->tooltip('Gerar PRD Técnico')
                     ->requiresConfirmation()
                     ->modalHeading('Gerar PRD Técnico')

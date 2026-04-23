@@ -36,7 +36,7 @@ class SubtasksRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('assigned_agent')
                     ->label('Agente')
                     ->badge()
-                    ->color('info')
+                    ->color('gray')
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('status')

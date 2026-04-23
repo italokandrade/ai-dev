@@ -38,6 +38,8 @@ class ProjectResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Projetos';
 
+    protected static \UnitEnum|string|null $navigationGroup = 'Projetos';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
@@ -418,9 +420,9 @@ class ProjectResource extends Resource
                                         }),
 
                                     Action::make('regenerateProjectPrd')
-                                        ->label('🔄 Regenerar PRD')
+                                        ->label('Regenerar PRD')
                                         ->icon('heroicon-o-arrow-path')
-                                        ->color('warning')
+                                        ->color('gray')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
                                             return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
@@ -619,12 +621,7 @@ class ProjectResource extends Resource
 
                 Tables\Columns\TextColumn::make('overall_progress')
                     ->label('Progresso')
-                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%')
-                    ->color(fn (Project $record) => match (true) {
-                        $record->overallProgress() >= 80 => 'success',
-                        $record->overallProgress() >= 40 => 'info',
-                        default => 'gray',
-                    }),
+                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%'),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Criado em')
@@ -662,12 +659,7 @@ class ProjectResource extends Resource
 
                                 Infolists\Components\TextEntry::make('overall_progress')
                                     ->label('Progresso Geral')
-                                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%')
-                                    ->color(fn (Project $record) => match (true) {
-                                        $record->overallProgress() >= 80 => 'success',
-                                        $record->overallProgress() >= 40 => 'warning',
-                                        default => 'gray',
-                                    }),
+                                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%'),
                             ]),
 
                         Grid::make(2)
@@ -690,15 +682,11 @@ class ProjectResource extends Resource
                         Infolists\Components\TextEntry::make('prd_status')
                             ->label('Status do PRD')
                             ->getStateUsing(fn (Project $record) => match (true) {
-                                empty($record->prd_payload) => 'Nenhum PRD gerado',
-                                $record->isPrdApproved() => '✅ PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
-                                default => '⏳ Aguardando aprovação do PRD',
+                                empty($record->prd_payload)  => 'Nenhum PRD gerado',
+                                $record->isPrdApproved()     => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
+                                default                      => 'Aguardando aprovação do PRD',
                             })
-                            ->color(fn (Project $record) => match (true) {
-                                $record->isPrdApproved() => 'success',
-                                !empty($record->prd_payload) => 'warning',
-                                default => 'gray',
-                            })
+                            ->color(fn (Project $record) => $record->isPrdApproved() ? 'success' : 'gray')
                             ->columnSpanFull(),
 
                         Infolists\Components\TextEntry::make('description')
@@ -770,12 +758,7 @@ class ProjectResource extends Resource
 
                                         Infolists\Components\TextEntry::make('progress_percentage')
                                             ->label('Progresso')
-                                            ->formatStateUsing(fn ($state) => $state.'%')
-                                            ->color(fn ($state) => match (true) {
-                                                $state >= 80 => 'success',
-                                                $state >= 40 => 'warning',
-                                                default => 'gray',
-                                            }),
+                                            ->formatStateUsing(fn ($state) => $state.'%'),
 
                                         Infolists\Components\TextEntry::make('children_count')
                                             ->label('Submódulos')
@@ -824,10 +807,8 @@ class ProjectResource extends Resource
                             ->badge()
                             ->color(fn (Project $record) => match ($record->activeQuotation?->status) {
                                 'approved', 'completed' => 'success',
-                                'sent', 'in_progress' => 'info',
-                                'draft' => 'warning',
-                                'rejected' => 'danger',
-                                default => 'gray',
+                                'rejected'              => 'danger',
+                                default                 => 'gray',
                             }),
 
                         Infolists\Components\TextEntry::make('activeQuotation.total_human_hours')
@@ -849,16 +830,14 @@ class ProjectResource extends Resource
                             ->getStateUsing(fn (Project $record) => $record->activeQuotation
                                 ? 'R$ '.number_format((float) $record->activeQuotation->ai_dev_price, 2, ',', '.')
                                 : '—')
-                            ->placeholder('—')
-                            ->color('success'),
+                            ->placeholder('—'),
 
                         Infolists\Components\TextEntry::make('activeQuotation.savings_percentage')
                             ->label('Economia')
                             ->getStateUsing(fn (Project $record) => $record->activeQuotation
                                 ? number_format((float) $record->activeQuotation->savings_percentage, 1, ',', '.').'%'
                                 : '—')
-                            ->placeholder('—')
-                            ->color('success'),
+                            ->placeholder('—'),
                     ])
                     ->columns(2)
                     ->collapsible(),
