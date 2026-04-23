@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Ai\Agents\RefineDescriptionAgent;
+use App\Ai\Agents\RefineFeatureAgent;
 use App\Enums\ProjectStatus;
 use App\Services\AiRuntimeConfigService;
 use App\Filament\Resources\ProjectResource\Pages;
@@ -192,7 +193,8 @@ class ProjectResource extends Resource
                                             ->maxLength(255),
                                         Forms\Components\Textarea::make('description')
                                             ->label('Descrição')
-                                            ->rows(3),
+                                            ->rows(3)
+                                            ->hintAction(self::getRefineFeatureAction('backend')),
                                     ])
                                     ->columns(1)
                                     ->addActionLabel('Adicionar Funcionalidade Backend')
@@ -217,7 +219,8 @@ class ProjectResource extends Resource
                                             ->maxLength(255),
                                         Forms\Components\Textarea::make('description')
                                             ->label('Descrição')
-                                            ->rows(3),
+                                            ->rows(3)
+                                            ->hintAction(self::getRefineFeatureAction('frontend')),
                                     ])
                                     ->columns(1)
                                     ->addActionLabel('Adicionar Funcionalidade Frontend')
@@ -228,6 +231,118 @@ class ProjectResource extends Resource
                     ])
                     ->columnSpanFull(),
             ]);
+    }
+
+    private static function getRefineFeatureAction(string $featureType): Action
+    {
+        $typeLabel = $featureType === 'backend' ? 'Backend' : 'Frontend';
+
+        return Action::make("refine{$typeLabel}FeatureWithAi")
+            ->label('Refinar com IA')
+            ->icon('heroicon-o-sparkles')
+            ->color('primary')
+            ->modalHeading("Refinar Descrição — Funcionalidade {$typeLabel}")
+            ->modalDescription('A descrição atual será pré-preenchida. Clique em "Refinar" para reescrevê-la com a IA, ou adicione instruções antes de refinar.')
+            ->modalSubmitActionLabel('Usar esta sugestão')
+            ->form([
+                Forms\Components\Hidden::make('project_name'),
+                Forms\Components\Hidden::make('project_description'),
+                Forms\Components\Hidden::make('feature_title'),
+
+                Forms\Components\Textarea::make('suggested_description')
+                    ->label('Descrição atual da funcionalidade')
+                    ->helperText('Você pode editar este texto livremente.')
+                    ->rows(6)
+                    ->required(),
+
+                Forms\Components\TextInput::make('refinement_query')
+                    ->label('O que deseja adicionar ou modificar?')
+                    ->placeholder('Ex: Deixe mais técnico, ou foque no impacto para o usuário...')
+                    ->helperText('Opcional. Deixe em branco para apenas reescrever, ou digite instruções e clique no botão ao lado.')
+                    ->suffixAction(
+                        Action::make("apply{$typeLabel}Refinement")
+                            ->label('Refinar')
+                            ->icon('heroicon-o-sparkles')
+                            ->color('primary')
+                            ->action(function (Set $set, Get $get) use ($featureType) {
+                                $query = $get('refinement_query');
+                                $currentText = $get('suggested_description');
+                                $projectName = $get('project_name');
+                                $projectDescription = $get('project_description');
+                                $featureTitle = $get('feature_title');
+
+                                try {
+                                    $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
+
+                                    $promptText = blank($query)
+                                        ? "Reescreva a descrição da funcionalidade '{$featureTitle}' ({$featureType}), melhorando a clareza e coesão sem alterar a essência:\n\n{$currentText}"
+                                        : "Reescreva a descrição da funcionalidade '{$featureTitle}' ({$featureType}) ajustando-a conforme solicitado:\n\n{$currentText}\n\nAjuste solicitado:\n{$query}";
+
+                                    $promptText .= "\n\n---\nCONTEXTO DO PROJETO '{$projectName}':\n{$projectDescription}\n---\n";
+                                    $promptText .= "IMPORTANTE: A descrição refinada deve estar alinhada com o propósito geral do projeto acima. NÃO inclua especificações técnicas de frameworks, ferramentas, versões ou arquitetura no texto final.";
+
+                                    $refined = (new RefineFeatureAgent(base_path()))
+                                        ->prompt(
+                                            $promptText,
+                                            provider: $aiConfig['provider'],
+                                            model: $aiConfig['model'],
+                                        );
+
+                                    $set('suggested_description', (string) $refined);
+                                    $set('refinement_query', '');
+
+                                    Notification::make()
+                                        ->title('Descrição refinada com sucesso')
+                                        ->success()
+                                        ->send();
+                                } catch (\Exception $e) {
+                                    Notification::make()
+                                        ->title('Erro ao refinar com IA')
+                                        ->body($e->getMessage())
+                                        ->danger()
+                                        ->send();
+                                }
+                            })
+                    ),
+            ])
+            ->mountUsing(function (Schema $form, Forms\Components\Textarea $component) {
+                $state = $component->getState();
+
+                // Obtém o contexto do projeto via record do form
+                $project = $form->getRecord();
+                $projectName = $project?->name ?? '';
+                $projectDescription = $project?->description ?? '';
+
+                // Tenta obter o título da funcionalidade do container pai (repeater item)
+                $featureTitle = '';
+                try {
+                    $container = $component->getContainer();
+                    if ($container) {
+                        $parentComponent = $container->getParentComponent();
+                        if ($parentComponent) {
+                            $parentState = $parentComponent->getRawState();
+                            $featureTitle = $parentState['title'] ?? '';
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $featureTitle = '';
+                }
+
+                $form->fill([
+                    'project_name' => $projectName,
+                    'project_description' => $projectDescription,
+                    'feature_title' => $featureTitle,
+                    'suggested_description' => $state ?? '',
+                ]);
+            })
+            ->action(function (array $data, Forms\Components\Textarea $component) {
+                $component->state($data['suggested_description']);
+
+                Notification::make()
+                    ->title('Descrição da funcionalidade atualizada')
+                    ->success()
+                    ->send();
+            });
     }
 
     public static function table(Table $table): Table
