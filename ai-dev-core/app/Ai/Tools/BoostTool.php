@@ -114,7 +114,7 @@ class BoostTool implements Tool
         if ($process->failed()) {
             return json_encode([
                 'success' => false,
-                'error' => "Boost tool '{$tool}' failed: " . $process->error(),
+                'error' => "Boost tool '{$tool}' failed: " . $process->errorOutput(),
                 'output' => $process->output(),
             ]);
         }

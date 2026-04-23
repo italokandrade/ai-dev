@@ -4,17 +4,20 @@ namespace App\Ai\Agents;
 
 use App\Ai\Tools\BoostTool;
 use App\Ai\Tools\FileReadTool;
+use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+#[MaxSteps(10)]
 class SystemAssistantAgent implements Agent, HasTools
 {
     use Promptable;
 
     public function __construct(
-        private readonly ?string $projectPath = null
+        private readonly ?string $projectPath = null,
+        private readonly bool $useTools = true,
     ) {}
 
     public function instructions(): Stringable|string
@@ -50,12 +53,13 @@ class SystemAssistantAgent implements Agent, HasTools
 
     public function tools(): iterable
     {
-        if ($this->projectPath) {
-            return [
-                new BoostTool($this->projectPath),
-                new FileReadTool($this->projectPath),
-            ];
+        if (! $this->useTools || ! $this->projectPath) {
+            return [];
         }
-        return [];
+
+        return [
+            new BoostTool($this->projectPath),
+            new FileReadTool($this->projectPath),
+        ];
     }
 }
