@@ -32,6 +32,10 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Blue,
             ])
+            ->renderHook(
+                'panels::head.end',
+                fn (): string => '<style>.fi-in-repeatable .fi-section-header-heading{font-size:.875rem;font-weight:500;}</style>',
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
