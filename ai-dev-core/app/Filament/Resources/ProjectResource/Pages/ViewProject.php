@@ -46,6 +46,20 @@ class ViewProject extends ViewRecord
                 })
                 ->visible(fn () => empty($this->record->prd_payload) || !empty($this->record->prd_payload['_status'] ?? '')),
 
+            Actions\Action::make('viewProjectPrd')
+                ->label('Ver PRD Completo')
+                ->icon('heroicon-o-document-text')
+                ->color('info')
+                ->modalHeading(fn () => "PRD Master — {$this->record->name}")
+                ->modalContent(fn () => view('filament.project-prd-viewer', ['prd' => $this->record->prd_payload]))
+                ->modalWidth('5xl')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Fechar')
+                ->visible(fn () =>
+                    !empty($this->record->prd_payload)
+                    && empty($this->record->prd_payload['_status'] ?? '')
+                ),
+
             Actions\Action::make('approveProjectPrd')
                 ->label('✅ Aprovar PRD — Criar Módulos')
                 ->icon('heroicon-o-check-circle')
