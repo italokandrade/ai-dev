@@ -7,10 +7,21 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Subtask extends Model
 {
-    use HasUuids;
+    use HasUuids, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['task_id', 'title', 'status', 'assigned_agent', 'execution_order',
+                       'retry_count', 'commit_hash', 'started_at', 'completed_at'])
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Subtarefa {$eventName}");
+    }
 
     protected $fillable = [
         'task_id',

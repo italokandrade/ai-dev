@@ -4,13 +4,45 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
+use Spatie\Activitylog\Contracts\Activity;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class SystemSetting extends Model
 {
+    use LogsActivity;
+
     protected $primaryKey = 'key';
     protected $keyType = 'string';
     public $incrementing = false;
     protected $fillable = ['key', 'value'];
+
+    private const SENSITIVE_SUBSTRINGS = ['key', 'secret', 'password', 'token'];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['key', 'value'])
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Config. Sistema {$eventName}: {$this->key}");
+    }
+
+    public function tapActivity(Activity $activity, string $eventName): void
+    {
+        foreach (self::SENSITIVE_SUBSTRINGS as $substring) {
+            if (str_contains($this->key ?? '', $substring)) {
+                $props = $activity->properties->toArray();
+                if (isset($props['attributes']['value'])) {
+                    $props['attributes']['value'] = '••••••';
+                }
+                if (isset($props['old']['value'])) {
+                    $props['old']['value'] = '••••••';
+                }
+                $activity->properties = collect($props);
+                break;
+            }
+        }
+    }
 
     // Chaves Fixas (Identidade)
     public const SYSTEM_NAME = 'system_name';

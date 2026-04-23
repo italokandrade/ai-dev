@@ -150,10 +150,26 @@ O sistema adota **granularidade progressiva**:
 
 | Tabela | Propósito |
 |---|---|
-| `audit_logs` | Log global (read-only) de todas as ações (Insert/Update/Delete) no sistema inteiro |
-| `roles` & `permissions` | Perfis de usuários e permissões granulares por módulo (Controle de Acesso) |
-| `system_settings` | Configurações do sistema via UI, incluindo credenciais e modelos da IA de interação (evita hardcoding no `.env`) |
-| `users` | Cadastro central de usuários vinculados a perfis |
+| `activity_log` | Log de auditoria via Spatie Activitylog — captura created/updated/deleted de todos os modelos com `LogsActivity` |
+| `roles` & `permissions` | Perfis e permissões via Spatie Permission — gerenciados pelo FilamentShield |
+| `system_settings` | Configurações do sistema via UI (AI providers, modelos, flags); valores sensíveis mascarados no log |
+| `users` | Cadastro central de usuários vinculados a perfis Spatie |
+
+**Cobertura de auditoria (`LogsActivity`) — todos os modelos rastreados:**
+
+| Modelo | Campos logados | Observação |
+|---|---|---|
+| `Project` | todos | `logAll()` + `logOnlyDirty()` |
+| `ProjectModule` | todos | `logAll()` + `logOnlyDirty()` |
+| `ProjectFeature` | todos | `logAll()` + `logOnlyDirty()` |
+| `ProjectSpecification` | todos | `logAll()` + `logOnlyDirty()` |
+| `ProjectQuotation` | todos | `logAll()` + `logOnlyDirty()` |
+| `Task` | todos | `logAll()` + `logOnlyDirty()` |
+| `Subtask` | campos operacionais | exclui `result_diff`, `file_locks` (volumosos) |
+| `AgentConfig` | todos | `logAll()` + `logOnlyDirty()` |
+| `SocialAccount` | todos | exclui `last_posted_at` (ruído) |
+| `SystemSetting` | `key`, `value` | valores de chaves sensíveis (`key`, `secret`, `password`, `token`) mascarados como `••••••` |
+| `User` | `name`, `email` | exclui `password`, `remember_token` |
 
 **Tabelas planejadas (Fase 2/3 — pendentes):**
 
@@ -164,6 +180,25 @@ O sistema adota **granularidade progressiva**:
 | `webhooks_config` | Fase 2 | Configuração de webhooks de entrada (GitHub, CI/CD) |
 | `context_library` | Fase 3 | Padrões de código TALL obrigatórios (few-shot fixo) |
 | `problems_solutions` | Fase 3 | Base de conhecimento auto-alimentada (RAG vetorial via pgvector) |
+
+---
+
+## 🔐 Segurança e Controle de Acesso
+
+| Camada | Implementação | Detalhe |
+|---|---|---|
+| **Autenticação** | Laravel Sanctum + Filament Authenticate middleware | Apenas usuários autenticados acessam o painel |
+| **Autorização de Painel** | `User::canAccessPanel()` | Exige ao menos um role Spatie atribuído (`roles()->exists()`) |
+| **Roles & Permissions** | Spatie Permission + FilamentShield | Roles: `super_admin`, `developer`, `panel_user` |
+| **Resource Policies** | `UserPolicy`, `ProjectPolicy`, `TaskPolicy`, `ProjectModulePolicy`, `AgentConfigPolicy` | Granularidade por operação (view/create/update/delete) |
+| **Logs Imutáveis** | `ActivityLogResource` (read-only, apenas `super_admin`) | canCreate/canEdit/canDelete = false |
+| **Mascaramento de Secrets** | `SystemSetting::tapActivity()` | Valores de settings com `key`/`secret`/`password`/`token` no nome são mascarados nos logs |
+| **Isolamento de Agentes** | Ferramentas escopadas ao `local_path` do Projeto Alvo | Agentes nunca escrevem fora do projeto alvo |
+
+**Hierarquia de roles:**
+- `super_admin` — acesso total, pode gerenciar usuários, logs e configurações
+- `developer` — pode criar/editar projetos, módulos e tasks; não gerencia usuários
+- `panel_user` — acesso básico ao painel (somente leitura de projetos/tasks)
 
 ---
 

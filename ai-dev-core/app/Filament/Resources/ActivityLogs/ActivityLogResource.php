@@ -27,6 +27,11 @@ class ActivityLogResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Administração';
 
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->isAdmin() ?? false;
+    }
+
     public static function canCreate(): bool
     {
         return false;
@@ -51,6 +56,7 @@ class ActivityLogResource extends Resource
         return [
             'App\Models\Project'              => 'Projeto',
             'App\Models\ProjectModule'        => 'Módulo',
+            'App\Models\ProjectFeature'       => 'Funcionalidade',
             'App\Models\ProjectSpecification' => 'Especificação',
             'App\Models\ProjectQuotation'     => 'Orçamento',
             'App\Models\Task'                 => 'Tarefa',
