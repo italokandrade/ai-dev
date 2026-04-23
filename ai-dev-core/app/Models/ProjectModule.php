@@ -32,6 +32,7 @@ class ProjectModule extends Model
         'priority',
         'dependencies',
         'progress_percentage',
+        'prd_payload',
         'started_at',
         'completed_at',
     ];
@@ -43,6 +44,7 @@ class ProjectModule extends Model
             'priority' => \App\Enums\Priority::class,
             'dependencies' => 'array',
             'progress_percentage' => 'float',
+            'prd_payload' => 'json',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];

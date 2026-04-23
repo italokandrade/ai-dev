@@ -228,6 +228,196 @@ class ProjectResource extends Resource
                                     ->collapsible()
                                     ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
                             ]),
+
+                        \Filament\Schemas\Components\Tabs\Tab::make('PRD do Projeto')
+                            ->schema([
+                                Forms\Components\Hidden::make('prd_payload'),
+                                Forms\Components\Hidden::make('prd_approved_at'),
+
+                                Forms\Components\Placeholder::make('prd_status')
+                                    ->label('Status do PRD')
+                                    ->content(function (Get $get) {
+                                        $prd = $get('prd_payload');
+                                        $approvedAt = $get('prd_approved_at');
+
+                                        if (empty($prd) || (is_array($prd) && empty($prd['modules'] ?? []))) {
+                                            return 'Nenhum PRD gerado. Clique em "Gerar PRD do Projeto" para criar.';
+                                        }
+
+                                        if (!empty($approvedAt)) {
+                                            return '✅ PRD aprovado em ' . \Illuminate\Support\Carbon::parse($approvedAt)->format('d/m/Y H:i');
+                                        }
+
+                                        $moduleCount = count($prd['modules'] ?? []);
+                                        return "⏳ PRD gerado com {$moduleCount} módulo(s). Aguardando aprovação.";
+                                    })
+                                    ->columnSpanFull(),
+
+                                Forms\Components\Placeholder::make('prd_preview')
+                                    ->label('Resumo do PRD')
+                                    ->visible(function (Get $get) {
+                                        $prd = $get('prd_payload');
+                                        return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+                                    })
+                                    ->content(function (Get $get) {
+                                        $prd = $get('prd_payload');
+                                        if (empty($prd) || !is_array($prd)) return '';
+
+                                        $lines = [];
+                                        $lines[] = '**Título:** ' . ($prd['title'] ?? '—');
+                                        $lines[] = '**Objetivo:** ' . ($prd['objective'] ?? '—');
+                                        $lines[] = '**Complexidade:** ' . ($prd['estimated_complexity'] ?? '—');
+                                        $lines[] = '';
+                                        $lines[] = '**Módulos:**';
+
+                                        foreach ($prd['modules'] ?? [] as $mod) {
+                                            $lines[] = '- **' . ($mod['name'] ?? '—') . '** (' . ($mod['priority'] ?? '—') . ')';
+                                            foreach ($mod['submodules'] ?? [] as $sub) {
+                                                $lines[] = '  - ' . ($sub['name'] ?? '—');
+                                            }
+                                        }
+
+                                        return new \Illuminate\Support\HtmlString(implode('<br>', $lines));
+                                    })
+                                    ->columnSpanFull(),
+
+                                \Filament\Schemas\Components\Actions::make([
+                                    Action::make('generateProjectPrd')
+                                        ->label('🤖 Gerar PRD do Projeto')
+                                        ->icon('heroicon-o-sparkles')
+                                        ->color('primary')
+                                        ->visible(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            return empty($prd) || (is_array($prd) && empty($prd['modules'] ?? []));
+                                        })
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Gerar PRD do Projeto')
+                                        ->modalDescription('A IA irá analisar todos os dados do projeto (descrição, funcionalidades backend e frontend) e gerar um PRD Master completo. Isso pode levar alguns minutos.')
+                                        ->modalSubmitActionLabel('Gerar PRD')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (!$project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+                                                return;
+                                            }
+
+                                            \App\Jobs\GenerateProjectPrdJob::dispatch($project);
+
+                                            Notification::make()
+                                                ->title('Geração do PRD iniciada')
+                                                ->body('O PRD Master está sendo gerado em background. Recarregue a página em alguns instantes.')
+                                                ->success()
+                                                ->send();
+                                        }),
+
+                                    Action::make('approveProjectPrd')
+                                        ->label('✅ Aprovar PRD e Criar Módulos')
+                                        ->icon('heroicon-o-check-circle')
+                                        ->color('success')
+                                        ->visible(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            $approvedAt = $get('prd_approved_at');
+                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []) && empty($approvedAt);
+                                        })
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Aprovar PRD e Criar Módulos')
+                                        ->modalDescription('Ao aprovar, o sistema irá criar automaticamente os módulos e submódulos do projeto com base no PRD gerado. Esta ação não pode ser desfeita.')
+                                        ->modalSubmitActionLabel('Aprovar e Criar')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (!$project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+                                                return;
+                                            }
+
+                                            try {
+                                                $project->approvePrd();
+                                                $project->createModulesFromPrd();
+
+                                                Notification::make()
+                                                    ->title('PRD aprovado e módulos criados')
+                                                    ->body('Os módulos e submódulos foram criados com sucesso.')
+                                                    ->success()
+                                                    ->send();
+                                            } catch (\Exception $e) {
+                                                Notification::make()
+                                                    ->title('Erro ao aprovar PRD')
+                                                    ->body($e->getMessage())
+                                                    ->danger()
+                                                    ->send();
+                                            }
+                                        }),
+
+                                    Action::make('regenerateProjectPrd')
+                                        ->label('🔄 Regenerar PRD')
+                                        ->icon('heroicon-o-arrow-path')
+                                        ->color('warning')
+                                        ->visible(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+                                        })
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Regenerar PRD')
+                                        ->modalDescription('Um novo PRD será gerado, substituindo o atual. Os módulos já criados não serão afetados.')
+                                        ->modalSubmitActionLabel('Regenerar')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (!$project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+                                                return;
+                                            }
+
+                                            $project->update([
+                                                'prd_payload' => null,
+                                                'prd_approved_at' => null,
+                                            ]);
+
+                                            \App\Jobs\GenerateProjectPrdJob::dispatch($project);
+
+                                            Notification::make()
+                                                ->title('Regeneração do PRD iniciada')
+                                                ->body('Um novo PRD está sendo gerado em background. Recarregue a página em alguns instantes.')
+                                                ->success()
+                                                ->send();
+                                        }),
+
+                                    Action::make('viewFullPrd')
+                                        ->label('👁️ Ver PRD Completo')
+                                        ->icon('heroicon-o-document-text')
+                                        ->color('gray')
+                                        ->visible(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+                                        })
+                                        ->modalHeading('PRD Completo do Projeto')
+                                        ->modalSubmitAction(false)
+                                        ->modalCancelActionLabel('Fechar')
+                                        ->modalContent(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            return new \Illuminate\Support\HtmlString(
+                                                '<pre class="text-xs overflow-auto max-h-96 bg-gray-100 p-4 rounded">' .
+                                                json_encode($prd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) .
+                                                '</pre>'
+                                            );
+                                        }),
+                                ])
+                                    ->columnSpanFull(),
+                            ])
+                            ->visible(function ($livewire) {
+                                return $livewire->record !== null;
+                            }),
                     ])
                     ->columnSpanFull(),
             ]);
@@ -504,16 +694,16 @@ class ProjectResource extends Resource
                 Group::make([
                     Section::make('Descrição do Projeto')
                         ->schema([
-                            Infolists\Components\TextEntry::make('currentSpecification.approved_at')
-                                ->label('Status da Especificação')
+                            Infolists\Components\TextEntry::make('prd_status')
+                                ->label('Status do PRD')
                                 ->getStateUsing(fn (Project $record) => match (true) {
-                                    $record->currentSpecification === null => 'Nenhuma especificação gerada',
-                                    $record->currentSpecification->isApproved() => '✅ Aprovada em '.$record->currentSpecification->approved_at->format('d/m/Y H:i'),
-                                    default => '⏳ Aguardando aprovação (v'.$record->currentSpecification->version.')',
+                                    empty($record->prd_payload) => 'Nenhum PRD gerado',
+                                    $record->isPrdApproved() => '✅ PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
+                                    default => '⏳ Aguardando aprovação do PRD',
                                 })
                                 ->color(fn (Project $record) => match (true) {
-                                    $record->currentSpecification?->isApproved() => 'success',
-                                    $record->currentSpecification !== null => 'warning',
+                                    $record->isPrdApproved() => 'success',
+                                    !empty($record->prd_payload) => 'warning',
                                     default => 'gray',
                                 })
                                 ->columnSpanFull(),

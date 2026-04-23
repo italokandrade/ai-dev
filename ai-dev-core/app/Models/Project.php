@@ -30,6 +30,8 @@ class Project extends Model implements Conversational
         'github_repo',
         'local_path',
         'status',
+        'prd_payload',
+        'prd_approved_at',
     ];
 
     public function features(): HasMany
@@ -51,6 +53,8 @@ class Project extends Model implements Conversational
     {
         return [
             'status' => ProjectStatus::class,
+            'prd_payload' => 'json',
+            'prd_approved_at' => 'datetime',
         ];
     }
 
@@ -129,5 +133,103 @@ class Project extends Model implements Conversational
     public function isActive(): bool
     {
         return $this->status === ProjectStatus::Active;
+    }
+
+    public function isPrdApproved(): bool
+    {
+        return $this->prd_approved_at !== null;
+    }
+
+    public function approvePrd(): void
+    {
+        $this->update(['prd_approved_at' => now()]);
+    }
+
+    /**
+     * Cria módulos e submódulos a partir do PRD payload.
+     */
+    public function createModulesFromPrd(): void
+    {
+        $prd = $this->prd_payload;
+
+        if (empty($prd['modules'])) {
+            return;
+        }
+
+        $moduleIdMap = [];
+
+        foreach ($prd['modules'] as $moduleData) {
+            $priorityEnum = match ($moduleData['priority'] ?? 'normal') {
+                'high' => \App\Enums\Priority::High,
+                'medium' => \App\Enums\Priority::Medium,
+                default => \App\Enums\Priority::Normal,
+            };
+
+            $parentModule = ProjectModule::create([
+                'project_id' => $this->id,
+                'name' => $moduleData['name'],
+                'description' => $moduleData['description'] ?? '',
+                'status' => \App\Enums\ModuleStatus::Planned,
+                'priority' => $priorityEnum,
+                'dependencies' => null,
+            ]);
+
+            $moduleIdMap[$moduleData['name']] = $parentModule->id;
+
+            if (! empty($moduleData['submodules'])) {
+                foreach ($moduleData['submodules'] as $submoduleData) {
+                    $subPriorityEnum = match ($submoduleData['priority'] ?? 'normal') {
+                        'high' => \App\Enums\Priority::High,
+                        'medium' => \App\Enums\Priority::Medium,
+                        default => \App\Enums\Priority::Normal,
+                    };
+
+                    $subModule = ProjectModule::create([
+                        'project_id' => $this->id,
+                        'parent_id' => $parentModule->id,
+                        'name' => $submoduleData['name'],
+                        'description' => $submoduleData['description'] ?? '',
+                        'status' => \App\Enums\ModuleStatus::Planned,
+                        'priority' => $subPriorityEnum,
+                        'dependencies' => null,
+                    ]);
+
+                    $moduleIdMap[$submoduleData['name']] = $subModule->id;
+                }
+            }
+        }
+
+        // Resolver dependências
+        foreach ($prd['modules'] as $moduleData) {
+            if (! empty($moduleData['dependencies'])) {
+                $depIds = collect($moduleData['dependencies'])
+                    ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                if (! empty($depIds) && isset($moduleIdMap[$moduleData['name']])) {
+                    ProjectModule::where('id', $moduleIdMap[$moduleData['name']])
+                        ->update(['dependencies' => $depIds]);
+                }
+            }
+
+            if (! empty($moduleData['submodules'])) {
+                foreach ($moduleData['submodules'] as $submoduleData) {
+                    if (! empty($submoduleData['dependencies'])) {
+                        $depIds = collect($submoduleData['dependencies'])
+                            ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
+                            ->filter()
+                            ->values()
+                            ->all();
+
+                        if (! empty($depIds) && isset($moduleIdMap[$submoduleData['name']])) {
+                            ProjectModule::where('id', $moduleIdMap[$submoduleData['name']])
+                                ->update(['dependencies' => $depIds]);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
