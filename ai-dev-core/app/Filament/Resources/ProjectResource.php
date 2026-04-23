@@ -687,46 +687,94 @@ class ProjectResource extends Resource
                                 Infolists\Components\RepeatableEntry::make('rootModules')
                                     ->label('')
                                     ->schema([
+
+                                        // Linha do módulo raiz
                                         Grid::make(4)
                                             ->schema([
                                                 Infolists\Components\TextEntry::make('name')
-                                                    ->label('Módulo')
+                                                    ->hiddenLabel()
                                                     ->weight('bold')
                                                     ->icon('heroicon-o-folder')
                                                     ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
                                                     ->openUrlInNewTab(false),
                                                 Infolists\Components\TextEntry::make('status')
-                                                    ->label('Status')
+                                                    ->hiddenLabel()
                                                     ->badge(),
                                                 Infolists\Components\TextEntry::make('progress_percentage')
-                                                    ->label('Progresso')
+                                                    ->hiddenLabel()
                                                     ->formatStateUsing(fn ($state) => $state.'%'),
-                                                Infolists\Components\TextEntry::make('children_count')
-                                                    ->label('Submódulos')
-                                                    ->getStateUsing(fn (ProjectModule $record) => $record->children->count()),
+                                                Infolists\Components\TextEntry::make('summary')
+                                                    ->hiddenLabel()
+                                                    ->getStateUsing(fn (ProjectModule $record) => $record->children->isNotEmpty()
+                                                        ? $record->children->count().' submódulos'
+                                                        : $record->tasks->count().' tasks'),
                                             ]),
-                                        Infolists\Components\RepeatableEntry::make('children')
-                                            ->label('Submódulos')
+
+                                        // Nível 1: filhos diretos do módulo raiz
+                                        Section::make('Submódulos Nível 1')
+                                            ->collapsed()
                                             ->schema([
-                                                Grid::make(4)
+                                                Infolists\Components\RepeatableEntry::make('children')
+                                                    ->label('')
                                                     ->schema([
-                                                        Infolists\Components\TextEntry::make('name')
-                                                            ->label('Submódulo')
-                                                            ->icon('heroicon-o-document-text')
-                                                            ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
-                                                            ->openUrlInNewTab(false),
-                                                        Infolists\Components\TextEntry::make('status')
-                                                            ->label('Status')
-                                                            ->badge(),
-                                                        Infolists\Components\TextEntry::make('progress_percentage')
-                                                            ->label('Progresso')
-                                                            ->formatStateUsing(fn ($state) => $state.'%'),
-                                                        Infolists\Components\TextEntry::make('tasks_count')
-                                                            ->label('Tasks')
-                                                            ->getStateUsing(fn (ProjectModule $record) => $record->tasks->count()),
-                                                    ]),
+
+                                                        Grid::make(4)
+                                                            ->schema([
+                                                                Infolists\Components\TextEntry::make('name')
+                                                                    ->hiddenLabel()
+                                                                    ->weight('bold')
+                                                                    ->icon('heroicon-o-document-text')
+                                                                    ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
+                                                                    ->openUrlInNewTab(false),
+                                                                Infolists\Components\TextEntry::make('status')
+                                                                    ->hiddenLabel()
+                                                                    ->badge(),
+                                                                Infolists\Components\TextEntry::make('progress_percentage')
+                                                                    ->hiddenLabel()
+                                                                    ->formatStateUsing(fn ($state) => $state.'%'),
+                                                                Infolists\Components\TextEntry::make('summary_l1')
+                                                                    ->hiddenLabel()
+                                                                    ->getStateUsing(fn (ProjectModule $record) => $record->children->isNotEmpty()
+                                                                        ? $record->children->count().' submódulos'
+                                                                        : $record->tasks->count().' tasks'),
+                                                            ]),
+
+                                                        // Nível 2: filhos do submódulo nível 1
+                                                        Section::make('Submódulos Nível 2')
+                                                            ->collapsed()
+                                                            ->schema([
+                                                                Infolists\Components\RepeatableEntry::make('children')
+                                                                    ->label('')
+                                                                    ->schema([
+                                                                        Grid::make(4)
+                                                                            ->schema([
+                                                                                Infolists\Components\TextEntry::make('name')
+                                                                                    ->hiddenLabel()
+                                                                                    ->weight('bold')
+                                                                                    ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
+                                                                                    ->openUrlInNewTab(false),
+                                                                                Infolists\Components\TextEntry::make('status')
+                                                                                    ->hiddenLabel()
+                                                                                    ->badge(),
+                                                                                Infolists\Components\TextEntry::make('progress_percentage')
+                                                                                    ->hiddenLabel()
+                                                                                    ->formatStateUsing(fn ($state) => $state.'%'),
+                                                                                Infolists\Components\TextEntry::make('tasks_count_l2')
+                                                                                    ->hiddenLabel()
+                                                                                    ->getStateUsing(fn (ProjectModule $record) => $record->tasks->count().' tasks'),
+                                                                            ]),
+                                                                    ])
+                                                                    ->columnSpanFull(),
+                                                            ])
+                                                            ->visible(fn (ProjectModule $record) => $record->children->isNotEmpty())
+                                                            ->columnSpanFull(),
+
+                                                    ])
+                                                    ->columnSpanFull(),
                                             ])
+                                            ->visible(fn (ProjectModule $record) => $record->children->isNotEmpty())
                                             ->columnSpanFull(),
+
                                     ])
                                     ->columnSpanFull(),
                             ]),

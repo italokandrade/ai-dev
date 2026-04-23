@@ -72,7 +72,13 @@ class Project extends Model implements Conversational
     {
         return $this->hasMany(ProjectModule::class)
             ->whereNull('parent_id')
-            ->with(['children.tasks'])
+            ->with([
+                'tasks',
+                'children' => fn ($q) => $q->with([
+                    'tasks',
+                    'children.tasks',
+                ]),
+            ])
             ->orderBy('created_at');
     }
 
