@@ -90,6 +90,7 @@ class ProjectResource extends Resource
                             ->columns(1),
 
                         \Filament\Schemas\Components\Tabs\Tab::make('Descrição do Projeto')
+                            ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
                                 Forms\Components\Textarea::make('description')
                                     ->label('O que este projeto se propõe a fazer?')
@@ -178,6 +179,7 @@ class ProjectResource extends Resource
                             ]),
 
                         \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
+                            ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
                                 Forms\Components\Repeater::make('backendFeatures')
                                     ->relationship()
@@ -204,6 +206,7 @@ class ProjectResource extends Resource
                             ]),
 
                         \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
+                            ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
                                 Forms\Components\Repeater::make('frontendFeatures')
                                     ->relationship()
