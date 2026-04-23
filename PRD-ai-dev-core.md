@@ -26,10 +26,10 @@ O **ai-dev-core** é uma aplicação Laravel 13 cuja missão é orquestrar o cic
 | Filas/Cache | Redis 7 + Laravel Horizon v5 | ✅ |
 | AI SDK | `laravel/ai` v0.5 | ✅ |
 | Boost | `laravel/boost` v2.4 | ✅ |
-| **LLM PREMIUM (Planejamento)** | OpenRouter → `anthropic/claude-opus-4.7` | ✅ |
-| **LLM HIGH (Código/QA)** | OpenRouter → `anthropic/claude-sonnet-4-6` | ✅ |
-| **LLM FAST (Docs/Jobs)** | OpenRouter → `anthropic/claude-haiku-4-5` | ✅ |
-| **IA DO SISTEMA (Produção)** | Configurável via System Settings | ✅ |
+| **LLM PREMIUM (Planejamento)** | Configurável via System Settings (ex: OpenRouter/Anthropic, Kimi K2.6) | ✅ |
+| **LLM HIGH (Código/QA)** | Configurável via System Settings (ex: OpenRouter/Anthropic, Kimi K2.6) | ✅ |
+| **LLM FAST (Docs/Jobs)** | Configurável via System Settings (ex: OpenRouter/Anthropic, OpenAI GPT-4o) | ✅ |
+| **IA DO SISTEMA (Produção)** | Configurável via System Settings (ex: Kimi K2.6, Claude Haiku) | ✅ |
 | Testes | Pest v4 + PHPUnit v12 | ✅ |
 | Codebase path | `/var/www/html/projetos/ai-dev/ai-dev-core` | ✅ |
 
@@ -97,7 +97,7 @@ pending → blocked → pending
 
 #### B.1. OrchestratorAgent ⚠️
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Decompõe PRD em Sub-PRDs retornando array JSON.
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Decompõe PRD em Sub-PRDs retornando array JSON.
 
 **O que falta / precisa refatorar:**
 - ❌ Não implementa `HasStructuredOutput` — saída JSON é parseada manualmente com `json_decode()` e `preg_replace` para remover markdown fences. Risco de falha silenciosa de formato.
@@ -111,7 +111,7 @@ pending → blocked → pending
 
 #### B.2. QAAuditorAgent ⚠️
 
-**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider `openrouter`, modelo `claude-sonnet-4-6`. Retorna JSON de auditoria.
+**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_HIGH)`. Retorna JSON de auditoria.
 
 **O que falta / precisa refatorar:**
 - ❌ Não implementa `HasStructuredOutput` — parse manual de JSON com `preg_replace` e `json_decode`. O `QAAuditJob` auto-aprova em caso de falha de parse (comportamento perigoso).
@@ -126,7 +126,7 @@ pending → blocked → pending
 
 #### B.3. SpecialistAgent ✅⚠️
 
-**O que existe:** Implementa `Agent, HasTools`. Recebe `$projectPath` no constructor. Injeta as 6 tools escopadas ao `projectPath`. Provider `openrouter`, modelo `claude-sonnet-4-6`.
+**O que existe:** Implementa `Agent, HasTools`. Recebe `$projectPath` no constructor. Injeta as 6 tools escopadas ao `projectPath`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_HIGH)`.
 
 **Observação de design:** O PRD arquitetural listava classes separadas por especialidade (BackendSpecialist, FrontendSpecialist, etc.). O código implementou um `SpecialistAgent` genérico que recebe `assigned_agent` como string. Esta é uma decisão válida — agente genérico + specialization via prompt é mais simples e funcional. O PRD passa a documentar este design.
 
@@ -143,7 +143,7 @@ pending → blocked → pending
 
 #### B.4. RefineDescriptionAgent ✅
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Usa `SystemContextService` para contexto dinâmico da stack. Sem `HasTools`.
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Usa `SystemContextService` para contexto dinâmico da stack. Sem `HasTools`.
 
 **Status:** Alinhado com o projeto. Sem refatoração necessária no momento.
 
@@ -151,7 +151,7 @@ pending → blocked → pending
 
 #### B.5. SpecificationAgent ⚠️
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Retorna JSON de especificação técnica.
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Retorna JSON de especificação técnica.
 
 **O que falta:**
 - ❌ Não implementa `HasStructuredOutput` — parse manual no `GenerateProjectSpecificationJob`.
@@ -164,7 +164,7 @@ pending → blocked → pending
 
 #### B.6. QuotationAgent ⚠️
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider `openrouter`, modelo `claude-opus-4.7`. Retorna JSON de orçamento.
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Retorna JSON de orçamento.
 
 **O que falta:**
 - ❌ Não implementa `HasStructuredOutput` — parse manual no `GenerateProjectQuotationJob`.
@@ -177,7 +177,7 @@ pending → blocked → pending
 
 #### B.7. DocsAgent ✅
 
-**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider `openrouter`, modelo `claude-haiku-4-5-20251001`. Busca documentação via `search-docs`.
+**O que existe:** Implementa `Agent, HasTools` com `BoostTool`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_FAST)`. Busca documentação via `search-docs`.
 
 **Status:** Alinhado. Sem refatoração necessária no momento.
 
@@ -185,13 +185,13 @@ pending → blocked → pending
 
 #### B.8. SecuritySpecialist ❌
 
-Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Modelo `claude-sonnet-4-6`. Rodará Enlightn, Nikto, `composer audit`. Retornará JSON estruturado com vulnerabilidades encontradas.
+Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_HIGH)`. Rodará Enlightn, Nikto, `composer audit`. Retornará JSON estruturado com vulnerabilidades encontradas.
 
 ---
 
 #### B.9. PerformanceAnalyst ❌
 
-Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Modelo `claude-sonnet-4-6`. Rodará Pest 4 browser tests (`visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`). Retornará JSON estruturado com métricas de performance.
+Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutput, HasTools`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_HIGH)`. Rodará Pest 4 browser tests (`visit()`, `assertNoJavaScriptErrors()`, `assertNoConsoleLogs()`). Retornará JSON estruturado com métricas de performance.
 
 ---
 

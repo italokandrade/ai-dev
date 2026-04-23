@@ -1294,6 +1294,13 @@ O AI-Dev suporta **múltiplos providers de IA configuráveis dinamicamente** via
 
 O provider `kimi` requer um driver customizado (`App\Ai\Providers\KimiProvider`) porque o Prism v0.100+ usa o endpoint `/responses` (API nova OpenAI) que a Moonshot não suporta. O `KimiProvider` força o driver para `openrouter` no Prism, garantindo o uso do endpoint `/chat/completions` compatível, e injeta um `User-Agent` whitelistado via middleware HTTP global (`AppServiceProvider::boot()`). O model ID aceito é `kimi-k2.6` (ou `kimi-for-coding` — ambos mapeiam para o mesmo modelo no backend).
 
+**Compatibilidade com Kimi K2.6 (Thinking Mode + Tool Calls):**
+O modelo `kimi-k2.6` tem *thinking mode* habilitado por padrão. Quando usa *tool calls*, a API retorna o raciocínio no campo `reasoning_content` (não em `content`). O Prism descarta esse campo ao reenviar o histórico, o que causava erro 400 da API. A solução implementada é um **cache de `reasoning_content` no middleware HTTP** (`AppServiceProvider`):
+1. Ao receber uma resposta da API com `tool_calls` + `reasoning_content`, o middleware armazena o valor em cache indexado pelo `tool_call_id`.
+2. Na próxima requisição, injeta o `reasoning_content` correto em cada mensagem de `assistant` que contenha `tool_calls`.
+
+Além disso, o `SystemAssistantAgent` possui o atributo `#[MaxSteps(10)]` porque o Kimi K2.6 precisa de mais steps para explorar arquivos via `FileReadTool` e depois retornar a resposta final (`finish_reason = stop`). O padrão do Prism (`round(count(tools) * 1.5) = 3`) era insuficiente.
+
 *   **Ollama (Compressor Local):** Modelo ultraleve rodando permanentemente no servidor (`qwen2.5:0.5b` ou `llama3.2:1b` — ambos cabem em ~500MB de RAM). Sua ÚNICA função é comprimir contexto quando a janela atinge 60% e gerar embeddings — nunca é usado para gerar código ou planejar. Fase 3 do roadmap.
 
 *   **Gestão de Contexto:** O conversation ID ativo é armazenado na tabela `projects` (`anthropic_session_id`) e gerenciado pelo trait `RemembersConversations` do SDK. A cada nova chamada, `AgentClass::make()->continue($conversationId, $user)->prompt(...)` resgata automaticamente o histórico do PostgreSQL.

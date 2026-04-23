@@ -37,7 +37,7 @@ Este documento descreve o funcionamento do **Admin Panel do ai-dev-core** (Maste
 O ponto de partida para qualquer automação. Cada linha em `projects` representa um **Projeto Alvo** — uma aplicação Laravel externa, com repositório próprio, banco próprio e Boost MCP próprio, que o ai-dev-core vai desenvolver/refatorar/manter.
 
 - **Campos-chave:** `name`, `github_repo`, `local_path` (caminho absoluto no servidor, ex: `/var/www/html/projetos/portal`), `status`. O `local_path` é o **ponto de acoplamento**: todo `FileReadTool`/`FileWriteTool`/`ShellExecuteTool`/`GitOperationTool`/`BoostTool` usado pelos agentes recebe esse path e opera exclusivamente dentro dele.
-- **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core usa o provider `openrouter` com família Anthropic — `claude-opus-4.7` (planejamento), `claude-sonnet-4-6` (código/QA), `claude-haiku-4-5-20251001` (docs). Configurado em `config/ai.php` **do ai-dev-core**. Cada Projeto Alvo tem seu próprio `.env` e sua própria `OPENROUTER_API_KEY` para as IAs de interação que rodam dentro dele — independentes deste cadastro.
+- **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama. O provider/model de cada tier é independente — é possível usar Kimi K2.6 no chat do dashboard e Anthropic nos jobs de planejamento, por exemplo.
 - **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
 
 ## 2. Estrutura de Módulos (`Modules`)
@@ -92,7 +92,7 @@ O widget `DashboardChat` é um componente Livewire embarcado na página inicial 
 ### 8.1 Arquitetura
 - **Componente:** `App\Filament\Widgets\DashboardChat` + blade `filament.widgets.dashboard-chat`
 - **Agente:** Utiliza o `SystemAssistantAgent`, que possui instruções de sistema (system prompt) rígidas em português.
-- **Modelo:** Configurado via `SystemSetting` (chaves `ai_system_provider` e `ai_system_model`), com fallback para `anthropic/claude-haiku-4-5-20251001`.
+- **Modelo:** Configurado via `SystemSetting` (chaves `ai_system_provider` e `ai_system_model`). Não há mais fallback hardcoded — o sistema usa obrigatoriamente os valores configurados na UI de Configuração do Sistema.
 
 ### 8.2 Persistência da Conversa
 - O histórico é salvo na **sessão PHP** (não no banco), sobrevivendo à navegação entre páginas.
@@ -187,10 +187,10 @@ Página Filament (`SystemSettingsPage`) localizada em **Configuração > Sistema
 | Seção | Campos | Descrição |
 |---|---|---|
 | Identidade do Sistema | Nome, Logotipo, Favicon | Identidade visual do painel |
-| IA Nível PREMIUM | Provider, API Key, Modelo | Planejamento (ex: Claude Opus 4.7) |
-| IA Nível HIGH | Provider, API Key, Modelo | Desenvolvimento/QA (ex: Claude Sonnet 4.6) |
-| IA Nível FAST | Provider, API Key, Modelo | Documentação/Jobs (ex: Claude Haiku 4.5) |
-| IA do Sistema | Provider, API Key, Modelo | Chat do dashboard (produção/interação) |
+| IA Nível PREMIUM | Provider, API Key, Modelo | Planejamento (ex: Claude Opus 4.7, Kimi K2.6) |
+| IA Nível HIGH | Provider, API Key, Modelo | Desenvolvimento/QA (ex: Claude Sonnet 4.6, Kimi K2.6) |
+| IA Nível FAST | Provider, API Key, Modelo | Documentação/Jobs (ex: Claude Haiku 4.5, GPT-4o-mini) |
+| IA do Sistema | Provider, API Key, Modelo | Chat do dashboard (ex: Kimi K2.6, Claude Haiku) |
 | Controle Operacional | Habilitar Agentes, Modo Manutenção | Controles de operação |
 
 ### 10.2 Persistência
@@ -220,8 +220,11 @@ Se você encontrar erros ao operar o sistema, consulte esta seção de lições 
 
 ### 4. Configuração de IA e Chaves API
 - **Problema:** IA não responde ou erro de autenticação.
-- **Causa:** Chaves API não são versionadas por segurança.
-- **Solução:** Verifique o arquivo `.env` local. Provider único: `OPENROUTER_API_KEY`. Todos os agentes usam OpenRouter com família Anthropic.
+- **Causa:** Chave API incorreta, provider não configurado, ou `SystemSetting` vazio.
+- **Solução:** Acesse `Configuração > Sistema` no painel e preencha os campos de Provider, API Key e Modelo para cada um dos 4 tiers (Premium, High, Fast, System). O sistema usa `AiRuntimeConfigService` para resolver esses valores em runtime a partir da tabela `system_settings`.
+  - **Kimi (Moonshot AI):** Use `kimi` como provider e `kimi-k2.6` como model. A URL padrão é `https://api.kimi.com/coding/v1` (Kimi Code membership). O sistema gerencia automaticamente o `User-Agent` whitelistado e o `reasoning_content` do thinking mode.
+  - **OpenRouter/Anthropic:** Use `openrouter` como provider e `anthropic/claude-sonnet-4.6` como model.
+  - **OpenAI:** Use `openai` como provider e `gpt-4o` como model.
 
 ### 5. Configuração do MCP na IDE (Remoto via VPN)
 - **Problema:** Conectar a IDE local (Cursor, Windsurf, Claude Desktop) ao servidor MCP do projeto rodando em um servidor remoto.
