@@ -181,6 +181,37 @@ class ProjectResource extends Resource
                         \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
                             ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
+                                \Filament\Schemas\Components\Actions::make([
+                                    Action::make('generateBackendFeatures')
+                                        ->label('🤖 Gerar Funcionalidades Backend com IA')
+                                        ->icon('heroicon-o-sparkles')
+                                        ->color('primary')
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Gerar Funcionalidades Backend')
+                                        ->modalDescription('A IA irá analisar os dados do projeto e gerar funcionalidades backend automaticamente. As funcionalidades existentes não serão removidas.')
+                                        ->modalSubmitActionLabel('Gerar')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (!$project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+                                                return;
+                                            }
+
+                                            \App\Jobs\GenerateProjectFeaturesJob::dispatch($project, 'backend');
+
+                                            Notification::make()
+                                                ->title('Geração iniciada')
+                                                ->body('As funcionalidades backend estão sendo geradas em background. Recarregue a página em alguns instantes.')
+                                                ->success()
+                                                ->send();
+                                        }),
+                                ])
+                                    ->columnSpanFull(),
+
                                 Forms\Components\Repeater::make('backendFeatures')
                                     ->relationship()
                                     ->label('')
@@ -208,6 +239,37 @@ class ProjectResource extends Resource
                         \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
                             ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
+                                \Filament\Schemas\Components\Actions::make([
+                                    Action::make('generateFrontendFeatures')
+                                        ->label('🤖 Gerar Funcionalidades Frontend com IA')
+                                        ->icon('heroicon-o-sparkles')
+                                        ->color('primary')
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Gerar Funcionalidades Frontend')
+                                        ->modalDescription('A IA irá analisar os dados do projeto e gerar funcionalidades frontend automaticamente. As funcionalidades existentes não serão removidas.')
+                                        ->modalSubmitActionLabel('Gerar')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (!$project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+                                                return;
+                                            }
+
+                                            \App\Jobs\GenerateProjectFeaturesJob::dispatch($project, 'frontend');
+
+                                            Notification::make()
+                                                ->title('Geração iniciada')
+                                                ->body('As funcionalidades frontend estão sendo geradas em background. Recarregue a página em alguns instantes.')
+                                                ->success()
+                                                ->send();
+                                        }),
+                                ])
+                                    ->columnSpanFull(),
+
                                 Forms\Components\Repeater::make('frontendFeatures')
                                     ->relationship()
                                     ->label('')
