@@ -70,7 +70,7 @@ class ProjectModulesRelationManager extends RelationManager
                     ->url(fn () => ProjectModuleResource::getUrl('create', ['project_id' => $this->getOwnerRecord()->id]))
                     ->openUrlInNewTab(false),
             ])
-            ->actions([
+            ->recordActions([
                 Action::make('view')
                     ->label('Ver')
                     ->icon('heroicon-o-eye')

@@ -58,7 +58,7 @@ class TasksRelationManager extends RelationManager
                     ->options(TaskStatus::class)
                     ->multiple(),
             ])
-            ->actions([
+            ->recordActions([
                 Action::make('view')
                     ->label('Ver')
                     ->icon('heroicon-o-eye')
