@@ -103,58 +103,54 @@ class ProjectResource extends Resource
                                             ->icon('heroicon-o-sparkles')
                                             ->color('primary')
                                             ->modalHeading('Refinar Descrição com IA')
-                                            ->modalDescription('A IA irá reescrever sua descrição seguindo os padrões do Laravel 13 e TALL Stack.')
+                                            ->modalDescription('Sua descrição atual será pré-preenchida. Clique em "Refinar" para reescrevê-la com a IA, ou adicione instruções antes de refinar.')
                                             ->modalSubmitActionLabel('Usar esta sugestão')
                                             ->form([
                                                 Forms\Components\Textarea::make('suggested_description')
-                                                    ->label('Sugestão da IA')
-                                                    ->helperText('Você pode editar esta sugestão livremente.')
+                                                    ->label('Descrição atual')
+                                                    ->helperText('Você pode editar este texto livremente.')
                                                     ->rows(8)
                                                     ->required(),
 
                                                 Forms\Components\TextInput::make('refinement_query')
                                                     ->label('O que deseja adicionar ou modificar?')
                                                     ->placeholder('Ex: Adicione um módulo de chat, ou mude o tom para mais formal...')
-                                                    ->helperText('Digite suas alterações e clique no botão circular ao lado para atualizar.')
+                                                    ->helperText('Opcional. Deixe em branco para apenas reescrever, ou digite instruções e clique no botão ao lado.')
                                                     ->suffixAction(
                                                         Action::make('applyRefinement')
-                                                            ->icon('heroicon-o-arrow-path')
+                                                            ->label('Refinar')
+                                                            ->icon('heroicon-o-sparkles')
+                                                            ->color('primary')
                                                             ->action(function (Set $set, Get $get) {
                                                                 $query = $get('refinement_query');
                                                                 $currentText = $get('suggested_description');
 
-                                                                if (blank($query)) {
-                                                                    Notification::make()
-                                                                        ->title('Informe o que deseja alterar')
-                                                                        ->warning()
-                                                                        ->send();
-
-                                                                    return;
-                                                                }
-
                                                                 try {
                                                                     $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-                                                                    $refined = RefineDescriptionAgent::make()
-                                                                        ->prompt(
-                                                                            "Ajuste o seguinte texto de descrição de projeto:\n\n".
+                                                                    $promptText = blank($query)
+                                                                        ? "Reescreva a seguinte descrição de projeto, melhorando a clareza e coesão sem alterar a essência:\n\n".$currentText
+                                                                        : "Reescreva a seguinte descrição de projeto ajustando-a conforme solicitado:\n\n".
                                                                             $currentText.
-                                                                            "\n\nInstrução de modificação do usuário:\n".
-                                                                            $query,
+                                                                            "\n\nAjuste solicitado:\n".$query;
+
+                                                                    $refined = (new RefineDescriptionAgent(base_path()))
+                                                                        ->prompt(
+                                                                            $promptText,
                                                                             provider: $aiConfig['provider'],
                                                                             model: $aiConfig['model'],
                                                                         );
 
                                                                     $set('suggested_description', (string) $refined);
-                                                                    $set('refinement_query', ''); // Limpa o campo de entrada
+                                                                    $set('refinement_query', '');
 
                                                                     Notification::make()
-                                                                        ->title('Sugestão atualizada')
+                                                                        ->title('Descrição refinada com sucesso')
                                                                         ->success()
                                                                         ->send();
                                                                 } catch (\Exception $e) {
                                                                     Notification::make()
-                                                                        ->title('Erro ao processar alteração')
+                                                                        ->title('Erro ao refinar com IA')
                                                                         ->body($e->getMessage())
                                                                         ->danger()
                                                                         ->send();
@@ -165,30 +161,9 @@ class ProjectResource extends Resource
                                             ->mountUsing(function (Schema $form, Forms\Components\Textarea $component) {
                                                 $state = $component->getState();
 
-                                                if (blank($state)) {
-                                                    return;
-                                                }
-
-                                                try {
-                                                    $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
-
-                                                    $refined = RefineDescriptionAgent::make()
-                                                        ->prompt(
-                                                            "Refine a seguinte descrição de projeto: \n\n".$state,
-                                                            provider: $aiConfig['provider'],
-                                                            model: $aiConfig['model'],
-                                                        );
-
-                                                    $form->fill([
-                                                        'suggested_description' => (string) $refined,
-                                                    ]);
-                                                } catch (\Exception $e) {
-                                                    Notification::make()
-                                                        ->title('Erro ao refinar com IA')
-                                                        ->body($e->getMessage())
-                                                        ->danger()
-                                                        ->send();
-                                                }
+                                                $form->fill([
+                                                    'suggested_description' => $state ?? '',
+                                                ]);
                                             })
                                             ->action(function (array $data, Forms\Components\Textarea $component) {
                                                 $component->state($data['suggested_description']);

@@ -42,7 +42,7 @@ Este `README.md` é a única fonte de verdade do projeto. Ferramentas de IA deve
 | `OrchestratorAgent` | Decompõe PRD em Sub-PRDs atômicos | openrouter | `anthropic/claude-opus-4.7` |
 | `SpecificationAgent` | Transforma descrição informal em spec técnica JSON | openrouter | `anthropic/claude-opus-4.7` |
 | `QuotationAgent` | Estima horas e custos por área profissional | openrouter | `anthropic/claude-opus-4.7` |
-| `RefineDescriptionAgent` | Refina a descrição do projeto antes da especificação | openrouter | `anthropic/claude-opus-4.7` |
+| `RefineDescriptionAgent` | Refina a descrição do projeto antes da especificação | Dinâmico (via AiRuntimeConfigService::LEVEL_PREMIUM) | Dinâmico |
 | `SpecialistAgent` | Lê e escreve código — implementa o Sub-PRD | openrouter | `anthropic/claude-sonnet-4-6` |
 | `QAAuditorAgent` | Audita o código entregue e aprova ou rejeita | openrouter | `anthropic/claude-sonnet-4-6` |
 | `DocsAgent` | Busca documentação TALL Stack via BoostTool | openrouter | `anthropic/claude-haiku-4-5-20251001` |
