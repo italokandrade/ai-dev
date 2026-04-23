@@ -120,6 +120,18 @@ PROMPT;
         return $data;
     }
 
+    public function failed(\Throwable $exception): void
+    {
+        Log::error("GenerateProjectPrdJob: Job falhou por completo", [
+            'project' => $this->project->name,
+            'error' => $exception->getMessage(),
+        ]);
+
+        $this->project->update([
+            'prd_payload' => $this->fallbackPrd('', $exception->getMessage()),
+        ]);
+    }
+
     private function fallbackPrd(string $prompt, string $error): array
     {
         return [
