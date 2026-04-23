@@ -645,211 +645,185 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                Section::make('Dados do Projeto')
-                    ->schema([
-                        Grid::make(3)
+                \Filament\Schemas\Components\Tabs::make()
+                    ->tabs([
+
+                        \Filament\Schemas\Components\Tabs\Tab::make('Visão Geral')
+                            ->icon('heroicon-o-information-circle')
                             ->schema([
-                                Infolists\Components\TextEntry::make('name')
-                                    ->label('Nome do Projeto')
-                                    ->weight('bold'),
-
-                                Infolists\Components\TextEntry::make('status')
-                                    ->label('Status')
-                                    ->badge(),
-
-                                Infolists\Components\TextEntry::make('overall_progress')
-                                    ->label('Progresso Geral')
-                                    ->getStateUsing(fn (Project $record) => $record->overallProgress().'%'),
-                            ]),
-
-                        Grid::make(2)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('local_path')
-                                    ->label('Caminho Local no Servidor')
-                                    ->placeholder('Não configurado')
-                                    ->copyable(),
-
-                                Infolists\Components\TextEntry::make('github_repo')
-                                    ->label('Repositório GitHub')
-                                    ->placeholder('Não configurado')
-                                    ->url(fn ($state) => $state ? "https://github.com/{$state}" : null)
-                                    ->openUrlInNewTab(),
-                            ]),
-                    ]),
-
-                Section::make('Descrição do Projeto')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('prd_status')
-                            ->label('Status do PRD')
-                            ->getStateUsing(fn (Project $record) => match (true) {
-                                empty($record->prd_payload)  => 'Nenhum PRD gerado',
-                                $record->isPrdApproved()     => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
-                                default                      => 'Aguardando aprovação do PRD',
-                            })
-                            ->color(fn (Project $record) => $record->isPrdApproved() ? 'success' : 'gray')
-                            ->columnSpanFull(),
-
-                        Infolists\Components\TextEntry::make('description')
-                            ->label('O que este projeto se propõe a fazer?')
-                            ->placeholder('—')
-                            ->columnSpanFull(),
-
-                        \Filament\Schemas\Components\Tabs::make('Funcionalidades Principais')
-                            ->tabs([
-                                \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
-                                    ->schema([
-                                        Infolists\Components\RepeatableEntry::make('backendFeatures')
-                                            ->label('')
-                                            ->schema([
-                                                Infolists\Components\TextEntry::make('title')
-                                                    ->hiddenLabel()
-                                                    ->weight('bold')
-                                                    ->bulleted(),
-                                                Infolists\Components\TextEntry::make('description')
-                                                    ->hiddenLabel()
-                                                    ->color('gray')
-                                                    ->visible(fn ($state) => filled($state)),
-                                            ])
-                                            ->columns(1)
-                                            ->grid(1)
-                                            ->columnSpanFull(),
-                                    ]),
-                                \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
-                                    ->schema([
-                                        Infolists\Components\RepeatableEntry::make('frontendFeatures')
-                                            ->label('')
-                                            ->schema([
-                                                Infolists\Components\TextEntry::make('title')
-                                                    ->hiddenLabel()
-                                                    ->weight('bold')
-                                                    ->bulleted(),
-                                                Infolists\Components\TextEntry::make('description')
-                                                    ->hiddenLabel()
-                                                    ->color('gray')
-                                                    ->visible(fn ($state) => filled($state)),
-                                            ])
-                                            ->columns(1)
-                                            ->grid(1)
-                                            ->columnSpanFull(),
-                                    ]),
-                            ])
-                            ->columnSpanFull(),
-                    ])
-                    ->collapsible(),
-
-                Section::make('Estrutura do Projeto (Módulos e Submódulos)')
-                    ->description('Hierarquia: Módulos (agrupadores) → Submódulos (executáveis) → Tasks')
-                    ->schema([
-                        Infolists\Components\RepeatableEntry::make('rootModules')
-                            ->label('')
-                            ->schema([
-                                Grid::make(4)
+                                Grid::make(3)
                                     ->schema([
                                         Infolists\Components\TextEntry::make('name')
-                                            ->label('Módulo')
-                                            ->weight('bold')
-                                            ->icon('heroicon-o-folder')
-                                            ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
-                                            ->openUrlInNewTab(false),
-
+                                            ->label('Nome')
+                                            ->weight('bold'),
                                         Infolists\Components\TextEntry::make('status')
                                             ->label('Status')
                                             ->badge(),
-
-                                        Infolists\Components\TextEntry::make('progress_percentage')
+                                        Infolists\Components\TextEntry::make('overall_progress')
                                             ->label('Progresso')
-                                            ->formatStateUsing(fn ($state) => $state.'%'),
-
-                                        Infolists\Components\TextEntry::make('children_count')
-                                            ->label('Submódulos')
-                                            ->getStateUsing(fn (ProjectModule $record) => $record->children->count().' submódulos'),
+                                            ->getStateUsing(fn (Project $record) => $record->overallProgress().'%'),
                                     ]),
+                                Grid::make(2)
+                                    ->schema([
+                                        Infolists\Components\TextEntry::make('local_path')
+                                            ->label('Caminho Local')
+                                            ->placeholder('Não configurado')
+                                            ->copyable(),
+                                        Infolists\Components\TextEntry::make('github_repo')
+                                            ->label('GitHub')
+                                            ->placeholder('Não configurado')
+                                            ->url(fn ($state) => $state ? "https://github.com/{$state}" : null)
+                                            ->openUrlInNewTab(),
+                                    ]),
+                                Infolists\Components\TextEntry::make('description')
+                                    ->label('Descrição')
+                                    ->placeholder('—')
+                                    ->columnSpanFull(),
+                            ]),
 
-                                // Submódulos do módulo
-                                Infolists\Components\RepeatableEntry::make('children')
-                                    ->label('Submódulos')
+                        \Filament\Schemas\Components\Tabs\Tab::make('Módulos')
+                            ->icon('heroicon-o-squares-2x2')
+                            ->schema([
+                                Infolists\Components\RepeatableEntry::make('rootModules')
+                                    ->label('')
                                     ->schema([
                                         Grid::make(4)
                                             ->schema([
                                                 Infolists\Components\TextEntry::make('name')
-                                                    ->label('Submódulo')
-                                                    ->icon('heroicon-o-document-text')
+                                                    ->label('Módulo')
+                                                    ->weight('bold')
+                                                    ->icon('heroicon-o-folder')
                                                     ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
                                                     ->openUrlInNewTab(false),
-
                                                 Infolists\Components\TextEntry::make('status')
-                                                    ->label('')
+                                                    ->label('Status')
                                                     ->badge(),
-
                                                 Infolists\Components\TextEntry::make('progress_percentage')
-                                                    ->label('% Concluído')
+                                                    ->label('Progresso')
                                                     ->formatStateUsing(fn ($state) => $state.'%'),
+                                                Infolists\Components\TextEntry::make('children_count')
+                                                    ->label('Submódulos')
+                                                    ->getStateUsing(fn (ProjectModule $record) => $record->children->count()),
+                                            ]),
+                                        Infolists\Components\RepeatableEntry::make('children')
+                                            ->label('Submódulos')
+                                            ->schema([
+                                                Grid::make(4)
+                                                    ->schema([
+                                                        Infolists\Components\TextEntry::make('name')
+                                                            ->label('Submódulo')
+                                                            ->icon('heroicon-o-document-text')
+                                                            ->url(fn (ProjectModule $record) => ProjectModuleResource::getUrl('view', ['record' => $record]))
+                                                            ->openUrlInNewTab(false),
+                                                        Infolists\Components\TextEntry::make('status')
+                                                            ->label('Status')
+                                                            ->badge(),
+                                                        Infolists\Components\TextEntry::make('progress_percentage')
+                                                            ->label('Progresso')
+                                                            ->formatStateUsing(fn ($state) => $state.'%'),
+                                                        Infolists\Components\TextEntry::make('tasks_count')
+                                                            ->label('Tasks')
+                                                            ->getStateUsing(fn (ProjectModule $record) => $record->tasks->count()),
+                                                    ]),
+                                            ])
+                                            ->columnSpanFull(),
+                                    ])
+                                    ->columnSpanFull(),
+                            ]),
 
-                                                Infolists\Components\TextEntry::make('tasks_count')
-                                                    ->label('Tasks')
-                                                    ->getStateUsing(fn (ProjectModule $record) => $record->tasks->count().' tasks'),
+                        \Filament\Schemas\Components\Tabs\Tab::make('PRD')
+                            ->icon('heroicon-o-document-text')
+                            ->schema([
+                                Infolists\Components\TextEntry::make('prd_status')
+                                    ->label('Status')
+                                    ->getStateUsing(fn (Project $record) => match (true) {
+                                        empty($record->prd_payload)  => 'Nenhum PRD gerado',
+                                        $record->isPrdApproved()     => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
+                                        default                      => 'Aguardando aprovação',
+                                    })
+                                    ->color(fn (Project $record) => $record->isPrdApproved() ? 'success' : 'gray')
+                                    ->columnSpanFull(),
+
+                                \Filament\Schemas\Components\Tabs::make('Funcionalidades')
+                                    ->tabs([
+                                        \Filament\Schemas\Components\Tabs\Tab::make('Backend')
+                                            ->schema([
+                                                Infolists\Components\RepeatableEntry::make('backendFeatures')
+                                                    ->label('')
+                                                    ->schema([
+                                                        Infolists\Components\TextEntry::make('title')
+                                                            ->hiddenLabel()->weight('bold')->bulleted(),
+                                                        Infolists\Components\TextEntry::make('description')
+                                                            ->hiddenLabel()->color('gray')
+                                                            ->visible(fn ($state) => filled($state)),
+                                                    ])
+                                                    ->columns(1)->grid(1)->columnSpanFull(),
+                                            ]),
+                                        \Filament\Schemas\Components\Tabs\Tab::make('Frontend')
+                                            ->schema([
+                                                Infolists\Components\RepeatableEntry::make('frontendFeatures')
+                                                    ->label('')
+                                                    ->schema([
+                                                        Infolists\Components\TextEntry::make('title')
+                                                            ->hiddenLabel()->weight('bold')->bulleted(),
+                                                        Infolists\Components\TextEntry::make('description')
+                                                            ->hiddenLabel()->color('gray')
+                                                            ->visible(fn ($state) => filled($state)),
+                                                    ])
+                                                    ->columns(1)->grid(1)->columnSpanFull(),
                                             ]),
                                     ])
                                     ->columnSpanFull(),
-                            ])
-                            ->columnSpanFull(),
+                            ]),
+
+                        \Filament\Schemas\Components\Tabs\Tab::make('Orçamento')
+                            ->icon('heroicon-o-calculator')
+                            ->schema([
+                                Grid::make(2)
+                                    ->schema([
+                                        Infolists\Components\TextEntry::make('quotation_status')
+                                            ->label('Status')
+                                            ->getStateUsing(fn (Project $record) => $record->activeQuotation === null
+                                                ? 'Aguardando geração'
+                                                : (ProjectQuotation::STATUS_LABELS[$record->activeQuotation->status] ?? $record->activeQuotation->status))
+                                            ->badge()
+                                            ->color(fn (Project $record) => match ($record->activeQuotation?->status) {
+                                                'approved', 'completed' => 'success',
+                                                'rejected'              => 'danger',
+                                                default                 => 'gray',
+                                            }),
+                                        Infolists\Components\TextEntry::make('quotation_hours')
+                                            ->label('Horas Humanas')
+                                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                                ? number_format((float) $record->activeQuotation->total_human_hours, 0, ',', '.').'h'
+                                                : '—'),
+                                        Infolists\Components\TextEntry::make('quotation_human_cost')
+                                            ->label('Custo Humano')
+                                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                                ? 'R$ '.number_format((float) $record->activeQuotation->total_human_cost, 2, ',', '.')
+                                                : '—'),
+                                        Infolists\Components\TextEntry::make('quotation_ai_price')
+                                            ->label('Preço AI-Dev')
+                                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                                ? 'R$ '.number_format((float) $record->activeQuotation->ai_dev_price, 2, ',', '.')
+                                                : '—'),
+                                        Infolists\Components\TextEntry::make('quotation_savings')
+                                            ->label('Economia')
+                                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
+                                                ? number_format((float) $record->activeQuotation->savings_percentage, 1, ',', '.').'%'
+                                                : '—'),
+                                    ]),
+                            ]),
+
                     ])
-                    ->collapsible(),
-
-                Section::make('Orçamento (gerado pela IA)')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('activeQuotation.status')
-                            ->label('Status')
-                            ->getStateUsing(fn (Project $record) => match (true) {
-                                $record->activeQuotation === null => 'Aguardando geração',
-                                default => ProjectQuotation::STATUS_LABELS[$record->activeQuotation->status] ?? $record->activeQuotation->status,
-                            })
-                            ->badge()
-                            ->color(fn (Project $record) => match ($record->activeQuotation?->status) {
-                                'approved', 'completed' => 'success',
-                                'rejected'              => 'danger',
-                                default                 => 'gray',
-                            }),
-
-                        Infolists\Components\TextEntry::make('activeQuotation.total_human_hours')
-                            ->label('Horas Humanas')
-                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
-                                ? number_format((float) $record->activeQuotation->total_human_hours, 0, ',', '.').'h'
-                                : '—')
-                            ->placeholder('—'),
-
-                        Infolists\Components\TextEntry::make('activeQuotation.total_human_cost')
-                            ->label('Custo Humano')
-                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
-                                ? 'R$ '.number_format((float) $record->activeQuotation->total_human_cost, 2, ',', '.')
-                                : '—')
-                            ->placeholder('—'),
-
-                        Infolists\Components\TextEntry::make('activeQuotation.ai_dev_price')
-                            ->label('Preço AI-Dev')
-                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
-                                ? 'R$ '.number_format((float) $record->activeQuotation->ai_dev_price, 2, ',', '.')
-                                : '—')
-                            ->placeholder('—'),
-
-                        Infolists\Components\TextEntry::make('activeQuotation.savings_percentage')
-                            ->label('Economia')
-                            ->getStateUsing(fn (Project $record) => $record->activeQuotation
-                                ? number_format((float) $record->activeQuotation->savings_percentage, 1, ',', '.').'%'
-                                : '—')
-                            ->placeholder('—'),
-                    ])
-                    ->columns(2)
-                    ->collapsible(),
+                    ->columnSpanFull(),
             ])
             ->columns(1);
     }
 
     public static function getRelations(): array
     {
-        return [
-            ProjectResource\RelationManagers\ProjectModulesRelationManager::class,
-        ];
+        return [];
     }
 
     public static function getPages(): array

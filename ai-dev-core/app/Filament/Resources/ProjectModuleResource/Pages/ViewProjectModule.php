@@ -53,7 +53,7 @@ class ViewProjectModule extends ViewRecord
 
                                 Infolists\Components\TextEntry::make('parent.name')
                                     ->label('Módulo Pai')
-                                    ->placeholder('Módulo Raiz')
+                                    ->placeholder('Raiz')
                                     ->url(fn ($state) => $state ? ProjectModuleResource::getUrl('view', ['record' => $this->record->parent_id]) : null)
                                     ->openUrlInNewTab(false),
 
@@ -66,15 +66,11 @@ class ViewProjectModule extends ViewRecord
                                     ->badge(),
                             ]),
 
-                        Infolists\Components\TextEntry::make('description')
-                            ->label('Descrição')
-                            ->columnSpanFull(),
-
                         Grid::make(3)
                             ->schema([
                                 Infolists\Components\TextEntry::make('progress_percentage')
                                     ->label('Progresso')
-                                    ->formatStateUsing(fn ($state) => $state . '%'),
+                                    ->formatStateUsing(fn ($state) => $state.'%'),
 
                                 Infolists\Components\TextEntry::make('started_at')
                                     ->label('Iniciado em')
@@ -86,6 +82,10 @@ class ViewProjectModule extends ViewRecord
                                     ->dateTime('d/m/Y H:i')
                                     ->placeholder('—'),
                             ]),
+
+                        Infolists\Components\TextEntry::make('description')
+                            ->label('Descrição')
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Submódulos')
@@ -108,7 +108,7 @@ class ViewProjectModule extends ViewRecord
 
                                         Infolists\Components\TextEntry::make('progress_percentage')
                                             ->label('Progresso')
-                                            ->formatStateUsing(fn ($state) => $state . '%'),
+                                            ->formatStateUsing(fn ($state) => $state.'%'),
 
                                         Infolists\Components\TextEntry::make('tasks_count')
                                             ->label('Tasks'),
@@ -126,7 +126,7 @@ class ViewProjectModule extends ViewRecord
                                 Infolists\Components\TextEntry::make('prd_payload.title')
                                     ->label('Título')
                                     ->weight('bold')
-                                    ->placeholder('PRD ainda não gerado'),
+                                    ->placeholder('PRD não gerado'),
 
                                 Infolists\Components\TextEntry::make('prd_payload.estimated_complexity')
                                     ->label('Complexidade')
@@ -143,18 +143,6 @@ class ViewProjectModule extends ViewRecord
                             ->label('Objetivo')
                             ->columnSpanFull()
                             ->placeholder('—'),
-
-                        Infolists\Components\KeyValueEntry::make('prd_payload.business_rules')
-                            ->label('Regras de Negócio')
-                            ->columnSpanFull()
-                            ->placeholder('Nenhuma regra definida')
-                            ->visible(fn () => !empty($this->record->prd_payload['business_rules'])),
-
-                        Infolists\Components\KeyValueEntry::make('prd_payload.acceptance_criteria')
-                            ->label('Critérios de Aceitação')
-                            ->columnSpanFull()
-                            ->placeholder('Nenhum critério definido')
-                            ->visible(fn () => !empty($this->record->prd_payload['acceptance_criteria'])),
                     ])
                     ->collapsible()
                     ->visible(fn () => !empty($this->record->prd_payload)),
@@ -167,110 +155,76 @@ class ViewProjectModule extends ViewRecord
         return [
             Actions\EditAction::make(),
 
-            Actions\Action::make('transition_in_progress')
-                ->label('Iniciar')
-                ->icon('heroicon-o-play')
-                ->color('primary')
+            Actions\Action::make('transition')
+                ->label(fn () => $this->record->status === ModuleStatus::Planned ? 'Iniciar' : 'Marcar como Concluído')
+                ->icon(fn () => $this->record->status === ModuleStatus::Planned ? 'heroicon-o-play' : 'heroicon-o-check-circle')
+                ->color(fn () => $this->record->status === ModuleStatus::Planned ? 'primary' : 'success')
                 ->requiresConfirmation()
                 ->action(function () {
                     try {
-                        $this->record->transitionTo(ModuleStatus::InProgress);
-                        Notification::make()->title('Módulo iniciado')->success()->send();
-                        $this->refreshFormData(['status', 'started_at']);
-                    } catch (\InvalidArgumentException $e) {
-                        Notification::make()->title($e->getMessage())->danger()->send();
-                    }
-                })
-                ->visible(fn () => $this->record->status === ModuleStatus::Planned),
+                        $target = $this->record->status === ModuleStatus::Planned
+                            ? ModuleStatus::InProgress
+                            : ModuleStatus::Completed;
 
-            Actions\Action::make('transition_completed')
-                ->label('Marcar como Concluído')
-                ->icon('heroicon-o-check-circle')
-                ->color('success')
-                ->requiresConfirmation()
-                ->action(function () {
-                    try {
-                        $this->record->transitionTo(ModuleStatus::Completed);
-                        Notification::make()->title('Módulo concluído!')->success()->send();
-                        $this->refreshFormData(['status', 'completed_at']);
+                        $this->record->transitionTo($target);
+
+                        Notification::make()
+                            ->title($target === ModuleStatus::InProgress ? 'Módulo iniciado' : 'Módulo concluído!')
+                            ->success()
+                            ->send();
+
+                        $this->refreshFormData(['status', 'started_at', 'completed_at']);
                     } catch (\InvalidArgumentException $e) {
                         Notification::make()->title($e->getMessage())->danger()->send();
                     }
                 })
-                ->visible(fn () => in_array($this->record->status, [ModuleStatus::InProgress, ModuleStatus::Testing])),
+                ->visible(fn () => in_array($this->record->status, [ModuleStatus::Planned, ModuleStatus::InProgress, ModuleStatus::Testing])),
 
             Actions\Action::make('generateModulePrd')
-                ->label('Gerar PRD do Módulo')
+                ->label('Gerar PRD')
                 ->icon('heroicon-o-sparkles')
                 ->color('gray')
                 ->requiresConfirmation()
-                ->modalHeading('Gerar PRD Técnico do Módulo')
-                ->modalDescription('A IA irá gerar um PRD detalhado e técnico para este módulo. Isso pode levar alguns minutos.')
-                ->modalSubmitActionLabel('Gerar PRD')
+                ->modalHeading('Gerar PRD do Módulo')
+                ->modalDescription('A IA irá gerar um PRD técnico detalhado para este módulo.')
+                ->modalSubmitActionLabel('Gerar')
                 ->action(function () {
                     GenerateModulePrdJob::dispatch($this->record);
-
                     Notification::make()
-                        ->title('Geração do PRD iniciada')
-                        ->body('O PRD técnico do módulo está sendo gerado em background. Recarregue a página em alguns instantes.')
+                        ->title('PRD sendo gerado...')
+                        ->body('Recarregue a página em alguns instantes.')
                         ->success()
                         ->send();
                 })
                 ->visible(fn () => empty($this->record->prd_payload) || !empty($this->record->prd_payload['_status'] ?? '')),
 
-            Actions\Action::make('viewFullModulePrd')
-                ->label('Ver PRD Completo')
-                ->icon('heroicon-o-document-text')
-                ->color('gray')
-                ->modalHeading(fn () => "PRD Técnico — {$this->record->name}")
-                ->modalContent(fn () => view('filament.module-prd-viewer', ['prd' => $this->record->prd_payload]))
-                ->modalWidth('7xl')
-                ->visible(fn () => !empty($this->record->prd_payload) && empty($this->record->prd_payload['_status'] ?? '')),
-
-            Actions\Action::make('createSubmodules')
-                ->label('✅ Aprovar PRD — Criar Submódulos')
-                ->icon('heroicon-o-squares-plus')
+            Actions\Action::make('approveModulePrd')
+                ->label('Aprovar PRD')
+                ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalHeading('Aprovar PRD e Criar Submódulos')
-                ->modalDescription('O PRD indica que este módulo possui submódulos. Ao aprovar, os submódulos definidos serão criados. Cada submódulo precisará de seu próprio PRD para gerar tasks ou sub-submódulos.')
-                ->modalSubmitActionLabel('Aprovar e Criar Submódulos')
+                ->modalHeading('Aprovar PRD do Módulo')
+                ->modalDescription(fn () => ($this->record->prd_payload['needs_submodules'] ?? false)
+                    ? 'Os submódulos definidos no PRD serão criados automaticamente.'
+                    : 'As tasks de desenvolvimento serão criadas automaticamente a partir do PRD.')
+                ->modalSubmitActionLabel('Aprovar e Criar')
                 ->action(function () {
-                    GenerateModuleSubmodulesJob::dispatch($this->record);
-                    Notification::make()
-                        ->title('PRD aprovado — Submódulos sendo criados')
-                        ->body('Os submódulos estão sendo criados. Acesse cada um para gerar seu PRD individual.')
-                        ->success()
-                        ->send();
+                    if ($this->record->prd_payload['needs_submodules'] ?? false) {
+                        GenerateModuleSubmodulesJob::dispatch($this->record);
+                        Notification::make()->title('Submódulos sendo criados...')->success()->send();
+                    } else {
+                        GenerateModuleTasksJob::dispatch($this->record);
+                        Notification::make()->title('Tasks sendo criadas...')->success()->send();
+                    }
                 })
                 ->visible(fn () =>
                     !empty($this->record->prd_payload)
                     && empty($this->record->prd_payload['_status'] ?? '')
-                    && ($this->record->prd_payload['needs_submodules'] ?? false)
-                    && !$this->record->children()->exists()
-                ),
-
-            Actions\Action::make('createTasks')
-                ->label('✅ Aprovar PRD — Criar Tasks')
-                ->icon('heroicon-o-clipboard-document-check')
-                ->color('success')
-                ->requiresConfirmation()
-                ->modalHeading('Aprovar PRD e Criar Tasks')
-                ->modalDescription('O PRD indica que este módulo não possui submódulos. Ao aprovar, as tasks de desenvolvimento serão criadas automaticamente a partir dos componentes, APIs, migrations e critérios definidos no PRD.')
-                ->modalSubmitActionLabel('Aprovar e Criar Tasks')
-                ->action(function () {
-                    GenerateModuleTasksJob::dispatch($this->record);
-                    Notification::make()
-                        ->title('PRD aprovado — Tasks sendo criadas')
-                        ->body('As tasks estão sendo geradas em background. Recarregue a página em instantes.')
-                        ->success()
-                        ->send();
-                })
-                ->visible(fn () =>
-                    !empty($this->record->prd_payload)
-                    && empty($this->record->prd_payload['_status'] ?? '')
-                    && !($this->record->prd_payload['needs_submodules'] ?? false)
-                    && !$this->record->tasks()->exists()
+                    && (
+                        ($this->record->prd_payload['needs_submodules'] ?? false)
+                            ? !$this->record->children()->exists()
+                            : !$this->record->tasks()->exists()
+                    )
                 ),
         ];
     }

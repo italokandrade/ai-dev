@@ -31,9 +31,7 @@ class ProjectModuleResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Módulos';
 
-    protected static \UnitEnum|string|null $navigationGroup = 'Projetos';
-
-    protected static ?int $navigationSort = 2;
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Schema $schema): Schema
     {
