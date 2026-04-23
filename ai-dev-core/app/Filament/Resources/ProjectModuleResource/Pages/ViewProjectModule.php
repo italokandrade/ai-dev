@@ -17,10 +17,20 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Model;
 
 class ViewProjectModule extends ViewRecord
 {
     protected static string $resource = ProjectModuleResource::class;
+
+    protected function resolveRecord(int|string $key): Model
+    {
+        return ProjectModule::with([
+            'project',
+            'parent',
+            'children' => fn ($q) => $q->withCount('tasks'),
+        ])->findOrFail($key);
+    }
 
     public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
     {
@@ -106,8 +116,7 @@ class ViewProjectModule extends ViewRecord
                                             ->formatStateUsing(fn ($state) => $state . '%'),
 
                                         Infolists\Components\TextEntry::make('tasks_count')
-                                            ->label('Tasks')
-                                            ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count()),
+                                            ->label('Tasks'),
                                     ]),
                             ])
                             ->columnSpanFull(),

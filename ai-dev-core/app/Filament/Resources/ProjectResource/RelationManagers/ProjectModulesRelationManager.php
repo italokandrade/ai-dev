@@ -52,13 +52,13 @@ class ProjectModulesRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('children_count')
                     ->label('Submódulos')
-                    ->getStateUsing(fn (ProjectModule $record) => $record->children()->count())
+                    ->counts('children')
                     ->badge()
                     ->color('info'),
 
                 Tables\Columns\TextColumn::make('tasks_count')
                     ->label('Tasks')
-                    ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count())
+                    ->counts('tasks')
                     ->badge()
                     ->color('success'),
             ])

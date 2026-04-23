@@ -172,12 +172,12 @@ class ProjectModuleResource extends Resource
             ])
             ->actions([
                 Action::make('entrar')
-                    ->label(fn (ProjectModule $record) => (string) $record->children()->count())
+                    ->label(fn (ProjectModule $record) => (string) ($record->children_count ?? 0))
                     ->icon('heroicon-m-folder-open')
                     ->action(fn (ProjectModule $record, Pages\ListProjectModules $livewire) => $livewire->setActiveModule($record->id))
                     ->color('info')
                     ->link()
-                    ->visible(fn (ProjectModule $record) => $record->children()->exists()),
+                    ->visible(fn (ProjectModule $record) => ($record->children_count ?? 0) > 0),
                 \Filament\Actions\ViewAction::make()->label(''),
                 EditAction::make()->label(''),
                 Action::make('generatePrd')

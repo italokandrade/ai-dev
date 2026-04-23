@@ -613,12 +613,9 @@ class ProjectResource extends Resource
 
                 Tables\Columns\TextColumn::make('modules_count')
                     ->label('Módulos / Submódulos')
-                    ->getStateUsing(function (Project $record) {
-                        $parentCount = $record->modules()->whereNull('parent_id')->count();
-                        $subCount = $record->modules()->whereNotNull('parent_id')->count();
-
-                        return "{$parentCount} / {$subCount}";
-                    }),
+                    ->getStateUsing(fn (Project $record) =>
+                        ($record->root_modules_count ?? 0).' / '.($record->sub_modules_count ?? 0)
+                    ),
 
                 Tables\Columns\TextColumn::make('overall_progress')
                     ->label('Progresso')
@@ -782,7 +779,7 @@ class ProjectResource extends Resource
 
                                         Infolists\Components\TextEntry::make('children_count')
                                             ->label('Submódulos')
-                                            ->getStateUsing(fn (ProjectModule $record) => $record->children()->count().' submódulos'),
+                                            ->getStateUsing(fn (ProjectModule $record) => $record->children->count().' submódulos'),
                                     ]),
 
                                 // Submódulos do módulo
@@ -807,7 +804,7 @@ class ProjectResource extends Resource
 
                                                 Infolists\Components\TextEntry::make('tasks_count')
                                                     ->label('Tasks')
-                                                    ->getStateUsing(fn (ProjectModule $record) => $record->tasks()->count().' tasks'),
+                                                    ->getStateUsing(fn (ProjectModule $record) => $record->tasks->count().' tasks'),
                                             ]),
                                     ])
                                     ->columnSpanFull(),

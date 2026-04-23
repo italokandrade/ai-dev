@@ -50,7 +50,7 @@ class ListProjectModules extends ListRecords
             $query->whereNull('parent_id');
         }
 
-        return $query;
+        return $query->withCount('children');
     }
 
     public function getTitle(): string|\Illuminate\Contracts\Support\Htmlable

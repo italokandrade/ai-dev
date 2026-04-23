@@ -95,17 +95,19 @@ class Project extends Model implements Conversational
 
     public function overallProgress(): float
     {
-        $totalTasks = $this->tasks()->count();
-        if ($totalTasks > 0) {
-            $completedTasks = $this->tasks()->where('status', 'completed')->count();
-            return round(($completedTasks / $totalTasks) * 100, 1);
-        }
-        $totalModules = $this->modules()->count();
-        if ($totalModules > 0) {
-            $completedModules = $this->modules()->where('status', 'completed')->count();
-            return round(($completedModules / $totalModules) * 100, 1);
-        }
-        return 0;
+        return once(function () {
+            $totalTasks = $this->tasks()->count();
+            if ($totalTasks > 0) {
+                $completedTasks = $this->tasks()->where('status', 'completed')->count();
+                return round(($completedTasks / $totalTasks) * 100, 1);
+            }
+            $totalModules = $this->modules()->count();
+            if ($totalModules > 0) {
+                $completedModules = $this->modules()->where('status', 'completed')->count();
+                return round(($completedModules / $totalModules) * 100, 1);
+            }
+            return 0.0;
+        });
     }
 
     public function quotations(): HasMany
