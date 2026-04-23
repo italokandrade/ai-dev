@@ -685,7 +685,7 @@ class ProjectResource extends Resource
                             ->icon('heroicon-o-squares-2x2')
                             ->schema([
                                 Infolists\Components\RepeatableEntry::make('rootModules')
-                                    ->label('')
+                                    ->hiddenLabel()
                                     ->schema([
 
                                         // Linha do módulo raiz
@@ -715,7 +715,7 @@ class ProjectResource extends Resource
                                             ->collapsed()
                                             ->schema([
                                                 Infolists\Components\RepeatableEntry::make('children')
-                                                    ->label('')
+                                                    ->hiddenLabel()
                                                     ->schema([
 
                                                         Grid::make(4)
@@ -744,7 +744,7 @@ class ProjectResource extends Resource
                                                             ->collapsed()
                                                             ->schema([
                                                                 Infolists\Components\RepeatableEntry::make('children')
-                                                                    ->label('')
+                                                                    ->hiddenLabel()
                                                                     ->schema([
                                                                         Grid::make(4)
                                                                             ->schema([
