@@ -28,15 +28,43 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->viteTheme('resources/css/filament/admin/theme.css')
+            ->brandName('AI-Dev CORE')
             ->colors([
-                'primary'   => Color::Indigo,   // #6366f1 — alinhado com o gradient do chat
-                'secondary' => Color::Violet,   // #8b5cf6 — complement
-                'success'   => Color::Emerald,  // Status: ativo, concluído
-                'warning'   => Color::Amber,    // Status: pausado, atenção
-                'danger'    => Color::Rose,     // Status: erro, exclusão
-                'info'      => Color::Sky,      // Status: informativo
-                'gray'      => Color::Slate,    // Neutrals — tom frio coerente
+                'primary'   => Color::Blue,    // #3b82f6 — Aether primary
+                'secondary' => Color::Violet,  // #8b5cf6 — Aether secondary
+                'success'   => Color::Emerald,
+                'warning'   => Color::Amber,
+                'danger'    => Color::Rose,    // rose, not red — per design spec
+                'info'      => Color::Sky,
+                'gray'      => Color::Zinc,    // Zinc remapped to Aether palette via @theme
             ])
+            ->renderHook(
+                'panels::body.start',
+                fn (): string => <<<HTML
+                <div aria-hidden="true" class="aether-scene">
+                    <div class="aether-grid"></div>
+                    <div class="aether-orb aether-orb-blue"></div>
+                    <div class="aether-orb aether-orb-purple"></div>
+                </div>
+                HTML,
+            )
+            ->renderHook(
+                'panels::head.end',
+                fn (): string => <<<'HTML'
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+                <script>
+                    (function () {
+                        var el = document.documentElement;
+                        el.classList.remove('light');
+                        el.classList.add('dark');
+                        try { localStorage.setItem('filament_color_scheme', 'dark'); } catch (e) {}
+                    })();
+                </script>
+                HTML,
+            )
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

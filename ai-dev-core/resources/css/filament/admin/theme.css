@@ -1,0 +1,555 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   Tailwind v4 @theme — fonts + zinc palette remapped to
+   Aether Dark values (Filament uses gray → Color::Zinc,
+   so overriding zinc shades changes all dark:bg-gray-* utilities)
+   ============================================================ */
+@theme {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Remap zinc shades → Aether Dark palette */
+    --color-zinc-950: #050505;
+    --color-zinc-900: #0f1117;
+    --color-zinc-800: #161b27;
+    --color-zinc-700: #1e2435;
+    --color-zinc-600: #374151;
+    --color-zinc-500: #4b5563;
+    --color-zinc-400: #6b7280;
+    --color-zinc-300: #9ca3af;
+    --color-zinc-200: #d1d5db;
+    --color-zinc-100: #e5e7eb;
+    --color-zinc-50:  #f9fafb;
+}
+
+/* ============================================================
+   Aether Dark — design tokens
+   ============================================================ */
+:root {
+    /* Surfaces */
+    --bg-base:     #050505;
+    --bg-deep:     #0a0a14;
+    --bg-surface:  #0f1117;
+    --bg-elevated: #161b27;
+    --bg-overlay:  #1e2435;
+    --grid-line:   #1f2937;
+
+    /* Borders */
+    --border-subtle:  rgba(31, 41, 55, 0.80);
+    --border-default: rgba(55, 65, 81, 0.60);
+    --border-strong:  rgba(75, 85, 99, 0.80);
+
+    /* Text */
+    --text-primary:   #ffffff;
+    --text-secondary: #e5e7eb;
+    --text-muted:     #9ca3af;
+    --text-faint:     #4b5563;
+    --text-dim:       #374151;
+
+    /* Blue (primary) */
+    --blue-400: #60a5fa;
+    --blue-500: #3b82f6;
+    --blue-600: #2563eb;
+
+    --primary:             var(--blue-500);
+    --primary-hover:       var(--blue-600);
+    --primary-soft-bg:     rgba(59, 130, 246, 0.10);
+    --primary-soft-border: rgba(59, 130, 246, 0.20);
+    --primary-glow:        rgba(59, 130, 246, 0.40);
+    --primary-ring:        rgba(59, 130, 246, 0.15);
+
+    /* Violet / Purple (secondary) */
+    --violet-500: #8b5cf6;
+    --purple-600: #9333ea;
+
+    /* Gradient — the brand signature */
+    --gradient-primary: linear-gradient(to right, #3b82f6, #9333ea);
+    --gradient-glow:    0 0 24px rgba(99, 102, 241, 0.35);
+
+    /* Ambient orbs */
+    --glow-blue:   rgba(37, 99, 235, 0.10);
+    --glow-purple: rgba(147, 51, 234, 0.10);
+
+    /* Glow rings — elevation language */
+    --glow-ring-primary: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    --glow-primary-lg:   0 0 20px rgba(59, 130, 246, 0.40);
+    --glow-gradient-lg:  0 0 24px rgba(99, 102, 241, 0.35);
+
+    /* Radii */
+    --radius-sm:   4px;
+    --radius-md:   6px;
+    --radius-lg:   8px;
+    --radius-xl:   12px;
+    --radius-full: 9999px;
+
+    /* Motion */
+    --duration-fast: 120ms;
+    --duration-base: 200ms;
+    --ease-out:      cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* ============================================================
+   Force dark color scheme
+   ============================================================ */
+html {
+    color-scheme: dark;
+}
+
+/* ============================================================
+   Keyframes
+   ============================================================ */
+@keyframes aether-pulse {
+    0%, 100% { transform: scale(1);   opacity: 0.5; }
+    50%       { transform: scale(1.2); opacity: 0.8; }
+}
+
+@keyframes aether-blink {
+    50% { opacity: 0; }
+}
+
+@keyframes aether-loading {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+/* ============================================================
+   Aether background scene
+   Injected via renderHook('panels::body.start') as .aether-scene
+   ============================================================ */
+.aether-scene {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.aether-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at center, black, transparent 80%);
+    opacity: 0.20;
+}
+
+.aether-orb {
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    filter: blur(120px);
+    animation: aether-pulse 3s infinite ease-in-out;
+}
+
+.aether-orb-blue {
+    top: 25%;
+    left: 25%;
+    background: var(--glow-blue);
+}
+
+.aether-orb-purple {
+    bottom: 25%;
+    right: 25%;
+    background: var(--glow-purple);
+    animation-delay: 1.5s;
+}
+
+/* ============================================================
+   Base — body
+   ============================================================ */
+body {
+    background-color: var(--bg-base);
+    font-family: var(--font-sans);
+}
+
+/* All Filament layout elements sit above the background scene */
+.fi-layout,
+.fi-sidebar,
+.fi-main-ctn,
+.fi-topbar,
+.fi-main {
+    position: relative;
+    z-index: 10;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+.fi-sidebar {
+    background-color: var(--bg-surface) !important;
+    border-right: 1px solid var(--border-subtle) !important;
+}
+
+/* Gradient divider under the brand logo */
+.fi-sidebar-header {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+}
+
+.fi-sidebar-header::after {
+    content: '';
+    display: block;
+    height: 1px;
+    margin: 0.75rem 1rem 0;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+}
+
+/* Navigation group headers — JetBrains Mono uppercase */
+.fi-sidebar-group-label {
+    font-family: var(--font-mono) !important;
+    font-size: 10px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: var(--text-faint) !important;
+}
+
+/* Active sidebar item */
+.fi-sidebar-item-active > .fi-sidebar-item-button,
+.fi-sidebar-item [aria-current="page"],
+.fi-sidebar-item.fi-active .fi-sidebar-item-button {
+    background-color: var(--primary-soft-bg) !important;
+    border-left: 2px solid var(--primary) !important;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0 !important;
+    color: var(--text-primary) !important;
+}
+
+/* Nav item hover */
+.fi-sidebar-item-button:hover {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* User avatar / footer area */
+.fi-sidebar-footer {
+    border-top: none !important;
+    position: relative;
+}
+
+.fi-sidebar-footer::before {
+    content: '';
+    display: block;
+    height: 1px;
+    margin-bottom: 0.75rem;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+}
+
+/* ============================================================
+   Topbar
+   ============================================================ */
+.fi-topbar,
+.fi-topbar-nav {
+    background-color: rgba(5, 5, 5, 0.85) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* ============================================================
+   Main content area
+   ============================================================ */
+.fi-main {
+    background-color: transparent !important;
+}
+
+/* ============================================================
+   Sections / Cards
+   ============================================================ */
+.fi-section {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: none !important;
+}
+
+.fi-section-header {
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.fi-section-header-heading {
+    font-family: var(--font-sans) !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+}
+
+/* ============================================================
+   Form inputs
+   ============================================================ */
+.fi-input-wrp input,
+.fi-input-wrp textarea,
+.fi-input-wrp select,
+.fi-select-input,
+.fi-textarea {
+    background-color: var(--bg-elevated) !important;
+    border-color: var(--border-subtle) !important;
+    border-radius: var(--radius-lg) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-sans) !important;
+}
+
+.fi-input-wrp input:focus,
+.fi-input-wrp textarea:focus,
+.fi-input-wrp select:focus {
+    border-color: var(--primary) !important;
+    box-shadow: var(--glow-ring-primary) !important;
+    outline: none !important;
+}
+
+.fi-fo-field-wrp-label label {
+    color: var(--text-secondary) !important;
+    font-family: var(--font-sans) !important;
+    font-size: 0.875rem !important;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.fi-btn {
+    border-radius: var(--radius-lg) !important;
+    transition: box-shadow var(--duration-base) var(--ease-out) !important;
+}
+
+.fi-btn-color-primary:hover {
+    box-shadow: var(--glow-primary-lg) !important;
+}
+
+.fi-btn-color-gray {
+    background-color: var(--bg-elevated) !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-secondary) !important;
+}
+
+.fi-btn-color-gray:hover {
+    background-color: var(--bg-overlay) !important;
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+.fi-ta-ctn {
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-xl) !important;
+    overflow: hidden;
+}
+
+.fi-ta-header-cell {
+    background-color: var(--bg-surface) !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 10px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.10em !important;
+    text-transform: uppercase !important;
+    color: var(--text-faint) !important;
+}
+
+.fi-ta-row {
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.fi-ta-row:last-child {
+    border-bottom: none !important;
+}
+
+.fi-ta-cell {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-secondary) !important;
+}
+
+.fi-ta-row:hover .fi-ta-cell {
+    background-color: var(--bg-overlay) !important;
+}
+
+/* ============================================================
+   Modals
+   ============================================================ */
+.fi-modal-window {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.70) !important;
+}
+
+.fi-modal-header {
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.fi-modal-footer {
+    border-top: 1px solid var(--border-subtle) !important;
+}
+
+/* ============================================================
+   Dropdowns
+   ============================================================ */
+.fi-dropdown-panel {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.55) !important;
+}
+
+.fi-dropdown-item:hover {
+    background-color: var(--bg-overlay) !important;
+}
+
+/* ============================================================
+   Badges / Pills
+   ============================================================ */
+.fi-badge {
+    border-radius: var(--radius-full) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 10px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+}
+
+/* ============================================================
+   Stats overview widgets (Dashboard)
+   ============================================================ */
+.fi-wi-stats-overview-stat {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-xl) !important;
+}
+
+.fi-wi-stats-overview-stat-value {
+    font-family: var(--font-sans) !important;
+    font-size: 2.25rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    color: var(--text-primary) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.fi-wi-stats-overview-stat-label {
+    font-family: var(--font-mono) !important;
+    font-size: 10px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: var(--text-faint) !important;
+}
+
+.fi-wi-stats-overview-stat-description {
+    color: var(--text-muted) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.75rem !important;
+}
+
+/* Stat card icon tile */
+.fi-wi-stats-overview-stat-icon {
+    width: 40px;
+    height: 40px;
+    background-color: var(--primary-soft-bg) !important;
+    border: 1px solid var(--primary-soft-border) !important;
+    border-radius: 0.5rem !important;
+    color: var(--blue-400) !important;
+}
+
+/* ============================================================
+   Brand / Logo
+   ============================================================ */
+.fi-logo {
+    font-family: var(--font-sans) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    font-size: 1.125rem !important;
+    color: var(--text-primary) !important;
+}
+
+/* ============================================================
+   Page header
+   ============================================================ */
+.fi-page-header-heading {
+    font-family: var(--font-sans) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    color: var(--text-primary) !important;
+}
+
+/* ============================================================
+   Notifications / Alerts
+   ============================================================ */
+.fi-no-notification {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: var(--radius-xl) !important;
+}
+
+/* ============================================================
+   Aether utility classes
+   Reusable in Blade components
+   ============================================================ */
+
+/* Gradient divider line */
+.aether-divider {
+    height: 1px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+}
+
+/* Gradient text accent */
+.aether-gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Mono status label */
+.aether-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+/* Blinking cursor for typing effect */
+.aether-typing::after {
+    content: '|';
+    animation: aether-blink 1s infinite;
+}
+
+/* Agent status loading bar */
+.aether-status-bar {
+    position: relative;
+    width: 192px;
+    height: 4px;
+    background-color: var(--bg-overlay);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.aether-status-bar::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 50%;
+    background-color: var(--primary);
+    border-radius: var(--radius-full);
+    animation: aether-loading 2s infinite;
+}
+
+/* Live status dot */
+.aether-dot-live {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #10b981;
+    animation: aether-pulse 2s infinite ease-in-out;
+}
+
+/* Provider color dots */
+.aether-dot-claude  { background-color: #cc785c; }
+.aether-dot-openai  { background-color: #10a37f; }
+.aether-dot-gemini  { background-color: #4285f4; }
+.aether-dot-ollama  { background-color: #a3a3a3; }
