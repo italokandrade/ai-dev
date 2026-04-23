@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../../../../vendor/filament/filament/resources/css/index.css';
 
 /* ============================================================
    Tailwind v4 @theme — fonts + zinc palette remapped to
