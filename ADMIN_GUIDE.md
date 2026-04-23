@@ -3,24 +3,30 @@
 ---
 
 > [!NOTE]
-> **📝 RASCUNHO — Ajustes de Menu (2025-04-22)**
+> **Versão 2.0 — Granularidade Progressiva (2026-04-23)**
 >
-> Alterações realizadas na estrutura de navegação do painel:
+> Alterações realizadas na estrutura de navegação e fluxo do painel:
 >
 > 1. **Bloco de desenvolvimento autônomo (menu raiz)** — ordem definitiva:
 >    - `Projetos` (sort=1) — ponto de entrada de tudo
->    - `Módulos` (sort=2) — submódulos e hierarquia de projeto
->    - `Tarefas` (sort=3) — renomeado de "Tasks" para PT-BR completo
+>    - `Módulos` (sort=2) — hierarquia progressiva: módulos → submódulos (se necessário)
+>    - `Tarefas` (sort=3) — unidades de trabalho em nós folha
 >
-> 2. **`Especificações` removida do menu lateral** (`$shouldRegisterNavigation = false`).
->    - Justificativa: o recurso de Especificações é parte interna do fluxo de um Projeto e deve ser acessado pela aba/view do próprio Projeto, não diretamente pelo menu.
->    - O resource ainda existe, a URL direta ainda funciona, apenas o link do sidebar foi suprimido.
+> 2. **Fluxo de Granularidade Progressiva (ativo):**
+>    - Projeto → Gerar PRD do Projeto → Aprovar → cria **apenas módulos raiz**
+>    - Módulo → Gerar PRD do Módulo → decide `needs_submodules`
+>    - Se `needs_submodules = true` → **"✅ Aprovar PRD — Criar Submódulos"** → repetir processo
+>    - Se `needs_submodules = false` → **"✅ Aprovar PRD — Criar Tasks"** → pipeline de execução
 >
-> 3. **Pendências a revisar** (próximas sessões):
->    - [ ] Avaliar se `Especificações` deve ser integrada como relação visível na view do Projeto (aba)
->    - [ ] Revisar o bloco "Configuração" e reorganizar os itens Agentes, Orçamentos, Redes Sociais
->    - [ ] Rever se o módulo `Orçamentos` deve ser acessível pelo menu ou apenas via Projeto
->    - [ ] Documentar fluxo completo de desenvolvimento autônomo (Projeto → Módulo → Tarefa → Agente → Task execution)
+> 3. **`Especificações` removida do menu lateral** (`$shouldRegisterNavigation = false`).
+>    - O fluxo ativo usa `projects.prd_payload` + `project_modules.prd_payload` em vez de `project_specifications`.
+>    - O resource `ProjectSpecificationResource` ainda existe para retrocompatibilidade.
+>
+> 4. **Navegação e Layout:**
+>    - Breadcrumbs hierárquicos em todas as páginas View (Projeto, Módulo, Task)
+>    - Links cruzados entre recursos (clicar no projeto na tabela de módulos, etc.)
+>    - Aba "Módulos do Projeto" no ViewProject com tabela linkável
+>    - Layout 100% largura — sections empilhadas verticalmente
 
 ---
 
@@ -36,25 +42,56 @@ Este documento descreve o funcionamento do **Admin Panel do ai-dev-core** (Maste
 ## 1. Gestão de Projetos (`Projects`)
 O ponto de partida para qualquer automação. Cada linha em `projects` representa um **Projeto Alvo** — uma aplicação Laravel externa, com repositório próprio, banco próprio e Boost MCP próprio, que o ai-dev-core vai desenvolver/refatorar/manter.
 
-- **Campos-chave:** `name`, `github_repo`, `local_path` (caminho absoluto no servidor, ex: `/var/www/html/projetos/portal`), `status`. O `local_path` é o **ponto de acoplamento**: todo `FileReadTool`/`FileWriteTool`/`ShellExecuteTool`/`GitOperationTool`/`BoostTool` usado pelos agentes recebe esse path e opera exclusivamente dentro dele.
-- **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama. O provider/model de cada tier é independente — é possível usar Kimi K2.6 no chat do dashboard e Anthropic nos jobs de planejamento, por exemplo.
+### 1.1 Fluxo de Criação e PRD Master
+
+O sistema adota **granularidade progressiva** — o PRD do projeto gera apenas os módulos de alto nível. Submódulos e tasks são decididos nos níveis subsequentes.
+
+**Passo a passo:**
+
+1. **Criar Projeto** — preencha `name`, `github_repo`, `local_path`, `db_password`
+2. **Descrever o Projeto** — na aba "Descrição do Projeto", escreva livremente o que o sistema deve fazer. Use "Refinar com IA" se quiser melhorar o texto.
+3. **Gerar PRD do Projeto** — na página de visualização do projeto, clique no botão **"Gerar PRD do Projeto"** (header da página). O `ProjectPrdAgent` analisa a descrição + funcionalidades e gera o PRD Master com os módulos de alto nível. O PRD também pode ser gerado via a aba "PRD do Projeto" no formulário de edição. **Isso pode levar alguns minutos.**
+4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"✅ Aprovar PRD — Criar Módulos"** (header da página de visualização). O sistema cria automaticamente os módulos raiz no banco e redireciona para a lista de módulos.
+5. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
+
+- **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama.
 - **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
 
 ## 2. Estrutura de Módulos (`Modules`)
-Os módulos permitem decompor um projeto complexo em partes menores e gerenciáveis.
+Os módulos permitem decompor um projeto complexo em partes menores e gerenciáveis. O sistema adota **granularidade progressiva**: cada módulo decide se precisa de submódulos.
 
 ### 2.1 Hierarquia (Módulos e Submódulos)
 - O sistema suporta **hierarquia infinita**. Um módulo pode ter um "Módulo Pai".
 - **Exemplo:** `Mensageria` > `WhatsApp` > `Caixa de Entrada`.
-- Isso permite que os agentes recebam contextos extremamente refinados, focando apenas na "folha" da árvore onde a tarefa deve ser executada.
+- **Regra de ouro:** Tasks são criadas **apenas nos nós folha** (módulos/submódulos sem filhos).
 
-### 2.2 Dependências Estritamente Consolidadas
+### 2.2 Fluxo de Trabalho por Módulo (Granularidade Progressiva)
+
+Após aprovar o PRD do projeto, cada módulo raiz precisa passar pelo seguinte:
+
+1. **Entrar no Módulo** — clique no nome do módulo para abrir a página de visualização
+2. **Gerar PRD do Módulo** — clique em "Gerar PRD do Módulo". O `ModulePrdAgent` gera um PRD técnico detalhado (schema, APIs, workflows, critérios). **Isso pode levar vários minutos.**
+3. **Decisão automática:**
+   - Se o PRD indicar `needs_submodules = true` → aparece o botão **"✅ Aprovar PRD — Criar Submódulos"**
+   - Se o PRD indicar `needs_submodules = false` → aparece o botão **"✅ Aprovar PRD — Criar Tasks"**
+4. **Se criar submódulos:** cada submódulo segue o mesmo processo (entra → gera PRD → decide)
+5. **Se criar tasks:** o sistema gera tasks automaticamente a partir do PRD técnico (componentes, APIs, migrations, testes)
+
+### 2.3 Dependências Estritamente Consolidadas
 - Um módulo pode depender de outros módulos do mesmo projeto.
 - **Regra de Seleção:** O sistema só permite selecionar como dependência módulos que já estejam com o status **Concluído** (`Completed`).
 - Isso garante que a base de código onde o novo módulo será construído está estável e testada.
 
+### 2.4 Navegação entre Módulos
+- **Breadcrumb no topo:** toda página de módulo mostra a trilha completa: `📁 Projeto / Módulo Pai / ... / Módulo Atual`
+- **Links clicáveis:** o nome do Projeto e do Módulo Pai são links que levam às respectivas páginas
+- **Título dinâmico na lista:** quando navegando dentro de um módulo, o título da página muda para "Submódulos de: {nome do módulo}" para deixar claro o contexto
+- **Aba "Tasks do Módulo":** mostra as tasks do módulo atual com link direto para cada task
+
 ## 3. Gestão de Tarefas (`Tasks`)
-As tarefas são as unidades de trabalho executadas pelos **agentes de desenvolvimento** do ai-dev-core. Cada task referencia um `project_id` — e todo o trabalho concreto (leitura de código, escrita, testes, commits) acontece no `local_path` daquele Projeto Alvo, **nunca** no filesystem do ai-dev-core.
+As tarefas são as unidades de trabalho executadas pelos **agentes de desenvolvimento** do ai-dev-core. Cada task referencia um `project_id` e um `module_id` — e todo o trabalho concreto (leitura de código, escrita, testes, commits) acontece no `local_path` daquele Projeto Alvo, **nunca** no filesystem do ai-dev-core.
+
+> **Regra:** Tasks são criadas **apenas em módulos folha** (módulos/submódulos que não têm filhos). O botão **"✅ Aprovar PRD — Criar Tasks"** só aparece quando o PRD do módulo define `needs_submodules = false`.
 
 ### 3.1 Classificação de Prioridade
 A prioridade não é mais um número confuso, mas sim uma classificação semântica:
@@ -64,8 +101,14 @@ A prioridade não é mais um número confuso, mas sim uma classificação semân
 - **Ordenação:** Internamente, o sistema processa primeiro as de maior prioridade seguindo a data de criação (mais antigas primeiro).
 
 ### 3.2 Vinculação e Fluxo
-- Uma task pode ser avulsa ou vinculada a um **Módulo**.
+- Uma task pode ser avulsa (hotfix, Sentinela) ou vinculada a um **Módulo Folha**.
 - O fluxo segue uma máquina de estados rigorosa: `pending` → `in_progress` → `qa_audit` → `testing` → `completed` / `rejected` → `rollback` → `failed`.
+
+### 3.3 Navegação da Task
+- **Breadcrumb no topo:** `📁 Projeto / 🔲 Módulo / 📋 Tarefa Atual`
+- **Links clicáveis:** o nome do Projeto e do Módulo levam às respectivas páginas
+- **Aba "Subtasks":** mostra as subtasks geradas pelo Orchestrator para esta task
+- **Layout vertical:** Visão Geral, PRD, Execução, Subtasks, Histórico e Log de Erros — cada section ocupa 100% de largura
 
 ## 4. Orçamentos e Custos (`Quotations`)
 Localizado no grupo "Configuração", permite estimar o custo humano vs. custo AI-Dev.

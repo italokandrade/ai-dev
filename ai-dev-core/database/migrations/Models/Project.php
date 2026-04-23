@@ -9,52 +9,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
 
 class Project extends Model implements Conversational
 {
-    use HasUuids, RemembersConversations, LogsActivity;
-
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logAll()
-            ->logOnlyDirty()
-            ->setDescriptionForEvent(fn (string $eventName) => "Projeto {$eventName}");
-    }
+    use HasUuids, RemembersConversations;
 
     protected $fillable = [
         'name',
-        'description',
         'github_repo',
         'local_path',
         'status',
-        'prd_payload',
-        'prd_approved_at',
     ];
-
-    public function features(): HasMany
-    {
-        return $this->hasMany(ProjectFeature::class);
-    }
-
-    public function backendFeatures(): HasMany
-    {
-        return $this->hasMany(ProjectFeature::class)->where('type', 'backend');
-    }
-
-    public function frontendFeatures(): HasMany
-    {
-        return $this->hasMany(ProjectFeature::class)->where('type', 'frontend');
-    }
 
     protected function casts(): array
     {
         return [
             'status' => ProjectStatus::class,
-            'prd_payload' => 'json',
-            'prd_approved_at' => 'datetime',
         ];
     }
 
@@ -133,65 +103,5 @@ class Project extends Model implements Conversational
     public function isActive(): bool
     {
         return $this->status === ProjectStatus::Active;
-    }
-
-    public function isPrdApproved(): bool
-    {
-        return $this->prd_approved_at !== null;
-    }
-
-    public function approvePrd(): void
-    {
-        $this->update(['prd_approved_at' => now()]);
-    }
-
-    /**
-     * Cria módulos de alto nível a partir do PRD payload.
-     * Submódulos são criados posteriormente via PRD de cada módulo.
-     */
-    public function createModulesFromPrd(): void
-    {
-        $prd = $this->prd_payload;
-
-        if (empty($prd['modules'])) {
-            return;
-        }
-
-        $moduleIdMap = [];
-
-        foreach ($prd['modules'] as $moduleData) {
-            $priorityEnum = match ($moduleData['priority'] ?? 'normal') {
-                'high' => \App\Enums\Priority::High,
-                'medium' => \App\Enums\Priority::Medium,
-                default => \App\Enums\Priority::Normal,
-            };
-
-            $module = ProjectModule::create([
-                'project_id' => $this->id,
-                'name' => $moduleData['name'],
-                'description' => $moduleData['description'] ?? '',
-                'status' => \App\Enums\ModuleStatus::Planned,
-                'priority' => $priorityEnum,
-                'dependencies' => null,
-            ]);
-
-            $moduleIdMap[$moduleData['name']] = $module->id;
-        }
-
-        // Resolver dependências entre módulos
-        foreach ($prd['modules'] as $moduleData) {
-            if (! empty($moduleData['dependencies'])) {
-                $depIds = collect($moduleData['dependencies'])
-                    ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
-                    ->filter()
-                    ->values()
-                    ->all();
-
-                if (! empty($depIds) && isset($moduleIdMap[$moduleData['name']])) {
-                    ProjectModule::where('id', $moduleIdMap[$moduleData['name']])
-                        ->update(['dependencies' => $depIds]);
-                }
-            }
-        }
     }
 }

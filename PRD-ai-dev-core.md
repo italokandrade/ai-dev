@@ -95,9 +95,36 @@ pending → blocked → pending
 
 ### Módulo B — Agentes de Desenvolvimento
 
+#### B.0. ProjectPrdAgent ✅ (Novo — Granularidade Progressiva)
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o PRD Master do projeto contendo **apenas módulos de alto nível** (zero submódulos).
+
+**Instruções:** Explicitamente proíbe a geração de submódulos no nível do projeto. Retorna JSON com `title`, `objective`, `modules[]` (name, description, priority, dependencies).
+
+**Job associado:** `GenerateProjectPrdJob` — fila `orchestrator`, timeout 600s.
+
+**Aprovação:** `Project::approvePrd()` + `Project::createModulesFromPrd()` cria apenas módulos raiz (`parent_id = null`).
+
+---
+
+#### B.0.1. ModulePrdAgent ✅ (Novo — Granularidade Progressiva)
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera PRD Técnico detalhado para **um módulo específico**.
+
+**Instruções:** Recebe contexto do projeto + nome/descrição do módulo. Retorna JSON com: `title`, `objective`, `scope`, `database_schema`, `api_endpoints`, `business_rules`, `components`, `workflows`, `acceptance_criteria`, `estimated_complexity`, `estimated_hours`, `needs_submodules` (boolean), `submodules[]`.
+
+**Decisão inteligente:** O próprio agente decide se o módulo precisa de submódulos baseado na complexidade. Módulos simples (ex: "Configurações") retornam `needs_submodules = false` e viram folhas imediatas.
+
+**Jobs associados:**
+- `GenerateModulePrdJob` — fila `orchestrator`, timeout 600s
+- `GenerateModuleSubmodulesJob` — cria submódulos do PRD quando `needs_submodules = true`
+- `GenerateModuleTasksJob` — cria tasks do PRD quando `needs_submodules = false` (folha)
+
+---
+
 #### B.1. OrchestratorAgent ⚠️
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Decompõe PRD em Sub-PRDs retornando array JSON.
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Decompõe PRD de **task** em Sub-PRDs retornando array JSON.
 
 **O que falta / precisa refatorar:**
 - ❌ Não implementa `HasStructuredOutput` — saída JSON é parseada manualmente com `json_decode()` e `preg_replace` para remover markdown fences. Risco de falha silenciosa de formato.
@@ -330,18 +357,32 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 
 ---
 
-#### D.6. Jobs Auxiliares existentes (fora do pipeline principal)
+#### D.6. Jobs de Granularidade Progressiva (Novos — Pipeline Ativo)
 
-Os jobs abaixo existem e são usados pelo Admin Panel. Não estavam no PRD original mas fazem parte do sistema:
+| Job | Fila | Propósito | Timeout |
+|---|---|---|---|
+| `GenerateProjectPrdJob` | `orchestrator` | Gera PRD Master do projeto via `ProjectPrdAgent` (apenas módulos) | 600s |
+| `GenerateModulePrdJob` | `orchestrator` | Gera PRD Técnico de um módulo via `ModulePrdAgent` | 600s |
+| `GenerateModuleSubmodulesJob` | `orchestrator` | Cria submódulos a partir do `prd_payload.submodules` do módulo | 600s |
+| `GenerateModuleTasksJob` | `orchestrator` | Cria tasks a partir do PRD técnico de um módulo folha | 600s |
+
+**Fluxo de ativação (UI Filament):**
+1. Usuário clica "Gerar PRD do Projeto" → `GenerateProjectPrdJob`
+2. Usuário aprova PRD → `approvePrd()` + `createModulesFromPrd()` (módulos raiz)
+3. Usuário entra em um módulo → clica "Gerar PRD do Módulo" → `GenerateModulePrdJob`
+4. Se PRD retorna `needs_submodules = true` → clica "Criar Submódulos" → `GenerateModuleSubmodulesJob`
+5. Se PRD retorna `needs_submodules = false` → clica "Criar Tasks" → `GenerateModuleTasksJob`
+
+#### D.7. Jobs Auxiliares existentes (fora do pipeline principal)
 
 | Job | Fila | Propósito |
 |---|---|---|
-| `GenerateProjectSpecificationJob` | `orchestrator` | Gera spec técnica via `SpecificationAgent` |
+| `GenerateProjectSpecificationJob` | `orchestrator` | Gera spec técnica via `SpecificationAgent` (legado) |
 | `GenerateProjectQuotationJob` | `orchestrator` | Gera orçamento via `QuotationAgent` |
-| `GenerateTasksFromSpecJob` | `orchestrator` | Cria tasks a partir de spec aprovada |
+| `GenerateTasksFromSpecJob` | `orchestrator` | Cria tasks a partir de spec aprovada (legado) |
 | `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo |
 
-**Status:** Existem e funcionam. Devem ser documentados e mantidos.
+**Status:** Existem e funcionam. `SpecificationAgent` e `GenerateTasksFromSpecJob` são legados — o fluxo ativo usa `ProjectPrdAgent` + `ModulePrdAgent`.
 
 ---
 
@@ -349,17 +390,23 @@ Os jobs abaixo existem e são usados pelo Admin Panel. Não estavam no PRD origi
 
 #### E.1. Resources ✅
 
-Todos já implementados — o PRD dizia que eram Fase 2, mas já existem:
+Todos já implementados:
 
 | Resource | Status |
 |---|---|
-| `ProjectResource` | ✅ Implementado com form, table, view, IAs de interação integradas |
-| `TaskResource` | ✅ Implementado com form, table, view, SubtasksRelationManager |
+| `ProjectResource` | ✅ Com aba "Módulos do Projeto" (ProjectModulesRelationManager), PRD do Projeto, navegação breadcrumb |
+| `TaskResource` | ✅ Com form, table, view, SubtasksRelationManager, breadcrumb |
 | `AgentConfigResource` | ✅ Implementado |
-| `ProjectSpecificationResource` | ✅ Implementado (extra) |
-| `ProjectModuleResource` | ✅ Implementado com TasksRelationManager (extra) |
-| `ProjectQuotationResource` | ✅ Implementado (extra) |
+| `ProjectSpecificationResource` | ✅ Implementado (legado) |
+| `ProjectModuleResource` | ✅ Com TasksRelationManager, breadcrumb hierárquico, ações de PRD/Submódulos/Tasks |
+| `ProjectQuotationResource` | ✅ Implementado |
 | `SocialAccountResource` | ✅ Migration criada, resource implementado (integração Fase 3) |
+
+**Navegação:**
+- `NavigationTree` component gera breadcrumbs em ViewProject, ViewProjectModule, ViewTask
+- Links cruzados: project.name → ViewProject, module.name → ViewProjectModule em todas as tabelas
+- ViewProjectModule mostra breadcrumb completo: Projeto > Pai > ... > Módulo Atual
+- Layout reorganizado: todas as sections em 100% de largura, empilhadas verticalmente
 
 #### E.2. Widgets de Dashboard ✅
 
@@ -645,10 +692,12 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 
 As seguintes melhorias e correções foram implementadas para alinhar o sistema com o PRD v2.0:
 
+- **✅ Granularidade Progressiva:** `ProjectPrdAgent` gera apenas módulos; `ModulePrdAgent` gera PRD técnico por módulo decidindo `needs_submodules`; submódulos e tasks criados apenas nos níveis apropriados.
+- **✅ Novos Jobs:** `GenerateProjectPrdJob`, `GenerateModulePrdJob`, `GenerateModuleSubmodulesJob`, `GenerateModuleTasksJob` — todos na fila `orchestrator` com timeout 600s.
+- **✅ Navegação Hierarchical:** `NavigationTree` component com breadcrumbs clicáveis em ViewProject, ViewProjectModule, ViewTask. Links cruzados entre recursos.
+- **✅ Layout Vertical:** Todas as páginas ViewProject, ViewProjectModule, ViewTask usam sections empilhadas em 100% de largura.
 - **✅ Providers de IA Dinâmicos:** Todos os Jobs e widgets usam `AiRuntimeConfigService` para resolver provider/model/key em runtime.
-- **✅ BoostTool Project-Path-Aware:** A ferramenta agora é instanciada com o path do projeto alvo e executa comandos artisan diretamente no diretório correto.
-- **✅ Isolamento de Agentes:** `SpecialistAgent`, `QAAuditorAgent`, `DocsAgent` e `DocSearchTool` agora operam estritamente no path do projeto alvo através do BoostTool corrigido.
+- **✅ Kimi Provider Persistente:** Fix para workers long-running — `Queue::before()` re-registra `Ai::extend('kimi')` antes de cada job.
 - **✅ Renomeação de Jobs e Filas:** `SubagentJob` renomeado para `ProcessSubtaskJob` e fila movida de `agents` para `subtasks` no Horizon para consistência.
-- **✅ Saída Estruturada (HasStructuredOutput):** Implementada nos agentes `Orchestrator`, `QA Auditor`, `Specification` e `Quotation`, eliminando o parsing manual de JSON e aumentando a confiabilidade.
 - **✅ Hardening de QA:** Remoção do auto-approve perigoso no `QAAuditJob` em caso de falha de parse; agora falhas de auditoria resultam em rejeição explícita.
 - **✅ Especialização de Agentes:** `SpecialistAgent` agora adapta suas instruções com base na especialidade atribuída (`assigned_agent`).

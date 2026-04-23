@@ -139,14 +139,18 @@ class TaskResource extends Resource
                 Tables\Columns\TextColumn::make('project.name')
                     ->label('Projeto')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->url(fn (Task $record): string => ProjectResource::getUrl('view', ['record' => $record->project_id]))
+                    ->openUrlInNewTab(false),
 
                 Tables\Columns\TextColumn::make('module.name')
                     ->label('Módulo')
                     ->placeholder('Avulsa')
                     ->searchable()
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->url(fn (Task $record): ?string => $record->module_id ? ProjectModuleResource::getUrl('view', ['record' => $record->module_id]) : null)
+                    ->openUrlInNewTab(false),
 
                 Tables\Columns\TextColumn::make('title')
                     ->label('Task')

@@ -5,27 +5,17 @@ namespace App\Ai\Agents;
 use App\Ai\Tools\BoostTool;
 use App\Services\SystemContextService;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
-use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
-use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Stringable;
 
 #[MaxSteps(10)]
-class ProjectPrdAgent implements Agent, HasStructuredOutput, HasTools
+#[Timeout(600)]
+class ProjectPrdAgent implements Agent
 {
     use Promptable;
-
-    public function __construct(
-        private readonly ?string $projectPath = null,
-    ) {}
-
-    public function tools(): iterable
-    {
-        if (!$this->projectPath) return [];
-        return [new BoostTool($this->projectPath)];
-    }
 
     public function instructions(): Stringable|string
     {
@@ -42,12 +32,10 @@ Sua função é receber o escopo completo de um projeto e gerar um PRD Master
 seus módulos e submódulos em granularidade pequena e atômica.
 
 REGRAS DE GRANULARIDADE (MUITO IMPORTANTE):
-1. Divida o sistema em módulos independentes e coesos.
-2. Cada módulo DEVE ter submódulos. Não crie módulos monolíticos.
-3. Cada submódulo deve ter uma responsabilidade ÚNICA e escopo isolado.
-4. Exemplo correto: "Mensageria" → submódulos "WhatsApp", "Telegram", "Email".
-5. Exemplo errado: um único submódulo "Mensageria" que faz tudo.
-6. A ordem dos módulos deve respeitar dependências (Auth sempre primeiro se necessário).
+1. Divida o sistema em MÓDULOS de alto nível — independentes e coesos.
+2. Cada módulo representa um domínio de negócio completo (ex: "Autenticação", "Financeiro", "Mensageria").
+3. NÃO inclua submódulos no PRD Master. Submódulos serão definidos posteriormente dentro de cada módulo.
+4. A ordem dos módulos deve respeitar dependências (Auth/Autenticação sempre primeiro se necessário).
 
 REGRAS DE CONTEÚDO:
 1. O PRD descreve O QUE o sistema faz, NÃO COMO fazer.
@@ -58,49 +46,24 @@ REGRAS DE CONTEÚDO:
 6. Respeite as funcionalidades já cadastradas pelo usuário — não as ignore.
 
 SAÍDA:
-- Retorne APENAS o JSON estruturado conforme o schema.
-- Não adicione introduções ou explicações fora do JSON.
-- Não use Markdown (negrito, listas) — retorne JSON puro.
-INSTRUCTIONS;
-    }
+- Retorne APENAS um JSON válido no formato exato abaixo, sem markdown, sem introduções:
 
-    public function schema(JsonSchema $schema): array
+{
+  "title": "Nome do Projeto — PRD Master",
+  "objective": "Descrição completa em parágrafo fluido...",
+  "scope_summary": "Resumo em 2-3 frases...",
+  "target_audience": "Quem usa o sistema...",
+  "modules": [
     {
-        return [
-            'title' => $schema->string()
-                ->description('Título do PRD Master. Ex: "Portal ItaloAndrade — PRD Master"')
-                ->required(),
-            'objective' => $schema->string()
-                ->description('Descrição técnica completa do sistema em parágrafo fluido. O que o sistema faz, para quem serve e que problemas resolve.')
-                ->required(),
-            'scope_summary' => $schema->string()
-                ->description('Resumo executivo do escopo em 2-3 frases.')
-                ->required(),
-            'target_audience' => $schema->string()
-                ->description('Quem são os usuários finais do sistema.')
-                ->required(),
-            'modules' => $schema->array()->items(
-                $schema->object([
-                    'name' => $schema->string()->description('Nome do módulo raiz (agrupador).')->required(),
-                    'description' => $schema->string()->description('Descrição do que este módulo abrange.')->required(),
-                    'priority' => $schema->string()->description('Prioridade: high, medium, low.')->required(),
-                    'dependencies' => $schema->array()->items($schema->string())->description('Nomes de outros módulos dos quais este depende.')->required(),
-                    'submodules' => $schema->array()->items(
-                        $schema->object([
-                            'name' => $schema->string()->description('Nome do submódulo (unidade executável).')->required(),
-                            'description' => $schema->string()->description('Responsabilidade única deste submódulo.')->required(),
-                            'priority' => $schema->string()->description('Prioridade: high, medium, low.')->required(),
-                            'dependencies' => $schema->array()->items($schema->string())->description('Nomes de outros submódulos dos quais este depende.')->required(),
-                        ])
-                    )->description('Lista de submódulos atômicos deste módulo.')->required(),
-                ])
-            )->description('Lista de módulos do sistema, cada um com submódulos atômicos.')->required(),
-            'non_functional_requirements' => $schema->array()->items($schema->string())
-                ->description('Requisitos não-funcionais: performance, segurança, SEO, acessibilidade, etc.')
-                ->required(),
-            'estimated_complexity' => $schema->string()
-                ->description('Complexidade estimada do projeto: trivial, simple, moderate, complex, very_complex.')
-                ->required(),
-        ];
+      "name": "Nome do Módulo",
+      "description": "Visão geral do domínio de negócio",
+      "priority": "high",
+      "dependencies": []
+    }
+  ],
+  "non_functional_requirements": ["SEO", "Performance"],
+  "estimated_complexity": "moderate"
+}
+INSTRUCTIONS;
     }
 }

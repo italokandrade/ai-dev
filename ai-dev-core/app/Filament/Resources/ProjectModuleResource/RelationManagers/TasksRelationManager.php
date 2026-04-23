@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProjectModuleResource\RelationManagers;
 
 use App\Enums\TaskStatus;
 use App\Models\Task;
+use Filament\Actions\Action;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -12,7 +13,7 @@ class TasksRelationManager extends RelationManager
 {
     protected static string $relationship = 'tasks';
 
-    protected static ?string $title = 'Tasks deste Submódulo';
+    protected static ?string $title = 'Tasks do Módulo';
 
     public function table(Table $table): Table
     {
@@ -23,7 +24,9 @@ class TasksRelationManager extends RelationManager
                     ->label('Task')
                     ->weight('bold')
                     ->searchable()
-                    ->limit(70),
+                    ->limit(70)
+                    ->url(fn (Task $record): string => route('filament.admin.resources.tasks.view', $record))
+                    ->openUrlInNewTab(false),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
@@ -56,13 +59,14 @@ class TasksRelationManager extends RelationManager
                     ->multiple(),
             ])
             ->actions([
-                Tables\Actions\Action::make('view')
-                    ->label('')
+                Action::make('view')
+                    ->label('Ver')
                     ->icon('heroicon-o-eye')
-                    ->url(fn (Task $record) => route('filament.admin.resources.tasks.view', $record)),
+                    ->url(fn (Task $record) => route('filament.admin.resources.tasks.view', $record))
+                    ->link(),
             ])
             ->headerActions([
-                Tables\Actions\Action::make('create_task')
+                Action::make('create_task')
                     ->label('Nova Task')
                     ->icon('heroicon-o-plus')
                     ->url(fn () => route('filament.admin.resources.tasks.create', [

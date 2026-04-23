@@ -6,7 +6,9 @@ use App\Ai\Providers\FailoverProvider;
 use App\Ai\Providers\KimiProvider;
 use GuzzleHttp\Psr7\Stream;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Gateway\Prism\PrismGateway;
@@ -36,9 +38,29 @@ class AppServiceProvider extends ServiceProvider
             return new KimiProvider(new PrismGateway($app['events']), $config, $app['events']);
         });
 
+        // Re-registrar provider 'kimi' antes de cada job no worker persistente,
+        // pois o AiManager é scoped e pode ser recriado entre jobs.
+        Queue::before(function (JobProcessing $event) {
+            $manager = Ai::getFacadeRoot();
+            $reflect = new \ReflectionClass($manager);
+            $prop = $reflect->getProperty('customCreators');
+            $prop->setAccessible(true);
+            $creators = $prop->getValue($manager);
+
+            if (! isset($creators['kimi'])) {
+                Ai::extend('kimi', function ($app, array $config) {
+                    return new KimiProvider(new PrismGateway($app['events']), $config, $app['events']);
+                });
+            }
+        });
+
         Http::globalMiddleware(function ($handler) {
             return function ($request, $options) use ($handler) {
                 if ($request->getUri()->getHost() === 'api.kimi.com') {
+                    // 0. Aumentar timeout para requests à API do Kimi (prompts grandes podem demorar)
+                    // Timeout de 10min para prompts grandes (PRD, especificações)
+                    $options['timeout'] = ($options['timeout'] ?? 0) < 600 ? 600 : $options['timeout'];
+
                     // 1. User-Agent whitelistado (exigido pela API do Kimi Code)
                     $request = $request->withHeader('User-Agent', 'claude-code/0.1.0');
 

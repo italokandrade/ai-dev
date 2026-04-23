@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Enums\ModuleStatus;
 use App\Filament\Resources\ProjectModuleResource\Pages;
+use App\Jobs\GenerateModulePrdJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use Filament\Forms;
@@ -117,7 +118,9 @@ class ProjectModuleResource extends Resource
                 Tables\Columns\TextColumn::make('project.name')
                     ->label('Projeto')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->url(fn (ProjectModule $record): string => ProjectResource::getUrl('view', ['record' => $record->project_id]))
+                    ->openUrlInNewTab(false),
 
                 Tables\Columns\TextColumn::make('name')
                     ->label('Módulo')
@@ -177,6 +180,23 @@ class ProjectModuleResource extends Resource
                     ->visible(fn (ProjectModule $record) => $record->children()->exists()),
                 \Filament\Actions\ViewAction::make()->label(''),
                 EditAction::make()->label(''),
+                Action::make('generatePrd')
+                    ->label('')
+                    ->icon('heroicon-o-sparkles')
+                    ->color('warning')
+                    ->tooltip('Gerar PRD Técnico')
+                    ->requiresConfirmation()
+                    ->modalHeading('Gerar PRD Técnico')
+                    ->modalDescription('A IA irá gerar um PRD detalhado para este módulo.')
+                    ->action(function (ProjectModule $record) {
+                        GenerateModulePrdJob::dispatch($record);
+                        Notification::make()
+                            ->title('Geração iniciada')
+                            ->body("O PRD do módulo '{$record->name}' está sendo gerado.")
+                            ->success()
+                            ->send();
+                    })
+                    ->visible(fn (ProjectModule $record) => empty($record->prd_payload) || !empty($record->prd_payload['_status'] ?? '')),
             ])
             ->bulkActions([]);
     }

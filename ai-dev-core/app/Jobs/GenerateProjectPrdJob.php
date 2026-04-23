@@ -17,7 +17,7 @@ class GenerateProjectPrdJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
-    public int $timeout = 180;
+    public int $timeout = 600;
 
     public function __construct(
         public Project $project,
@@ -34,14 +34,14 @@ class GenerateProjectPrdJob implements ShouldQueue
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-            $response = (new ProjectPrdAgent($this->project->local_path ?? base_path()))
+            $response = (new ProjectPrdAgent())
                 ->prompt(
                     $prompt,
                     provider: $aiConfig['provider'],
                     model: $aiConfig['model'],
                 );
 
-            $prdPayload = $response->data;
+            $prdPayload = $this->parsePrd((string) $response);
 
             Log::info("GenerateProjectPrdJob: PRD gerado com sucesso para '{$this->project->name}'", [
                 'modules' => count($prdPayload['modules'] ?? []),
@@ -67,12 +67,19 @@ class GenerateProjectPrdJob implements ShouldQueue
         $projectName = $this->project->name;
         $description = $this->project->description ?? 'Nenhuma descrição fornecida.';
 
+        // Trunca descrição para evitar prompt gigante e timeout na IA
+        if (strlen($description) > 1500) {
+            $description = substr($description, 0, 1500) . "\n\n[...descrição truncada para otimização...]";
+        }
+
+        // Usa apenas título das funcionalidades para reduzir tamanho do prompt
+        // As descrições completas já estão no banco, não precisam ser repetidas no prompt
         $backendFeatures = $this->project->backendFeatures
-            ->map(fn ($f) => "- {$f->title}: {$f->description}")
+            ->map(fn ($f) => "- {$f->title}")
             ->implode("\n") ?: 'Nenhuma funcionalidade backend cadastrada.';
 
         $frontendFeatures = $this->project->frontendFeatures
-            ->map(fn ($f) => "- {$f->title}: {$f->description}")
+            ->map(fn ($f) => "- {$f->title}")
             ->implode("\n") ?: 'Nenhuma funcionalidade frontend cadastrada.';
 
         return <<<PROMPT
@@ -81,18 +88,36 @@ PROJETO: {$projectName}
 DESCRIÇÃO DO SISTEMA:
 {$description}
 
-FUNCIONALIDADES BACKEND JÁ CADASTRADAS:
+FUNCIONALIDADES BACKEND:
 {$backendFeatures}
 
-FUNCIONALIDADES FRONTEND JÁ CADASTRADAS:
+FUNCIONALIDADES FRONTEND:
 {$frontendFeatures}
 
 ---
-INSTRUÇÃO: Com base em TODAS as informações acima, gere o PRD Master deste projeto.
+INSTRUÇÃO: Com base nas informações acima, gere o PRD Master deste projeto.
 O PRD deve respeitar EXATAMENTE as funcionalidades já cadastradas.
 Não invente módulos ou funcionalidades que não foram solicitadas.
 Divida tudo em módulos e submódulos pequenos, atômicos e de responsabilidade única.
 PROMPT;
+    }
+
+    private function parsePrd(string $raw): array
+    {
+        $clean = preg_replace('/^```json\s*|\s*```$/m', '', trim($raw));
+        $clean = trim($clean);
+
+        $data = json_decode($clean, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Log::warning('GenerateProjectPrdJob: Falha ao parsear JSON da IA', [
+                'raw_preview' => substr($raw, 0, 500),
+                'json_error' => json_last_error_msg(),
+            ]);
+            throw new \RuntimeException('JSON inválido retornado pela IA: ' . json_last_error_msg());
+        }
+
+        return $data;
     }
 
     private function fallbackPrd(string $prompt, string $error): array

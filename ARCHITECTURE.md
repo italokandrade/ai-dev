@@ -109,7 +109,9 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `name` | String(255) | Nome legível do projeto (único) |
 | `github_repo` | String(255) / Nullable | URL do repositório GitHub (ex: `italokandrade/portal`) |
 | `local_path` | String(500) / Nullable | Caminho absoluto no servidor (ex: `/var/www/html/projetos/portal`) |
-| `anthropic_session_id` | String / Nullable | UUID da conversa persistida pelo SDK (trait `RemembersConversations`) — contexto infinito por projeto, servido via OpenRouter → família Anthropic |
+| `anthropic_session_id` | String / Nullable | UUID da conversa persistida pelo SDK (trait `RemembersConversations`) — contexto infinito por projeto |
+| `prd_payload` | JSON / Nullable | PRD Master do projeto — módulos de alto nível gerados pelo `ProjectPrdAgent` |
+| `prd_approved_at` | Timestamp / Nullable | Quando o PRD Master foi aprovado — dispara `createModulesFromPrd()` |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
@@ -257,8 +259,8 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 
 ---
 
-**`project_specifications`** — Especificação técnica gerada pela IA a partir da descrição informal do usuário.
-O fluxo: usuário descreve o sistema em linguagem natural → SpecificationAgent gera JSON estruturado → humano aprova → módulos/submódulos criados automaticamente.
+**`project_specifications`** — Especificação técnica gerada pela IA (legado — mantido para retrocompatibilidade).
+O fluxo ativo usa `projects.prd_payload` (PRD Master gerado pelo `ProjectPrdAgent`) + `project_modules.prd_payload` (PRD Técnico gerado pelo `ModulePrdAgent`).
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -266,13 +268,19 @@ O fluxo: usuário descreve o sistema em linguagem natural → SpecificationAgent
 | `project_id` | FK → `projects.id` | Projeto associado |
 | `user_description` | Text | Descrição informal do sistema enviada pelo usuário |
 | `ai_specification` | JSON | Especificação estruturada gerada pela IA (módulos, submódulos, features, stack) |
-| `version` | Int (default: 1) | Versão da especificação (incrementa a cada refinamento) |
-| `approved_at` | Timestamp / Nullable | Quando foi aprovada — dispara criação automática de módulos/submódulos |
+| `version` | Int (default: 1) | Versão da especificação |
+| `approved_at` | Timestamp / Nullable | Quando foi aprovada |
 | `approved_by` | FK → `users.id` / Nullable | Quem aprovou |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
 
-**Estrutura do `ai_specification` JSON:**
+**Fluxo ativo (Granularidade Progressiva):**
+1. `ProjectPrdAgent` gera `projects.prd_payload` com módulos de alto nível
+2. `Project::approvePrd()` + `createModulesFromPrd()` cria módulos raiz
+3. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo
+4. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
+
+**Estrutura do `ai_specification` JSON (legado):**
 ```json
 {
   "system_name": "Portal ItaloAndrade",
@@ -297,12 +305,14 @@ O fluxo: usuário descreve o sistema em linguagem natural → SpecificationAgent
 }
 ```
 
-**Ao aprovar:** `ProjectSpecification::approve($user)` chama `createModulesAndSubmodules()` que percorre o JSON e cria automaticamente todos os registros em `project_modules` (módulos com `parent_id = null`) e seus submódulos (com `parent_id = modulo_pai.id`).
+**Ao aprovar (fluxo legado):** `ProjectSpecification::approve($user)` chama `createModulesAndSubmodules()` que percorre o JSON e cria módulos e submódulos.
+
+**Fluxo ativo:** `Project::approvePrd()` chama `createModulesFromPrd()` que cria **apenas módulos raiz** (`parent_id = null`). Submódulos são criados posteriormente via `GenerateModuleSubmodulesJob` quando o PRD técnico do módulo define `needs_submodules = true`.
 
 ---
 
 **`project_modules`** — Módulos e submódulos do projeto (estrutura hierárquica).
-A estrutura é: **Projeto → Módulos → Submódulos → Tasks**. Cada submódulo recebe tasks da automação.
+O sistema adota **granularidade progressiva**: cada módulo/submódulo possui seu próprio PRD técnico (`prd_payload`) que decide o próximo passo.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -310,22 +320,24 @@ A estrutura é: **Projeto → Módulos → Submódulos → Tasks**. Cada submód
 | `project_id` | FK → `projects.id` | Projeto associado |
 | `parent_id` | FK → `project_modules.id` / Nullable | Módulo pai (null = módulo raiz; preenchido = submódulo) |
 | `name` | String(255) | Nome do módulo/submódulo |
-| `prd_payload` | JSON | O PRD completo do módulo ou submódulo em formato JSON estruturado |
 | `description` | Text | Descrição do que este módulo abrange |
 | `status` | Enum: `planned`, `in_progress`, `testing`, `completed`, `revision` | Estado atual |
 | `priority` | Enum: `low`, `normal`, `high`, `critical` | Prioridade de desenvolvimento |
 | `dependencies` | JSON / Nullable | Array de UUIDs de módulos que devem ser concluídos antes deste |
 | `progress_percentage` | TinyInt (0-100) | % calculado automaticamente com base nas tasks concluídas |
+| `prd_payload` | JSON / Nullable | PRD Técnico do módulo — gerado pelo `ModulePrdAgent`. Contém: objetivo, schema, APIs, regras, workflows, critérios, `needs_submodules`, `submodules` |
 | `started_at` | Timestamp / Nullable | Quando o desenvolvimento começou |
 | `completed_at` | Timestamp / Nullable | Quando foi concluído |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
 
-**Hierarquia e lógica:**
-- `parent_id = null` → módulo raiz (agrupador, ex: "Autenticação", "Dashboard", "CRUD Produtos")
-- `parent_id = uuid` → submódulo (unidade executável, ex: "Login/Logout", "Recuperação de senha")
-- Tasks são sempre vinculadas a **submódulos**, nunca a módulos raiz
-- `recalculateProgress()` conta tasks completadas / total tasks do submódulo
+**Hierarquia e lógica (Granularidade Progressiva):**
+- `parent_id = null` → módulo raiz (agrupador de alto nível, ex: "Autenticação", "Dashboard")
+- `parent_id = uuid` → submódulo (criado apenas quando o PRD do pai define `needs_submodules = true`)
+- O PRD de cada módulo (`prd_payload`) decide se precisa de submódulos (`needs_submodules` boolean)
+- Tasks são criadas **apenas em nós folha** (módulos/submódulos sem filhos e com `needs_submodules = false`)
+- Submódulos podem ter seus próprios submódulos (hierarquia infinita)
+- `recalculateProgress()` conta tasks completadas / total tasks do módulo folha
 - `dependenciesMet()` verifica se todos os módulos dependência estão com status `completed`
 
 ---
@@ -610,10 +622,9 @@ Planejado para permitir publicação multi-plataforma via `hamzahassanm/laravel-
 ### 2.2. Relacionamento Visual entre Tabelas (ERD Simplificado)
 
 ```text
-projects ──┬── 1:N ── project_specifications (IA gera → humano aprova → cria módulos)
-            │
-            ├── 1:N ── project_modules ──┬── 1:N ── project_modules (submódulos, parent_id)
-            │          (módulos raiz)    └── 1:N ── tasks
+projects ──┬── 1:N ── project_modules ──┬── 1:N ── project_modules (submódulos, parent_id)
+            │   (PRD Master → módulos)   │   └── 1:N ── tasks (apenas em folhas)
+            │                            └── 1:N ── tasks (apenas em folhas)
             │
             ├── 1:N ── tasks ──┬── 1:N ── subtasks ──── N:1 ── agents_config
             │   (tasks avulsas) ├── 1:N ── task_transitions
@@ -724,15 +735,17 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 app/
 ├── Ai/
 │   ├── Agents/
+│   │   ├── ProjectPrdAgent.php          ← implements Agent — Gera PRD Master do projeto (apenas módulos)
+│   │   ├── ModulePrdAgent.php           ← implements Agent — Gera PRD Técnico de um módulo (decide submódulos)
 │   │   ├── OrchestratorAgent.php        ← implements Agent, HasStructuredOutput, HasTools — Planner
 │   │   ├── QAAuditorAgent.php           ← implements Agent, HasStructuredOutput — Judge
-│   │   ├── BackendSpecialist.php        ← implements Agent, Conversational, HasTools — Executor
-│   │   ├── FrontendSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
-│   │   ├── FilamentSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
-│   │   ├── DatabaseSpecialist.php       ← implements Agent, Conversational, HasTools — Executor
-│   │   ├── DevOpsSpecialist.php         ← implements Agent, Conversational, HasTools — Executor
+│   │   ├── SpecialistAgent.php          ← implements Agent, Conversational, HasTools — Executor genérico
 │   │   ├── SecuritySpecialist.php       ← implements Agent, HasStructuredOutput, HasTools — Auditor de Segurança
 │   │   ├── PerformanceAnalyst.php       ← implements Agent, HasStructuredOutput — Analista
+│   │   ├── RefineDescriptionAgent.php   ← implements Agent — Refina descrição do projeto com IA
+│   │   ├── SpecificationAgent.php       ← implements Agent — Gera especificação técnica (legado)
+│   │   ├── QuotationAgent.php           ← implements Agent — Gera orçamento
+│   │   ├── DocsAgent.php                ← implements Agent, HasTools — Busca documentação
 │   │   └── ContextCompressor.php        ← implements Agent (usa Ollama) — Compressão
 │   └── Tools/
 │       ├── BoostTool.php                ← implements Laravel\Ai\Contracts\Tool — Boost MCP do Projeto Alvo
@@ -743,12 +756,19 @@ app/
 │       └── ShellExecuteTool.php         ← implements Laravel\Ai\Contracts\Tool — artisan/composer/npm
 │
 ├── Jobs/
+│   ├── GenerateProjectPrdJob.php        ← Gera PRD Master via ProjectPrdAgent → salva em projects.prd_payload
+│   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva em project_modules.prd_payload
+│   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo
+│   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha
 │   ├── OrchestratorJob.php              ← Despacha OrchestratorAgent → grava subtasks → enfileira workers
 │   ├── ProcessSubtaskJob.php            ← Executa um SpecialistAgent para uma Subtask específica
 │   ├── QAAuditJob.php                   ← Executa QAAuditorAgent sobre o diff de uma subtask
 │   ├── SecurityAuditJob.php             ← Executa SecuritySpecialist após QA aprovar
 │   ├── PerformanceAnalysisJob.php       ← Executa PerformanceAnalyst após Security aprovar
-│   └── ContextCompressionJob.php        ← Comprime sessão quando atinge threshold 0.6
+│   ├── ContextCompressionJob.php        ← Comprime sessão quando atinge threshold 0.6
+│   ├── GenerateProjectSpecificationJob.php ← Gera spec técnica (legado)
+│   ├── GenerateProjectQuotationJob.php  ← Gera orçamento
+│   └── ScaffoldProjectJob.php           ← Scaffolding inicial do Projeto Alvo
 │
 ├── Events/
 │   ├── TaskCreatedEvent.php             ← Disparado quando uma nova task é inserida

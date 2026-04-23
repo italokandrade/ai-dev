@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\ProjectResource\Pages;
 
+use App\Filament\Components\NavigationTree;
+use App\Filament\Resources\ProjectModuleResource;
 use App\Filament\Resources\ProjectResource;
+use App\Jobs\GenerateProjectPrdJob;
 use App\Jobs\GenerateProjectSpecificationJob;
 use App\Models\ProjectSpecification;
 use Filament\Actions;
@@ -14,11 +17,69 @@ class ViewProject extends ViewRecord
 {
     protected static string $resource = ProjectResource::class;
 
+    public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    {
+        return NavigationTree::forProject($this->record);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Actions\EditAction::make(),
 
+            Actions\Action::make('generateProjectPrd')
+                ->label('Gerar PRD do Projeto')
+                ->icon('heroicon-o-sparkles')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Gerar PRD do Projeto')
+                ->modalDescription('A IA irá gerar o PRD global do projeto, definindo os módulos de alto nível. Isso pode levar alguns minutos.')
+                ->modalSubmitActionLabel('Gerar PRD')
+                ->action(function () {
+                    GenerateProjectPrdJob::dispatch($this->record);
+
+                    Notification::make()
+                        ->title('Geração do PRD iniciada')
+                        ->body('O PRD do projeto está sendo gerado. Acesse a aba "PRD do Projeto" em alguns instantes.')
+                        ->success()
+                        ->send();
+                })
+                ->visible(fn () => empty($this->record->prd_payload) || !empty($this->record->prd_payload['_status'] ?? '')),
+
+            Actions\Action::make('approveProjectPrd')
+                ->label('✅ Aprovar PRD — Criar Módulos')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Aprovar PRD e Criar Módulos')
+                ->modalDescription('Ao aprovar, os módulos de alto nível serão criados a partir do PRD. Submódulos e tasks serão definidos individualmente dentro de cada módulo.')
+                ->modalSubmitActionLabel('Aprovar e Criar Módulos')
+                ->action(function () {
+                    try {
+                        $this->record->approvePrd();
+                        $this->record->createModulesFromPrd();
+
+                        Notification::make()
+                            ->title('PRD aprovado — Módulos criados!')
+                            ->body('Os módulos foram criados. Acesse cada módulo e gere seu PRD individual para definir submódulos ou tasks.')
+                            ->success()
+                            ->send();
+
+                        $this->redirect(ProjectModuleResource::getUrl('index'));
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->title('Erro ao aprovar PRD')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                })
+                ->visible(fn () =>
+                    !empty($this->record->prd_payload)
+                    && empty($this->record->prd_payload['_status'] ?? '')
+                    && !empty($this->record->prd_payload['modules'] ?? [])
+                    && !$this->record->isPrdApproved()
+                ),
 
             // Aprovar especificação atual → cria módulos/submódulos
             Actions\Action::make('approve_spec')

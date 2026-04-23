@@ -119,17 +119,26 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 
 Todas as tabelas abaixo vivem no banco **`ai_dev_core`**. Elas descrevem e auditam a operação do ai-dev-core sobre os Projetos Alvo.
 
-A estrutura hierárquica é: **Projeto → Módulos → Submódulos → Tasks → Subtasks**. Cada nível é subdividido ao máximo para que a automação processe unidades pequenas e precisas.
+A estrutura hierárquica é: **Projeto → Módulos → Submódulos (opcional) → Tasks em folhas → Subtasks**.
+
+O sistema adota **granularidade progressiva**:
+1. **Projeto** → gera PRD Master com apenas os **módulos de alto nível** (sem submódulos)
+2. **Módulo** → gera PRD Técnico próprio que decide se precisa de `submódulos`
+3. **Submódulo** (se necessário) → repete o processo recursivamente
+4. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico
+5. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
+
+> **Regra:** tasks são criadas **apenas nos nós folha**, nunca em cascata. O PRD de cada nível decide o próximo passo.
 
 **Tabelas implementadas (Fase 1 — operacionais):**
 
 | Tabela | Propósito |
 |---|---|
 | `projects` | Cadastro de Projetos Alvo (repo, `local_path`, stack, env, com PRD do Sistema Inteiro em JSON) |
-| `project_specifications` | Especificação técnica gerada pelo SpecificationAgent; aprovação auto-cria módulos/submódulos |
-| `project_modules` | Módulos e submódulos (hierárquico via parent_id): Projeto → Módulos → Submódulos, com PRD em JSON por módulo/submódulo |
+| `project_specifications` | Especificação técnica legada (mantida para retrocompatibilidade); o fluxo ativo usa `projects.prd_payload` |
+| `project_modules` | Módulos e submódulos (hierárquico via `parent_id`), cada um com seu próprio `prd_payload` JSON técnico |
 | `project_quotations` | Orçamentos com comparativo de custo humano vs. AI-Dev e cálculo de ROI |
-| `tasks` | Tarefas vinculadas a submódulos, com PRD em JSON |
+| `tasks` | Tarefas vinculadas a módulos folha (sem filhos), com PRD em JSON |
 | `subtasks` | Decomposição granular feita pelo Orchestrator (sub-PRDs por especialista) |
 | `agents_config` | Configuração dinâmica de cada agente (modelo, temperatura, prompt) |
 | `task_transitions` | Log de auditoria de toda mudança de estado |

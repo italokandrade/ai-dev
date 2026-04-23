@@ -8,7 +8,183 @@ O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas A
 
 ---
 
-## 1. JSON Schema do PRD Principal (Task)
+## 0. JSON Schema do PRD do Projeto (Project PRD)
+
+Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `ProjectPrdAgent`. **Contém apenas módulos de alto nível** — submódulos são proibidos neste nível.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI-Dev Project PRD",
+  "type": "object",
+  "required": ["title", "objective", "modules"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Título do projeto. Ex: 'Sistema de Gestão Jurídica'"
+    },
+    "objective": {
+      "type": "string",
+      "description": "Descrição clara do objetivo do sistema."
+    },
+    "modules": {
+      "type": "array",
+      "description": "Lista de módulos de ALTO NÍVEL. NÃO incluir submódulos aqui.",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "priority"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nome do módulo. Ex: 'Gestão de Clientes'"
+          },
+          "description": {
+            "type": "string",
+            "description": "O que este módulo abrange em 1-2 frases."
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "normal", "low"],
+            "description": "Prioridade de implementação"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Nomes de outros módulos que devem ser concluídos antes deste",
+            "default": []
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}
+```
+
+---
+
+## 1. JSON Schema do PRD do Módulo (Module PRD)
+
+Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pelo `ModulePrdAgent`.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI-Dev Module PRD",
+  "type": "object",
+  "required": ["title", "objective", "scope", "needs_submodules"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Título técnico do módulo"
+    },
+    "objective": {
+      "type": "string",
+      "description": "Objetivo claro e técnico deste módulo"
+    },
+    "scope": {
+      "type": "string",
+      "description": "Escopo do que está incluído e EXCLUÍDO deste módulo"
+    },
+    "database_schema": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "type": { "type": "string" },
+                    "nullable": { "type": "boolean" },
+                    "default": {},
+                    "relations": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "api_endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "business_rules": {
+      "type": "object",
+      "description": "Regras de negócio como pares chave-valor"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "steps": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "object",
+      "description": "Critérios de aceitação como pares chave-valor"
+    },
+    "estimated_complexity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "very_high"]
+    },
+    "estimated_hours": {
+      "type": "number",
+      "description": "Horas estimadas de desenvolvimento"
+    },
+    "needs_submodules": {
+      "type": "boolean",
+      "description": "TRUE se este módulo precisa de submódulos; FALSE se é uma folha (recebe tasks diretamente)"
+    },
+    "submodules": {
+      "type": "array",
+      "description": "Lista de submódulos (apenas quando needs_submodules = true)",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "priority"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "priority": { "type": "string", "enum": ["high", "normal", "low"] }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## 2. JSON Schema do PRD Principal (Task)
 
 Este é o formato que preenche o campo `tasks.prd_payload`:
 
@@ -123,7 +299,7 @@ Este é o formato que preenche o campo `tasks.prd_payload`:
 
 ---
 
-## 2. Exemplo Completo de PRD Principal
+## 3. Exemplo Completo de PRD Principal
 
 Abaixo está um exemplo real e completo de um PRD bem escrito para criar um CRUD de usuários em Filament v5:
 
@@ -169,7 +345,7 @@ Abaixo está um exemplo real e completo de um PRD bem escrito para criar um CRUD
 
 ---
 
-## 3. JSON Schema do Sub-PRD (Subtask)
+## 4. JSON Schema do Sub-PRD (Subtask)
 
 Quando o Orchestrator quebra o PRD principal, cada subtask recebe um Sub-PRD menor e focado. Este é o formato do campo `subtasks.sub_prd_payload`:
 
@@ -249,7 +425,7 @@ Quando o Orchestrator quebra o PRD principal, cada subtask recebe um Sub-PRD men
 
 ---
 
-## 4. Exemplo: Como o Orchestrator Quebra um PRD em Sub-PRDs
+## 5. Exemplo: Como o Orchestrator Quebra um PRD em Sub-PRDs
 
 Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria as seguintes subtasks:
 
@@ -372,7 +548,7 @@ Usando o exemplo do PRD de "Gestão de Usuários" acima, o Orchestrator geraria 
 
 ---
 
-## 5. PRDs Gerados Automaticamente (Pelo Sentinela)
+## 6. PRDs Gerados Automaticamente (Pelo Sentinela)
 
 Quando o Sentinela detecta um erro em runtime, ele gera um PRD automaticamente com formato específico:
 
@@ -408,7 +584,7 @@ Quando o Sentinela detecta um erro em runtime, ele gera um PRD automaticamente c
 
 ---
 
-## 6. Validação do PRD (PRDValidator.php)
+## 7. Validação do PRD (PRDValidator.php)
 
 O `PRDValidator.php` verifica:
 
