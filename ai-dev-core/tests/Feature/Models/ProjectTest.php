@@ -72,3 +72,49 @@ test('project calculates overall progress', function () {
 
     expect($project->overallProgress())->toBe(50.0);
 });
+
+test('project creates root modules idempotently with cap and deduplication', function () {
+    $project = Project::create([
+        'name' => 'test-prd-modules',
+        'status' => 'active',
+        'prd_payload' => [
+            'modules' => [
+                ['name' => 'Autenticação', 'description' => 'Auth', 'priority' => 'high'],
+                ['name' => '  autenticação  ', 'description' => 'Duplicated auth', 'priority' => 'medium'],
+                ...collect(range(1, 45))
+                    ->map(fn (int $index) => ['name' => "Módulo {$index}", 'description' => "Desc {$index}"])
+                    ->all(),
+            ],
+        ],
+    ]);
+
+    $project->createModulesFromPrd();
+    $project->createModulesFromPrd();
+
+    expect($project->modules()->whereNull('parent_id')->count())->toBe(Project::MAX_ROOT_MODULES)
+        ->and($project->modules()->where('name', 'Autenticação')->count())->toBe(1);
+});
+
+test('project approves blueprint only when it is ready', function () {
+    $project = Project::create([
+        'name' => 'test-blueprint-approval',
+        'status' => 'active',
+    ]);
+
+    expect(fn () => $project->approveBlueprint())->toThrow(RuntimeException::class);
+
+    $project->update([
+        'blueprint_payload' => [
+            'domain_model' => [
+                'entities' => [
+                    ['name' => 'clientes', 'description' => 'Clientes atendidos'],
+                ],
+                'relationships' => [],
+            ],
+        ],
+    ]);
+
+    $project->approveBlueprint();
+
+    expect($project->fresh()->blueprint_approved_at)->not->toBeNull();
+});
