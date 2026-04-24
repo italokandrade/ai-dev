@@ -42,8 +42,6 @@ REGRAS DE CONTEÚDO:
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e conciso em todos os campos de texto. Frases curtas.
-- Limite arrays ao essencial: máximo 5 itens em business_rules, 5 em acceptance_criteria, 3 em workflows.
-- Descrições de colunas: apenas o tipo e restrições principais, sem explicações longas.
 - O JSON DEVE estar completo e válido. Priorize fechar o JSON corretamente acima de qualquer detalhe extra.
 
 SAÍDA:
