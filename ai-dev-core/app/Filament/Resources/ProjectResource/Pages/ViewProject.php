@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProjectResource\Pages;
 use App\Filament\Components\NavigationTree;
 use App\Filament\Resources\ProjectModuleResource;
 use App\Filament\Resources\ProjectResource;
+use App\Jobs\CascadeModulePrdJob;
 use App\Jobs\GenerateProjectPrdJob;
 use Filament\Actions;
 use Filament\Notifications\Notification;
@@ -95,6 +96,43 @@ class ViewProject extends ViewRecord
                             ->title('PRD aprovado — Módulos criados!')
                             ->success()
                             ->send();
+                        $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
+                    } catch (\Exception $e) {
+                        Notification::make()->title('Erro')->body($e->getMessage())->danger()->send();
+                    }
+                })
+                ->visible(fn () =>
+                    !empty($this->record->prd_payload)
+                    && empty($this->record->prd_payload['_status'] ?? '')
+                    && !empty($this->record->prd_payload['modules'] ?? [])
+                    && !$this->record->isPrdApproved()
+                ),
+
+            Actions\Action::make('autoApproveProjectPrd')
+                ->label('Auto Aprovar PRD — Cascata Completa')
+                ->icon('heroicon-o-bolt')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Auto Aprovação em Cascata')
+                ->modalDescription('O sistema irá aprovar o PRD e automaticamente gerar e aprovar os PRDs de todos os módulos e submódulos, criando as tasks ao final de cada ramo. Nenhuma task será executada automaticamente. Este processo pode levar vários minutos.')
+                ->modalSubmitActionLabel('Iniciar Cascata')
+                ->action(function () {
+                    try {
+                        $this->record->approvePrd();
+                        $this->record->createModulesFromPrd();
+
+                        $modules = $this->record->modules()->whereNull('parent_id')->get();
+
+                        foreach ($modules as $module) {
+                            CascadeModulePrdJob::dispatch($module);
+                        }
+
+                        Notification::make()
+                            ->title('Cascata iniciada!')
+                            ->body("PRD aprovado. Gerando PRDs para {$modules->count()} módulo(s) em background.")
+                            ->success()
+                            ->send();
+
                         $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
                     } catch (\Exception $e) {
                         Notification::make()->title('Erro')->body($e->getMessage())->danger()->send();
