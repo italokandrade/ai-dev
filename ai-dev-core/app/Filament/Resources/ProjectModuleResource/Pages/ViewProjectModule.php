@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProjectModuleResource\Pages;
 
 use App\Enums\ModuleStatus;
 use App\Filament\Components\NavigationTree;
+use App\Filament\Components\PrdRenderer;
 use App\Filament\Resources\ProjectModuleResource;
 use App\Filament\Resources\ProjectResource;
 use App\Jobs\GenerateModulePrdJob;
@@ -17,6 +18,7 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 
 class ViewProjectModule extends ViewRecord
@@ -32,7 +34,7 @@ class ViewProjectModule extends ViewRecord
         ])->findOrFail($key);
     }
 
-    public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    public function getSubheading(): string|Htmlable|null
     {
         return NavigationTree::forModule($this->record);
     }
@@ -145,7 +147,7 @@ class ViewProjectModule extends ViewRecord
                             ->placeholder('—'),
                     ])
                     ->collapsible()
-                    ->visible(fn () => !empty($this->record->prd_payload)),
+                    ->visible(fn () => ! empty($this->record->prd_payload)),
             ])
             ->columns(1);
     }
@@ -197,8 +199,7 @@ class ViewProjectModule extends ViewRecord
                         ->success()
                         ->send();
                 })
-                ->visible(fn () =>
-                    empty($this->record->prd_payload)
+                ->visible(fn () => empty($this->record->prd_payload)
                     || ($this->record->prd_payload['_status'] ?? '') === 'ai_generation_failed'
                 ),
 
@@ -228,13 +229,12 @@ class ViewProjectModule extends ViewRecord
                         Notification::make()->title('Tasks sendo criadas...')->success()->send();
                     }
                 })
-                ->visible(fn () =>
-                    !empty($this->record->prd_payload)
+                ->visible(fn () => ! empty($this->record->prd_payload)
                     && empty($this->record->prd_payload['_status'] ?? '')
                     && (
                         ($this->record->prd_payload['needs_submodules'] ?? false)
-                            ? !$this->record->children()->exists()
-                            : !$this->record->tasks()->exists()
+                            ? ! $this->record->children()->exists()
+                            : ! $this->record->tasks()->exists()
                     )
                 ),
 
@@ -245,16 +245,8 @@ class ViewProjectModule extends ViewRecord
                 ->modalHeading(fn () => $this->record->prd_payload['title'] ?? 'PRD do Módulo')
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('Fechar')
-                ->modalContent(function () {
-                    $prd = $this->record->prd_payload;
-                    return new \Illuminate\Support\HtmlString(
-                        '<pre class="text-xs overflow-auto max-h-[70vh] bg-gray-100 dark:bg-gray-800 p-4 rounded whitespace-pre-wrap">'
-                        . e(json_encode($prd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))
-                        . '</pre>'
-                    );
-                })
-                ->visible(fn () =>
-                    !empty($this->record->prd_payload)
+                ->modalContent(fn () => PrdRenderer::render($this->record->prd_payload))
+                ->visible(fn () => ! empty($this->record->prd_payload)
                     && empty($this->record->prd_payload['_status'] ?? '')
                 ),
         ];
