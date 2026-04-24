@@ -24,14 +24,18 @@ class FileWriteTool implements Tool
         $action = $request['action'] ?? 'write';
         $path = $request['path'];
 
-        if (! str_starts_with($path, '/')) {
-            $path = rtrim($this->workingDirectory, '/').'/'.$path;
+        $resolvedPath = $this->resolvePath($path);
+        if ($resolvedPath === null) {
+            return json_encode([
+                'success' => false,
+                'error' => 'Invalid path: access outside of project working directory is not allowed.',
+            ]);
         }
 
         return match ($action) {
-            'write' => $this->writeFile($path, $request['content'] ?? ''),
-            'replace' => $this->replaceInFile($path, $request['old_string'] ?? '', $request['new_string'] ?? ''),
-            'mkdir' => $this->makeDirectory($path),
+            'write' => $this->writeFile($resolvedPath, $request['content'] ?? ''),
+            'replace' => $this->replaceInFile($resolvedPath, $request['old_string'] ?? '', $request['new_string'] ?? ''),
+            'mkdir' => $this->makeDirectory($resolvedPath),
             default => json_encode(['success' => false, 'error' => "Unknown action: {$action}"]),
         };
     }
@@ -89,6 +93,38 @@ class FileWriteTool implements Tool
         return json_encode(['success' => true, 'path' => $path, 'replacements' => 1]);
     }
 
+    private function resolvePath(string $inputPath): ?string
+    {
+        $base = rtrim($this->workingDirectory, '/');
+        $candidate = str_starts_with($inputPath, '/') ? $inputPath : "{$base}/{$inputPath}";
+        $normalized = preg_replace('#/+#', '/', $candidate);
+        if ($normalized === null) {
+            return null;
+        }
+
+        $segments = explode('/', ltrim($normalized, '/'));
+        $safeSegments = [];
+        foreach ($segments as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+
+            if ($segment === '..') {
+                array_pop($safeSegments);
+
+                continue;
+            }
+
+            $safeSegments[] = $segment;
+        }
+
+        $resolved = '/'.implode('/', $safeSegments);
+
+        return str_starts_with($resolved.'/', $base.'/') || $resolved === $base
+            ? $resolved
+            : null;
+    }
+
     private function makeDirectory(string $path): string
     {
         if (is_dir($path)) {
@@ -113,14 +149,11 @@ class FileWriteTool implements Tool
                 ->description('Absolute or project-relative path to the target file or directory.')
                 ->required(),
             'content' => $schema->string()
-                ->description('Full file content for the "write" action.')
-                ->required(),
+                ->description('Full file content for the "write" action.'),
             'old_string' => $schema->string()
-                ->description('Exact string to find for the "replace" action. Must be unique in the file.')
-                ->required(),
+                ->description('Exact string to find for the "replace" action. Must be unique in the file.'),
             'new_string' => $schema->string()
-                ->description('Replacement string for the "replace" action.')
-                ->required(),
+                ->description('Replacement string for the "replace" action.'),
         ];
     }
 }

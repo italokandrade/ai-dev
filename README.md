@@ -95,7 +95,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 **Pontos-chave:**
 
 - `SpecialistAgent`, `QAAuditorAgent` e `DocsAgent` recebem o `project.local_path` ao serem instanciados. Todas as ferramentas de filesystem/shell/git (`FileReadTool`, `FileWriteTool`, `ShellExecuteTool`, `GitOperationTool`) já são escopadas ao path do Projeto Alvo via constructor.
-- O `BoostTool` deve ser instanciado com o mesmo `local_path` e roteia para `php artisan boost:*` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core. _Status de implementação: BoostTool atual opera no contexto do ai-dev-core — pendente tornar project-path-aware._
+- O `BoostTool` deve ser instanciado com o mesmo `local_path` e roteia para `php artisan boost:*` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core.
 - `DocsAgent` (`BoostTool.search-docs`) pesquisa a documentação instalada no **Boost do Projeto Alvo**, refletindo as versões exatas de Laravel/Filament/Livewire que aquele projeto tem instaladas.
 
 ---

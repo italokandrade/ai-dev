@@ -7,7 +7,7 @@
 | Ferramenta | Escopo de execução |
 |---|---|
 | `ShellExecuteTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool` | `working_directory` = `projects.local_path` do alvo (injetado no constructor). |
-| `BoostTool` | Envelopa as tools do Laravel Boost MCP (`search-docs`, `database-schema`, `database-query`, `browser-logs`, `last-error`) — devem ser resolvidas **no Boost do Projeto Alvo**. *(Implementation status: a versão atual ainda opera no ai-dev-core; tornar project-path-aware está na Fase 1 do roadmap. Prompts já assumem o estado-alvo.)* |
+| `BoostTool` | Envelopa as tools do Laravel Boost MCP (`search-docs`, `database-schema`, `database-query`, `browser-logs`, `last-error`) — resolvidas **no Boost do Projeto Alvo** via `working_directory = projects.local_path` injetado no constructor. |
 | `DocSearchTool` | Wrapper fino sobre `DocsAgent`, que por sua vez usa `BoostTool.search-docs`. Mesmo contexto do `BoostTool`. |
 
 **Consequência prática para o engenheiro de prompt:** ao descrever uma ação para a IA, nunca cite o caminho do ai-dev-core como se fosse o palco do trabalho. O agente recebe `project.local_path` como input — todos os caminhos absolutos que ele manipula devem começar com esse prefixo.
@@ -59,7 +59,7 @@ As ferramentas que tocam filesystem/shell/git recebem `string $workingDirectory`
 |---|---|---|
 | `search-docs` | Busca na documentação da stack TALL do alvo (Laravel, Livewire, Filament, Tailwind, Alpine, Anime.js) — com versão correspondente à instalada no alvo | `queries: string[]` |
 | `database-schema` | Retorna colunas, tipos, índices, FKs de uma tabela do alvo | `table: string` |
-| `database-query` | Executa SELECT no banco do alvo via schema estruturado *(Fase 2: migrar de SQL raw para `table/columns/where` com allowlist — ver §Hardening abaixo)* | `table: string`, `columns: string[]`, `where: array` *(alvo)* · `query: string`, `limit: int` *(atual)* |
+| `database-query` | Executa SELECT no banco do alvo via schema estruturado com validação de `table`, operadores e cláusulas `where` | `table: string`, `columns: string[]`, `where: array`, `limit: int` |
 | `browser-logs` | Últimos logs capturados pelo Telescope/Debugbar do alvo | `limit: int` |
 | `last-error` | Última exceção registrada em `storage/logs` do alvo | — |
 
@@ -93,9 +93,9 @@ O artigo [Production-Safe Database Tools](https://laravel.com/blog/laravel-ai-sd
 
 **Decisão deste projeto:** o `database-query` segue o padrão Query Builder apenas porque é um wrapper de uso interno da plataforma de IA (usada pelos agentes para inspecionar schema). **Para todo o desenvolvimento dos módulos do Projeto Alvo, as ferramentas de domínio de negócio criadas DEVEM usar a abordagem "Individual Eloquent Tools"** (Start Simple) como preconiza a Laravel, evitando expor a surface inteira do banco para o agente prematuramente.
 
-### Hardening do `database-query` *(Fase 2 — a implementar)*
+### Hardening do `database-query` *(Fase 2 — pendências)*
 
-A sub-tool `database-query` aceita atualmente SQL livre (`query: string`). Antes de ir para produção, ela deve receber as seguintes proteções, alinhadas com o padrão "Production-Safe Database Tools" do Laravel AI SDK blog:
+A sub-tool `database-query` já opera com payload estruturado (`table`, `columns`, `where`) e apply de validações básicas (allowlist de tabelas e operadores + redação de campos sensíveis + cap de saída). As pendências para produção, alinhadas com o padrão "Production-Safe Database Tools" do Laravel AI SDK blog, são:
 
 #### Allowlist de tabelas, colunas e operadores
 
@@ -115,7 +115,7 @@ private array $COLUMN_ALLOWLIST = [
 private array $OPERATOR_ALLOWLIST = ['=', '>', '<', '>=', '<=', 'LIKE', 'BETWEEN'];
 ```
 
-O schema da sub-tool deve ser migrado de `query: string` para um objeto estruturado (`table`, `columns`, `where`) — o mesmo padrão do blog — de forma que o LLM nunca passe SQL raw, apenas intenções validadas.
+Atualmente a validação de colunas ainda é genérica. O próximo passo é consolidar allowlist de colunas por tabela para reduzir ainda mais a superfície de consulta.
 
 #### Redação de dados sensíveis
 
@@ -186,7 +186,7 @@ Audite o `tool_calls_log` periodicamente para ver o que os agentes realmente con
 ## 2. DocSearchTool — Busca Focada em Docs TALL
 
 **Classe:** `App\Ai\Tools\DocSearchTool`
-**Constructor:** sem argumentos.
+**Constructor:** `string $workingDirectory` (opcional, propagado para `DocsAgent`/`BoostTool` no contexto do Projeto Alvo).
 **Responsabilidade:** wrapper sobre o `DocsAgent` (Haiku 4.5) que delega para `BoostTool.search-docs`. Expõe um schema mais simples que o `BoostTool` completo quando o agente só precisa de docs.
 
 ### Schema

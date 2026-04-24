@@ -3,6 +3,8 @@
 namespace App\Ai\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Process;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
@@ -13,8 +15,8 @@ class BoostTool implements Tool
      * Tables allowed for database-query.
      */
     private const array TABLE_ALLOWLIST = [
-        'users', 'projects', 'tasks', 'subtasks', 'project_specifications', 
-        'project_modules', 'project_quotations', 'social_accounts', 'system_settings'
+        'users', 'projects', 'tasks', 'subtasks', 'project_specifications',
+        'project_modules', 'project_quotations', 'social_accounts', 'system_settings',
     ];
 
     /**
@@ -22,9 +24,6 @@ class BoostTool implements Tool
      */
     private const array SENSITIVE_SUFFIXES = ['_token', '_secret', '_password', '_key', '_hash'];
 
-    /**
-     * Allowed operators for where clauses.
-     */
     private const array OPERATOR_ALLOWLIST = ['=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL'];
 
     public function __construct(
@@ -63,6 +62,7 @@ class BoostTool implements Tool
         $table = $args['table'] ?? null;
         $columns = $args['columns'] ?? ['*'];
         $limit = min($args['limit'] ?? 50, 100);
+        $where = is_array($args['where'] ?? null) ? $args['where'] : [];
 
         if (! in_array($table, self::TABLE_ALLOWLIST)) {
             return json_encode([
@@ -71,12 +71,75 @@ class BoostTool implements Tool
             ]);
         }
 
-        // Build a simple secure SQL query
-        $colsString = implode(', ', array_map(fn($c) => '"' . str_replace('"', '', $c) . '"', $columns));
-        $query = "SELECT {$colsString} FROM \"{$table}\" LIMIT {$limit}";
+        $colsString = implode(', ', array_map(fn ($c) => '"'.str_replace('"', '', $c).'"', $columns));
+        $query = "SELECT {$colsString} FROM \"{$table}\"";
+        $bindings = [];
+        $whereSql = [];
+
+        foreach ($where as $index => $condition) {
+            if (! is_array($condition)) {
+                return json_encode([
+                    'success' => false,
+                    'error' => "Invalid where condition at index {$index}.",
+                ]);
+            }
+
+            $column = $condition['column'] ?? null;
+            $operator = strtoupper((string) ($condition['operator'] ?? '='));
+            $value = $condition['value'] ?? null;
+
+            if (! is_string($column) || $column === '') {
+                return json_encode([
+                    'success' => false,
+                    'error' => "Invalid column in where condition at index {$index}.",
+                ]);
+            }
+
+            if (! in_array($operator, self::OPERATOR_ALLOWLIST, true)) {
+                return json_encode([
+                    'success' => false,
+                    'error' => "Operator '{$operator}' is not allowed.",
+                ]);
+            }
+
+            $quotedColumn = '"'.str_replace('"', '', $column).'"';
+
+            if (in_array($operator, ['IS NULL', 'IS NOT NULL'], true)) {
+                $whereSql[] = "{$quotedColumn} {$operator}";
+
+                continue;
+            }
+
+            if ($operator === 'IN') {
+                if (! is_array($value) || $value === []) {
+                    return json_encode([
+                        'success' => false,
+                        'error' => "Operator IN requires a non-empty array in where condition at index {$index}.",
+                    ]);
+                }
+
+                $placeholders = [];
+                foreach ($value as $inValue) {
+                    $placeholders[] = '?';
+                    $bindings[] = $inValue;
+                }
+                $whereSql[] = "{$quotedColumn} IN (".implode(', ', $placeholders).')';
+
+                continue;
+            }
+
+            $whereSql[] = "{$quotedColumn} {$operator} ?";
+            $bindings[] = $value;
+        }
+
+        if ($whereSql !== []) {
+            $query .= ' WHERE '.implode(' AND ', $whereSql);
+        }
+
+        $query .= " LIMIT {$limit}";
 
         try {
-            $records = \Illuminate\Support\Facades\DB::select($query);
+            $records = DB::select($query, $bindings);
             $resultArray = array_map(function ($record) {
                 return (array) $record;
             }, $records);
@@ -85,7 +148,7 @@ class BoostTool implements Tool
         } catch (\Exception $e) {
             return json_encode([
                 'success' => false,
-                'error' => 'Database query failed: ' . $e->getMessage()
+                'error' => 'Database query failed: '.$e->getMessage(),
             ]);
         }
     }
@@ -100,21 +163,21 @@ class BoostTool implements Tool
         foreach ($args as $key => $value) {
             if (is_array($value)) {
                 foreach ($value as $item) {
-                    $argsString .= " --{$key}=\"" . addslashes($item) . "\"";
+                    $argsString .= " --{$key}=\"".addslashes($item).'"';
                 }
             } else {
-                $argsString .= " --{$key}=\"" . addslashes((string)$value) . "\"";
+                $argsString .= " --{$key}=\"".addslashes((string) $value).'"';
             }
         }
 
-        $process = \Illuminate\Support\Facades\Process::path($this->workingDirectory)
+        $process = Process::path($this->workingDirectory)
             ->timeout(60)
             ->run("php artisan {$command} {$argsString}");
 
         if ($process->failed()) {
             return json_encode([
                 'success' => false,
-                'error' => "Boost tool '{$tool}' failed: " . $process->errorOutput(),
+                'error' => "Boost tool '{$tool}' failed: ".$process->errorOutput(),
                 'output' => $process->output(),
             ]);
         }
@@ -129,15 +192,17 @@ class BoostTool implements Tool
     {
         try {
             $data = json_decode($rawResult, true);
-            if (! is_array($data)) return mb_substr($rawResult, 0, 5000);
+            if (! is_array($data)) {
+                return mb_substr($rawResult, 0, 5000);
+            }
 
             // Redact sensitive fields
             $redactedData = $this->redactRecursive($data);
-            
+
             $encoded = json_encode($redactedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
             if (strlen($encoded) > 5000) {
-                return mb_substr($encoded, 0, 5000) . "\n... (result truncated to 5000 chars)";
+                return mb_substr($encoded, 0, 5000)."\n... (result truncated to 5000 chars)";
             }
 
             return $encoded;
@@ -163,6 +228,7 @@ class BoostTool implements Tool
                 }
             }
         }
+
         return $data;
     }
 
@@ -176,8 +242,14 @@ class BoostTool implements Tool
                 'queries' => $schema->array()->items($schema->string())->description('Queries for search-docs (array of strings)'),
                 'table' => $schema->string()->description('Table name for database-schema or database-query'),
                 'columns' => $schema->array()->items($schema->string())->description('Columns to retrieve for database-query (default ["*"])'),
+                'where' => $schema->array()->items(
+                    $schema->object([
+                        'column' => $schema->string()->description('Column name for WHERE clause')->required(),
+                        'operator' => $schema->string()->description('Operator (=, >, <, >=, <=, LIKE, ILIKE, IN, IS NULL, IS NOT NULL)')->required(),
+                        'value' => $schema->string()->description('Value for comparison. Omit for IS NULL / IS NOT NULL'),
+                    ])
+                )->description('Optional WHERE conditions combined with AND.'),
                 'limit' => $schema->integer()->description('Limit for logs or query results (default 50)'),
-                'query' => $schema->string()->description('Legacy SQL query (discouraged, use structured params)'),
             ])->description('Arguments for the selected tool.')
                 ->required(),
         ];
