@@ -6,14 +6,28 @@ use App\Services\SystemContextService;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
 #[MaxSteps(10)]
 #[Timeout(600)]
-class ModulePrdAgent implements Agent
+class ModulePrdAgent implements Agent, HasProviderOptions
 {
     use Promptable;
+
+    public function providerOptions(Lab|string $provider): array
+    {
+        if ($provider === 'kimi') {
+            return [
+                'max_completion_tokens' => 32768,
+                'response_format'       => ['type' => 'json_object'],
+            ];
+        }
+
+        return [];
+    }
 
     public function instructions(): Stringable|string
     {
