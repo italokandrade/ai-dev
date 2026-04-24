@@ -1,6 +1,6 @@
 # Schema do PRD (Product Requirement Document)
 
-Este documento define o formato **exato** que todo PRD e Sub-PRD deve seguir no ecossistema AI-Dev. O Sistema Inteiro a ser desenvolvido, cada módulo e cada submódulo devem ter um PRD salvo no banco de dados (`projects.prd_payload` e `project_modules.prd_payload`), assim como cada task também deve ter um PRD salvo no banco de dados (`tasks.prd_payload`). Dessa forma, as IAs ou os humanos que irão trabalhar nas atividades sabem exatamente o que devem fazer. Quando o Orchestrator quebra um PRD em Sub-PRDs para as subtasks, o campo `subtasks.sub_prd_payload` DEVE seguir o schema de Sub-PRD.
+Este documento define o formato **exato** que todo PRD, Blueprint Técnico e Sub-PRD deve seguir no ecossistema AI-Dev. O Sistema Inteiro a ser desenvolvido, cada módulo e cada submódulo devem ter um PRD salvo no banco de dados (`projects.prd_payload` e `project_modules.prd_payload`), o desenho técnico progressivo fica em `projects.blueprint_payload` e `project_modules.blueprint_payload`, e cada task também deve ter um PRD salvo no banco de dados (`tasks.prd_payload`). Dessa forma, as IAs ou os humanos que irão trabalhar nas atividades sabem exatamente o que devem fazer. Quando o Orchestrator quebra um PRD em Sub-PRDs para as subtasks, o campo `subtasks.sub_prd_payload` DEVE seguir o schema de Sub-PRD.
 
 O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas ANTES de aceitar a task. Se o JSON for inválido, a task é rejeitada com uma mensagem clara do que falta.
 
@@ -63,6 +63,71 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
 
 ---
 
+## 0.1. JSON Schema do Blueprint Técnico Global
+
+Este é o formato que preenche `projects.blueprint_payload`. Gerado pelo `ProjectBlueprintAgent` depois do PRD Master e antes dos módulos. O MER/ERD global identifica entidades e relacionamentos, mas **não define campos** neste nível; campos são adicionados progressivamente por `project_modules.blueprint_payload`.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI-Dev Technical Blueprint",
+  "type": "object",
+  "required": ["title", "artifact_type", "domain_model", "architecture"],
+  "properties": {
+    "title": { "type": "string" },
+    "artifact_type": { "type": "string", "enum": ["technical_blueprint"] },
+    "summary": { "type": "string" },
+    "domain_model": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "modules": { "type": "array", "items": { "type": "string" } },
+              "columns": { "type": "array", "maxItems": 0 }
+            }
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "target", "type"],
+            "properties": {
+              "source": { "type": "string" },
+              "target": { "type": "string" },
+              "type": { "type": "string" },
+              "foreign_key": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "use_cases": { "type": "array" },
+    "workflows": { "type": "array" },
+    "architecture": {
+      "type": "object",
+      "properties": {
+        "containers": { "type": "array" },
+        "components": { "type": "array" },
+        "integrations": { "type": "array" }
+      }
+    },
+    "api_surface": { "type": "array" },
+    "non_functional_decisions": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+---
+
 ## 1. JSON Schema do PRD do Módulo (Module PRD)
 
 Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pelo `ModulePrdAgent`.
@@ -111,6 +176,29 @@ Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pel
             }
           }
         }
+      }
+    },
+    "blueprint_contribution": {
+      "type": "object",
+      "description": "Contribuição deste módulo ao Blueprint Técnico Global. Pode detalhar entidades, campos, relacionamentos, casos de uso, workflows, componentes, integrações e API surface.",
+      "properties": {
+        "domain_model": {
+          "type": "object",
+          "properties": {
+            "entities": { "type": "array" },
+            "relationships": { "type": "array" }
+          }
+        },
+        "use_cases": { "type": "array" },
+        "workflows": { "type": "array" },
+        "architecture": {
+          "type": "object",
+          "properties": {
+            "components": { "type": "array" },
+            "integrations": { "type": "array" }
+          }
+        },
+        "api_surface": { "type": "array" }
       }
     },
     "api_endpoints": {

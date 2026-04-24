@@ -103,15 +103,29 @@ pending → blocked → pending
 
 **Job associado:** `GenerateProjectPrdJob` — fila `orchestrator`, timeout 600s.
 
-**Aprovação:** `Project::approvePrd()` + `Project::createModulesFromPrd()` cria apenas módulos raiz (`parent_id = null`).
+**Aprovação:** `Project::approvePrd()` libera a geração do Blueprint Técnico Global. A criação dos módulos raiz só ocorre depois de `Project::approveBlueprint()`.
 
 ---
 
-#### B.0.1. ModulePrdAgent ✅ (Novo — Granularidade Progressiva)
+#### B.0.1. ProjectBlueprintAgent ✅ (Novo — Blueprint Técnico Progressivo)
+
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o Blueprint Técnico Global depois do PRD Master e antes dos módulos.
+
+**Instruções:** Retorna JSON com MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações, API surface, decisões não funcionais e perguntas abertas. Não cria código, migrations ou scaffold físico.
+
+**Job associado:** `GenerateProjectBlueprintJob` — fila `orchestrator`, timeout 600s.
+
+**Aprovação:** `Project::approveBlueprint()` valida `blueprint_payload` e libera `Project::createModulesFromPrd()`.
+
+---
+
+#### B.0.2. ModulePrdAgent ✅ (Novo — Granularidade Progressiva)
 
 **O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera PRD Técnico detalhado para **um módulo específico**.
 
-**Instruções:** Recebe contexto do projeto + nome/descrição do módulo. Retorna JSON com: `title`, `objective`, `scope`, `database_schema`, `api_endpoints`, `business_rules`, `components`, `workflows`, `acceptance_criteria`, `estimated_complexity`, `estimated_hours`, `needs_submodules` (boolean), `submodules[]`.
+**Instruções:** Recebe contexto do projeto + nome/descrição do módulo + Blueprint Técnico Global atual. Retorna JSON com: `title`, `objective`, `scope`, `database_schema`, `blueprint_contribution`, `api_endpoints`, `business_rules`, `components`, `workflows`, `acceptance_criteria`, `estimated_complexity`, `estimated_hours`, `needs_submodules` (boolean), `submodules[]`.
+
+**Blueprint progressivo:** `ProjectBlueprintService` incorpora `blueprint_contribution` de cada módulo/submódulo em `projects.blueprint_payload`, adicionando campos, relacionamentos, workflows, componentes e APIs sem perder o desenho global.
 
 **Decisão inteligente:** O próprio agente decide se o módulo precisa de submódulos baseado na complexidade. Módulos simples (ex: "Configurações") retornam `needs_submodules = false` e viram folhas imediatas.
 
@@ -224,23 +238,18 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 
 ### Módulo C — Ferramentas Atômicas (Tool Layer)
 
-#### C.1. BoostTool ⚠️ CRÍTICO
+#### C.1. BoostTool ✅⚠️
 
-**O que existe:** Implementa `Tool`. Mapeia sub-tools do Boost (`search-docs`, `database-schema`, `database-query`, `browser-logs`, `last-error`). Instancia as classes Boost via `app()`.
+**O que existe:** Implementa `Tool`. Mapeia sub-tools do Boost (`search-docs`, `database-schema`, `database-query`, `browser-logs`, `last-error`, `application-info`) e executa `php artisan boost:execute-tool` dentro do `projects.local_path` do Projeto Alvo.
 
-**Problemas críticos:**
-- ❌ **Não é project-path-aware.** Não tem `workingDirectory` no constructor. As classes Boost são instanciadas via `app()` e operam no contexto do ai-dev-core, **não do Projeto Alvo**. Isso é a falha mais crítica do sistema: o agente lê o schema do banco errado.
-- ❌ `BoostTool` não é instanciado com `local_path` no `SpecialistAgent`. Atualmente o `SpecialistAgent` passa `new BoostTool` sem argumentos — quando deveria passar `new BoostTool($this->projectPath)`.
-- ❌ `DocsAgent` e `QAAuditorAgent` também usam `new BoostTool` sem path.
-- ❌ Schema do `database-query` usa SQL raw — sem allowlist, sem redação de campos sensíveis, sem conexão readonly, sem cap de 5.000 chars.
+**Status atual:**
+- ✅ É project-path-aware via `__construct(?string $workingDirectory)`.
+- ✅ `SpecialistAgent`, `DocsAgent`, `DocSearchTool` e `QAAuditorAgent` propagam o `local_path`.
+- ✅ `database-query` usa payload estruturado, valida tabela/coluna contra o schema real do alvo, bloqueia tabelas internas, bloqueia colunas sensíveis, aplica allowlist de operadores e limita saída a 5.000 chars.
 
-**Refatoração necessária (Fase 1 — bloqueante):**
-1. Adicionar `__construct(private readonly ?string $workingDirectory = null)`.
-2. Rotear todas as sub-tools para o `workingDirectory` recebido (executar `php artisan boost:*` dentro do `local_path`).
-3. Atualizar todos os agentes que instanciam `BoostTool` para passar o `projectPath`.
-
-**Refatoração necessária (Fase 2 — alta prioridade):**
-4. Hardening do `database-query`: allowlist de tabelas/colunas/operadores, redação de campos `_token/_secret/_password/_key/_hash`, conexão `readonly`, cap de 5.000 chars.
+**Pendente para produção:**
+1. Provisionar conexão `readonly` em cada Projeto Alvo e passar `database="readonly"` nas chamadas de consulta.
+2. Implementar listener de auditoria para popular `tool_calls_log` automaticamente em cada tool call.
 
 ---
 
@@ -268,29 +277,19 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 
 ---
 
-#### C.5. ShellExecuteTool ⚠️
+#### C.5. ShellExecuteTool ✅⚠️
 
-**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Tem lista negra (`BLOCKED_PATTERNS`) de comandos perigosos.
+**O que existe:** Implementa `Tool`. Recebe `$workingDirectory` no constructor. Bloqueia operadores de shell e executa apenas comandos allowlisted (`php artisan`, `composer`, `npm`, `npx`, `pint`, `pest`, `phpstan`, `phpunit`, `enlightn`, `nikto`, `sqlmap`).
 
-**O que falta:**
-- ❌ Não tem **allowlist de binários** — o PRD exige allowlist explícita (`php`, `composer`, `git`, `npm`, `phpstan`, `enlightn`, `nikto`, `composer audit`). A lista negra atual apenas bloqueia padrões específicos como `rm -rf /`, mas qualquer outro binário passa.
-
-**Refatoração necessária (Fase 2):**
-1. Substituir `BLOCKED_PATTERNS` por allowlist de binários explícita.
-2. Binário fora da allowlist → lançar exception auditada.
+**Pendente:** Ampliar telemetria/auditoria por evento `Tool::dispatched()`; a execução local já está limitada por allowlist.
 
 ---
 
-#### C.6. DocSearchTool ⚠️
+#### C.6. DocSearchTool ✅
 
 **O que existe:** Implementa `Tool`. Delega para `DocsAgent` que usa `BoostTool.search-docs` internamente.
 
-**O que falta:**
-- ❌ Não é project-path-aware. Não recebe `workingDirectory` e não passa path para o `DocsAgent`/`BoostTool` interno. Após o fix do `BoostTool` (C.1), este tool também precisará receber o path.
-
-**Refatoração necessária (Fase 1, junto com BoostTool):**
-1. Adicionar `__construct(private readonly string $workingDirectory)`.
-2. Passar `workingDirectory` ao instanciar `BoostTool` internamente.
+**Status:** Alinhado. Recebe `workingDirectory` e o propaga ao `DocsAgent`/`BoostTool`.
 
 ---
 
@@ -298,7 +297,7 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 
 #### D.1. OrchestratorJob ⚠️
 
-**O que existe:** Implementa `ShouldQueue`. Fila `orchestrator`. Transição `pending → in_progress`, chama `OrchestratorAgent`, cria subtasks, despacha subtasks prontas via `SubagentJob`.
+**O que existe:** Implementa `ShouldQueue`. Fila `orchestrator`. Transição `pending → in_progress`, chama `OrchestratorAgent`, cria subtasks, despacha subtasks prontas via `ProcessSubtaskJob`.
 
 **Problemas:**
 - ✅ Usa `AiRuntimeConfigService::apply(LEVEL_PREMIUM)` para resolver provider/model/key dinamicamente do `SystemSetting`.
@@ -311,21 +310,20 @@ Não existe. Deve ser criado na Fase 2. Implementará `Agent, HasStructuredOutpu
 
 ---
 
-#### D.2. SubagentJob ⚠️
+#### D.2. ProcessSubtaskJob ✅⚠️
 
-**O que existe:** Implementa `ShouldQueue`. Fila `agents`. Instancia `SpecialistAgent($workDir)`, chama `prompt()`, captura diff, despacha `QAAuditJob`.
+**O que existe:** Implementa `ShouldQueue`. Fila `subtasks`. Instancia `SpecialistAgent($workDir, $assignedAgent)`, chama `prompt()`, captura diff do working tree/staged changes e despacha `QAAuditJob`.
 
 **Problemas:**
-- ⚠️ **Nome diverge do PRD**: o PRD define `ProcessSubtaskJob`, o código chama `SubagentJob`. Deve ser renomeado para consistência.
-- ⚠️ **Fila diverge**: usa fila `agents`, mas o Horizon está configurado com supervisor para fila `subagent`. **Bug de roteamento de fila.**
 - ✅ Usa `AiRuntimeConfigService::apply(LEVEL_HIGH)` para resolver provider/model/key dinamicamente.
-- ❌ Não passa `assigned_agent` ao instanciar `SpecialistAgent` — agente não sabe qual especialidade aplicar.
+- ✅ Passa `assigned_agent` ao `SpecialistAgent`.
+- ⚠️ File locks ainda vivem no Model `Subtask`; extrair para service na Fase 2.
+- ⚠️ Não cria branch isolado por task.
 
-**Refatoração necessária (Fase 1):**
-1. Renomear para `ProcessSubtaskJob`.
-2. Corrigir fila para `subtasks` (e atualizar Horizon).
-
-4. Passar `assigned_agent` ao construtor do `SpecialistAgent`.
+**Refatoração necessária (Fase 2):**
+1. Extrair FileLockManager para `app/Services`.
+2. Implementar branch por task e rollback por commit hash.
+3. Integrar auditoria automática de tool calls.
 
 ---
 
@@ -362,16 +360,18 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 | Job | Fila | Propósito | Timeout |
 |---|---|---|---|
 | `GenerateProjectPrdJob` | `orchestrator` | Gera PRD Master do projeto via `ProjectPrdAgent` (apenas módulos) | 600s |
-| `GenerateModulePrdJob` | `orchestrator` | Gera PRD Técnico de um módulo via `ModulePrdAgent` | 600s |
+| `GenerateProjectBlueprintJob` | `orchestrator` | Gera Blueprint Técnico Global via `ProjectBlueprintAgent` | 600s |
+| `GenerateModulePrdJob` | `orchestrator` | Gera PRD Técnico de um módulo via `ModulePrdAgent` e incorpora contribuição ao Blueprint | 600s |
 | `GenerateModuleSubmodulesJob` | `orchestrator` | Cria submódulos a partir do `prd_payload.submodules` do módulo | 600s |
 | `GenerateModuleTasksJob` | `orchestrator` | Cria tasks a partir do PRD técnico de um módulo folha | 600s |
 
 **Fluxo de ativação (UI Filament):**
 1. Usuário clica "Gerar PRD do Projeto" → `GenerateProjectPrdJob`
-2. Usuário aprova PRD → `approvePrd()` + `createModulesFromPrd()` (módulos raiz)
-3. Usuário entra em um módulo → clica "Gerar PRD do Módulo" → `GenerateModulePrdJob`
-4. Se PRD retorna `needs_submodules = true` → clica "Criar Submódulos" → `GenerateModuleSubmodulesJob`
-5. Se PRD retorna `needs_submodules = false` → clica "Criar Tasks" → `GenerateModuleTasksJob`
+2. Usuário aprova PRD → `approvePrd()` + `GenerateProjectBlueprintJob`
+3. Usuário aprova Blueprint → `approveBlueprint()` + `createModulesFromPrd()` (módulos raiz)
+4. Usuário entra em um módulo → clica "Gerar PRD do Módulo" → `GenerateModulePrdJob`
+5. Se PRD retorna `needs_submodules = true` → clica "Criar Submódulos" → `GenerateModuleSubmodulesJob`
+6. Se PRD retorna `needs_submodules = false` → clica "Criar Tasks" → `GenerateModuleTasksJob`
 
 #### D.7. Jobs Auxiliares existentes (fora do pipeline principal)
 
@@ -440,15 +440,15 @@ Todos já implementados:
 
 ---
 
-#### F.2. ShellExecuteTool Binary Allowlist ❌
+#### F.2. ShellExecuteTool Binary Allowlist ✅
 
-Ver C.5. Atualmente usa lista negra, não allowlist. Fase 2.
+Ver C.5. A execução já usa allowlist de comandos e bloqueia operadores de shell.
 
 ---
 
-#### F.3. BoostTool database-query Hardening ❌
+#### F.3. BoostTool database-query Hardening ✅⚠️
 
-Ver C.1. Fase 2 — alta prioridade.
+Ver C.1. O wrapper já valida contra schema real, bloqueia campos sensíveis e limita saída; falta provisionar conexão `readonly` por Projeto Alvo.
 
 ---
 
@@ -503,20 +503,19 @@ Não provisionado. Script de criação de usuário `aidev_readonly` com `GRANT S
 
 ### Módulo I — Horizon e Filas
 
-#### I.1. Config do Horizon ⚠️
+#### I.1. Config do Horizon ✅
 
-**Problema crítico:** O `SubagentJob` publica na fila `agents`, mas o Horizon tem supervisor configurado para fila `subagent`. Os jobs de subtask **nunca serão processados** com a config atual.
+**Status:** Filas alinhadas no código atual. `ProcessSubtaskJob` publica em `subtasks`, `OrchestratorJob` publica em `orchestrator` e `QAAuditJob` publica em `qa`; o Horizon possui supervisors correspondentes.
 
-**Tabela de divergências:**
+**Tabela de filas:**
 
 | Job | Fila usada pelo Job | Supervisor Horizon | Status |
 |---|---|---|---|
 | `OrchestratorJob` | `orchestrator` | `orchestrator` | ✅ |
-| `SubagentJob` | `agents` | `subagent` | ❌ Bug |
+| `ProcessSubtaskJob` | `subtasks` | `subtasks` | ✅ |
 | `QAAuditJob` | `qa` | `qa` | ✅ |
 
-**Necessário (Fase 1 — bloqueante):**
-1. Alinhar fila do `SubagentJob` (futuro `ProcessSubtaskJob`) para `subtasks` e criar supervisor correspondente no Horizon.
+**Pendente:** Operacionalizar Supervisor no servidor para manter Horizon ativo em produção.
 
 ---
 
@@ -563,13 +562,13 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 
 - [x] ✅ **[Bug #1 — Resolvido]** Todos os Jobs usam `AiRuntimeConfigService` para provider dinâmico
 - [x] ✅ **[Bug #2 — Resolvido]** Todos os Jobs usam `AiRuntimeConfigService` para provider dinâmico
-- [ ] **[Bug #3 — Bloqueante]** Alinhar fila do `SubagentJob` com supervisor do Horizon (`agents` → `subtasks`, criar supervisor)
-- [ ] **[Bug #4 — Crítico]** `BoostTool` project-path-aware: adicionar `__construct(private readonly ?string $workingDirectory = null)` e rotear sub-tools para o `workingDirectory`
-- [ ] **[Bug #5 — Crítico]** `SpecialistAgent` passar `new BoostTool($this->projectPath)` em vez de `new BoostTool`
-- [ ] **[Bug #6 — Crítico]** `QAAuditorAgent` passar `new BoostTool($this->projectPath)` — o auditor precisa ler o banco/docs do Projeto Alvo
-- [ ] **[Bug #7]** `DocSearchTool` receber `workingDirectory` e passar ao `BoostTool` interno
-- [ ] **[Melhoria]** `SpecialistAgent` receber `assigned_agent` slug no constructor e adaptar `instructions()` por especialidade
-- [ ] **[Melhoria]** Renomear `SubagentJob` → `ProcessSubtaskJob` (mantendo alias para retrocompatibilidade da fila)
+- [x] ✅ **[Bug #3 — Resolvido]** Fila de subtasks alinhada: `ProcessSubtaskJob` → `subtasks` e Horizon → `subtasks`
+- [x] ✅ **[Bug #4 — Resolvido]** `BoostTool` project-path-aware via `workingDirectory` e `boost:execute-tool`
+- [x] ✅ **[Bug #5 — Resolvido]** `SpecialistAgent` passa `new BoostTool($this->projectPath)`
+- [x] ✅ **[Bug #6 — Resolvido]** `QAAuditorAgent` passa `new BoostTool($this->projectPath)`
+- [x] ✅ **[Bug #7 — Resolvido]** `DocSearchTool` recebe `workingDirectory` e passa ao `DocsAgent`/`BoostTool`
+- [x] ✅ **[Melhoria — Resolvida]** `SpecialistAgent` recebe `assigned_agent` slug no constructor
+- [x] ✅ **[Melhoria — Resolvida]** Job de subagente consolidado como `ProcessSubtaskJob`
 - [ ] Teste end-to-end documentado: task "Criar Model de Post" no Projeto Alvo executada de ponta a ponta sem intervenção humana
 
 ---
@@ -582,7 +581,7 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 
 - [ ] **[Alta — segurança/validação]** `HasStructuredOutput` implementado em: `OrchestratorAgent`, `QAAuditorAgent`, `SpecificationAgent`, `QuotationAgent`
 - [ ] **[Alta — auditoria]** Migration `tool_calls_log` + Model `ToolCallLog` + listener `Tool::dispatched()` em `AppServiceProvider`
-- [ ] **[Alta — segurança]** `BoostTool.database-query` hardening: schema estruturado com allowlist, redação de campos sensíveis, conexão `readonly`, cap 5.000 chars
+- [ ] **[Alta — segurança]** Provisionar conexão `readonly` por Projeto Alvo para completar o hardening de defesa em profundidade do `BoostTool.database-query`
 - [ ] Migration `agent_executions` + Model `AgentExecution`
 - [ ] Migration `webhooks_config` + Model `WebhookConfig`
 - [ ] `SecuritySpecialist` agent implementado (`Agent, HasStructuredOutput, HasTools`)
@@ -591,7 +590,7 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 - [ ] `PerformanceAnalysisJob` implementado (fila `performance`)
 - [ ] `QAAuditJob` despachar `SecurityAuditJob` após todas subtasks aprovadas (em vez de ir direto para `completed`)
 - [ ] `QAAuditJob` remover auto-approve em caso de falha de parse
-- [ ] `ShellExecuteTool` substituir lista negra por allowlist explícita de binários
+- [x] ✅ `ShellExecuteTool` usa allowlist explícita de comandos/binários
 - [ ] `GitOperationTool` receber action `revert` com `commit_hash`
 - [ ] `OrchestratorJob` criar branch `task/{uuid_short}` e salvar em `tasks.git_branch`
 - [ ] `SpecialistAgent` remover criação de branch — trabalhar no branch da task

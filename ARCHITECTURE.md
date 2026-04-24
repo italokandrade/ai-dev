@@ -65,7 +65,7 @@ A tabela comparativa canônica — com repositório, codebase, banco, dependênc
 O ai-dev-core se conecta a cada Projeto Alvo por **dois vetores** e nada mais:
 
 1. **Filesystem** — `projects.local_path` armazena o caminho absoluto (ex: `/var/www/html/projetos/portal`). `FileReadTool`, `FileWriteTool`, `ShellExecuteTool` e `GitOperationTool` recebem esse path no constructor e operam **exclusivamente** dentro dele.
-2. **Boost MCP do Projeto Alvo** — o `BoostTool` envelopa `php artisan boost:*` executado **dentro** do `local_path` do alvo. Isso garante que `database-schema`, `search-docs`, `database-query`, `browser-logs` reflitam o estado real **daquele** projeto (inclusive versões de Laravel/Filament/Livewire instaladas, que podem divergir do ai-dev-core).
+2. **Boost MCP do Projeto Alvo** — o `BoostTool` envelopa `php artisan boost:execute-tool` executado **dentro** do `local_path` do alvo. Isso garante que `database-schema`, `search-docs`, `database-query`, `browser-logs` reflitam o estado real **daquele** projeto (inclusive versões de Laravel/Filament/Livewire instaladas, que podem divergir do ai-dev-core).
 
 Nenhum estado do ai-dev-core vaza para o Projeto Alvo: o agente escreve código, commita no repositório do alvo, executa testes no alvo. A trilha de auditoria (quem fez o quê, tokens gastos, transições de status) fica registrada **somente** no banco do ai-dev-core.
 
@@ -111,7 +111,9 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `local_path` | String(500) / Nullable | Caminho absoluto no servidor (ex: `/var/www/html/projetos/portal`) |
 | `anthropic_session_id` | String / Nullable | UUID da conversa persistida pelo SDK (trait `RemembersConversations`) — contexto infinito por projeto |
 | `prd_payload` | JSON / Nullable | PRD Master do projeto — módulos de alto nível gerados pelo `ProjectPrdAgent` |
-| `prd_approved_at` | Timestamp / Nullable | Quando o PRD Master foi aprovado — dispara `createModulesFromPrd()` |
+| `prd_approved_at` | Timestamp / Nullable | Quando o PRD Master foi aprovado — libera geração do Blueprint Técnico |
+| `blueprint_payload` | JSON / Nullable | Blueprint Técnico Global — MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface |
+| `blueprint_approved_at` | Timestamp / Nullable | Quando o Blueprint Técnico foi aprovado — libera `createModulesFromPrd()` |
 | `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
@@ -260,7 +262,7 @@ O AI-Dev usa **dois proxies de IA** com papéis invertidos por classe de agente:
 ---
 
 **`project_specifications`** — Especificação técnica gerada pela IA (legado — mantido para retrocompatibilidade).
-O fluxo ativo usa `projects.prd_payload` (PRD Master gerado pelo `ProjectPrdAgent`) + `project_modules.prd_payload` (PRD Técnico gerado pelo `ModulePrdAgent`).
+O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_payload` (Blueprint Técnico Global) e `project_modules.prd_payload`/`blueprint_payload` (PRD Técnico e contribuição de módulo).
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -276,14 +278,17 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master gerado pelo `ProjectPrdAgen
 
 **Fluxo ativo (Granularidade Progressiva):**
 1. `ProjectPrdAgent` gera `projects.prd_payload` com módulos de alto nível
-2. `Project::approvePrd()` + `createModulesFromPrd()` cria módulos raiz
-3. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo
-4. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
+2. `Project::approvePrd()` libera `GenerateProjectBlueprintJob`
+3. `ProjectBlueprintAgent` gera `projects.blueprint_payload`
+4. `Project::approveBlueprint()` + `createModulesFromPrd()` cria módulos raiz
+5. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo, usando o Blueprint como trilho
+6. `ProjectBlueprintService` incorpora `blueprint_contribution` do módulo ao Blueprint Global
+7. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
 
 **Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
-1. Acionado pelo botão "Auto Aprovar PRD — Cascata Completa" em `ViewProject`
-2. Aprova PRD Master + cria módulos raiz + despacha `CascadeModulePrdJob` para cada um
-3. Cada job gera o PRD técnico via `ModulePrdAgent`, auto-aprova e:
+1. Acionado pelo botão "Auto Aprovar Blueprint — Cascata Completa" em `ViewProject`
+2. Aprova o Blueprint, cria módulos raiz e despacha `CascadeModulePrdJob` para cada um
+3. Cada job gera o PRD técnico via `ModulePrdAgent`, incorpora a contribuição ao Blueprint, auto-aprova e:
    - Se `needs_submodules: true` → cria submódulos e despacha o job para cada filho
    - Se `needs_submodules: false` → cria tasks (`status: pending`) — **nunca executadas automaticamente**
 4. O ciclo repete recursivamente até todas as folhas terem tasks
@@ -321,7 +326,7 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master gerado pelo `ProjectPrdAgen
 ---
 
 **`project_modules`** — Módulos e submódulos do projeto (estrutura hierárquica).
-O sistema adota **granularidade progressiva**: cada módulo/submódulo possui seu próprio PRD técnico (`prd_payload`) que decide o próximo passo.
+O sistema adota **granularidade progressiva**: cada módulo/submódulo possui seu próprio PRD técnico (`prd_payload`) e uma contribuição de Blueprint (`blueprint_payload`) que decide o próximo passo e enriquece o desenho global.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
@@ -335,6 +340,7 @@ O sistema adota **granularidade progressiva**: cada módulo/submódulo possui se
 | `dependencies` | JSON / Nullable | Array de UUIDs de módulos que devem ser concluídos antes deste |
 | `progress_percentage` | TinyInt (0-100) | % calculado automaticamente com base nas tasks concluídas |
 | `prd_payload` | JSON / Nullable | PRD Técnico do módulo — gerado pelo `ModulePrdAgent`. Contém: objetivo, schema, APIs, regras, workflows, critérios, `needs_submodules`, `submodules` |
+| `blueprint_payload` | JSON / Nullable | Contribuição deste módulo ao Blueprint Global: entidades, campos, relacionamentos, workflows, componentes, integrações e APIs |
 | `started_at` | Timestamp / Nullable | Quando o desenvolvimento começou |
 | `completed_at` | Timestamp / Nullable | Quando foi concluído |
 | `created_at` | Timestamp | Data de criação |
@@ -693,16 +699,16 @@ A comunicação **NÃO** é feita por chamada HTTP entre serviços, nem por invo
                     │ 2. Chama LLM (Claude)        │
                     │ 3. Quebra PRD em Sub-PRDs    │
                     │ 4. Cria subtasks no DB       │
-                    │ 5. Despacha SubagentJobs     │
+                    │ 5. Despacha ProcessSubtaskJob │
                     └──────────────┬───────────────┘
                                    │
                     ┌──────────────▼───────────────┐
                     │  Redis Queue: "executors"     │
                     │                               │
                     │ ┌──────────────────────────┐  │
-                    │ │ SubagentJob(subtask_id=1) │  │ ◀── Backend Specialist
-                    │ │ SubagentJob(subtask_id=2) │  │ ◀── Frontend Specialist
-                    │ │ SubagentJob(subtask_id=3) │  │ ◀── Filament Specialist
+                    │ │ ProcessSubtaskJob(id=1)   │  │ ◀── Backend Specialist
+                    │ │ ProcessSubtaskJob(id=2)   │  │ ◀── Frontend Specialist
+                    │ │ ProcessSubtaskJob(id=3)   │  │ ◀── Filament Specialist
                     │ └──────────────────────────┘  │
                     └──────────────┬────────────────┘
                                    │
@@ -755,7 +761,7 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 
 **Workers da fila `orchestrator`:** durante cascata de PRD, múltiplos workers em paralelo aceleram a geração (cada módulo leva 3-7 minutos de chamada LLM). O `CascadeModulePrdJob` é seguro para múltiplos workers porque cada job é vinculado a um módulo específico via `module_id`. Com `tries=3` e `timeout=660s`, jobs individuais podem ser retentados sem duplicar dados (checagem de existência antes de criar submódulos/tasks).
 
-**Como escalar os subagentes?** Basta alterar o `processes` no config do Horizon para a fila `executors`. Em um servidor com mais RAM, pode-se subir para 5 ou 10 workers paralelos. O sistema se adapta automaticamente porque cada SubagentJob já sabe qual subtask processar (via `subtask_id`).
+**Como escalar os subagentes?** Basta alterar o `maxProcesses` no config do Horizon para a fila `subtasks`. Em um servidor com mais RAM, pode-se subir para 5 ou 10 workers paralelos. O sistema se adapta automaticamente porque cada `ProcessSubtaskJob` já sabe qual subtask processar (via `subtask_id`).
 
 ### 3.3. Classes Laravel Envolvidas (Mapa do Código — Laravel 13)
 
@@ -764,7 +770,8 @@ app/
 ├── Ai/
 │   ├── Agents/
 │   │   ├── ProjectPrdAgent.php          ← implements Agent — Gera PRD Master do projeto (apenas módulos)
-│   │   ├── ModulePrdAgent.php           ← implements Agent — Gera PRD Técnico de um módulo (decide submódulos)
+│   │   ├── ProjectBlueprintAgent.php    ← implements Agent — Gera Blueprint Técnico Global antes dos módulos
+│   │   ├── ModulePrdAgent.php           ← implements Agent — Gera PRD Técnico de um módulo (decide submódulos e contribui com o Blueprint)
 │   │   ├── GenerateFeaturesAgent.php    ← implements Agent — Gera lista de features por camada (backend|frontend) em JSON
 │   │   ├── RefineFeatureAgent.php       ← implements Agent, HasTools, MaxSteps(10) — Refina feature individual via BoostTool
 │   │   ├── OrchestratorAgent.php        ← implements Agent, HasStructuredOutput, HasTools — Planner
@@ -788,8 +795,9 @@ app/
 │
 ├── Jobs/
 │   ├── GenerateProjectPrdJob.php        ← Gera PRD Master via ProjectPrdAgent → salva em projects.prd_payload
-│   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva em project_modules.prd_payload (manual)
-│   ├── CascadeModulePrdJob.php          ← Gera PRD + auto-aprova + despacha filhos recursivamente (cascata automática)
+│   ├── GenerateProjectBlueprintJob.php  ← Gera Blueprint Técnico via ProjectBlueprintAgent → salva em projects.blueprint_payload
+│   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva PRD e atualiza Blueprint
+│   ├── CascadeModulePrdJob.php          ← Gera PRD + atualiza Blueprint + auto-aprova + despacha filhos recursivamente
 │   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo (aprovação manual)
 │   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha (aprovação manual)
 │   ├── GenerateProjectFeaturesJob.php   ← Gera project_features via GenerateFeaturesAgent (type: backend|frontend)
@@ -824,6 +832,7 @@ app/
 │
 ├── Services/
 │   ├── SystemContextService.php     ← Monta contexto dinâmico (padrões TALL + RAG + histórico) para a mensagem user do prompt()
+│   ├── ProjectBlueprintService.php  ← Normaliza e incorpora contribuições de módulo ao Blueprint Técnico Global
 │   ├── FileLockManager.php          ← Mutex de arquivos para subtasks paralelas (Fase 2 — planejado)
 │   ├── PRDValidator.php             ← Valida PRD contra o JSON Schema (Fase 2 — planejado)
 │   └── TaskOrchestrator.php         ← Coordena o pipeline Agent→QA→Git (Fase 2 — planejado)
@@ -945,7 +954,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
      a. Verificar: todas as subtasks em `dependencies` estão com status `success`?
         → NÃO: Manter status `pending` e esperar.
         → SIM: Avançar para execução.
-     b. O SubagentJob monta o Prompt:
+     b. O ProcessSubtaskJob monta o Prompt:
         [System Prompt do Agente (agents_config.role_description)]
         + [Padrões de Código relevantes (context_library)]
         + [Sub-PRD desta subtask (subtasks.sub_prd_payload)]
@@ -988,7 +997,7 @@ EVENTO GATILHO (Webhook/Nova Tarefa na UI/Sentinela):
        → Se retry_count < max_retries (default: 3):
          → Salvar feedback em subtask.qa_feedback.
          → Reverter status para 'pending'.
-         → Despachar novo SubagentJob com o feedback do QA incluído no prompt.
+         → Despachar novo ProcessSubtaskJob com o feedback do QA incluído no prompt.
          → O subagente corrige o código baseado EXATAMENTE no feedback do QA.
        → Se retry_count >= max_retries:
          → Marcar subtask como 'error'.
@@ -1412,7 +1421,7 @@ O catálogo completo de ferramentas, com schemas de entrada/saída e exemplos pr
 | 3 | **FileReadTool** | `App\Ai\Tools\FileReadTool` | Leitura de arquivos do Projeto Alvo com limites de linhas/bytes |
 | 4 | **FileWriteTool** | `App\Ai\Tools\FileWriteTool` | Escrita/patch de arquivos do Projeto Alvo com validação de path |
 | 5 | **GitOperationTool** | `App\Ai\Tools\GitOperationTool` | `status`, `diff`, `add`, `commit`, `branch` no repo do Projeto Alvo |
-| 6 | **ShellExecuteTool** | `App\Ai\Tools\ShellExecuteTool` | Execução de `php artisan`, `composer`, `npm`, `php -l` no cwd do Projeto Alvo |
+| 6 | **ShellExecuteTool** | `App\Ai\Tools\ShellExecuteTool` | Execução allowlisted de `php artisan`, `composer`, `npm`, `npx` e binários QA no cwd do Projeto Alvo |
 
 **Por que apenas 6?** O contrato `Tool` do Laravel AI SDK encoraja ferramentas enxutas com `schema()` preciso — cada Tool é uma classe PHP com ações bem definidas. Ferramentas especializadas (testes, segurança, performance, deploy, redes sociais) são cobertas pela combinação `ShellExecuteTool` + `BoostTool` no Projeto Alvo: `php artisan test`, `php artisan enlightn`, `composer audit`, etc. rodam via shell; schema e logs vêm do Boost. Funcionalidades futuras (publicação em redes sociais, análise dinâmica) serão adicionadas como Agents dedicados, não como Tools genéricas.
 
@@ -1542,7 +1551,7 @@ Para evitar a "síndrome do design perfeito sem código", o projeto será implem
   - Usar `Promptable` trait + `implements Agent, HasStructuredOutput, HasTools`
   - Configurar `config/ai.php` com provider OpenRouter (família Anthropic — Opus 4.7 / Sonnet 4.6 / Haiku 4.5)
 - [ ] Implementar 6 Tools SDK: `BoostTool`, `DocSearchTool`, `FileReadTool`, `FileWriteTool`, `GitOperationTool`, `ShellExecuteTool` (`implements Laravel\Ai\Contracts\Tool`)
-- [ ] Implementar `OrchestratorJob`, `SubagentJob`, `QAAuditJob` (despachados via Laravel Queue)
+- [ ] Implementar `OrchestratorJob`, `ProcessSubtaskJob`, `QAAuditJob` (despachados via Laravel Queue)
 - [ ] Configurar Horizon + Supervisor para as 4 filas principais
 - [ ] Teste end-to-end: Criar uma task "Criar Model de Post" e ver o sistema executar sozinho
 
@@ -1953,7 +1962,7 @@ O Boost é instalado **em cada aplicação Laravel do ecossistema** (ai-dev-core
 
 #### Agentes Autônomos (Fluxo AI-Dev) → Boost do Projeto Alvo
 
-O `SpecialistAgent` não precisa de contexto sobre Filament ou Livewire no seu prompt. O `BoostTool` deve ser instanciado com o `local_path` do Projeto Alvo e rotear `php artisan boost:*` **dentro** daquele path. Assim, o agente recebe schema, docs e exemplos referentes à versão exata instalada **no alvo**, não no ai-dev-core:
+O `SpecialistAgent` não precisa de contexto sobre Filament ou Livewire no seu prompt. O `BoostTool` é instanciado com o `local_path` do Projeto Alvo e roteia `php artisan boost:execute-tool` **dentro** daquele path. Assim, o agente recebe schema, docs e exemplos referentes à versão exata instalada **no alvo**, não no ai-dev-core:
 
 ```
 ❌ Sem Boost — agente carrega docs no contexto:
@@ -1964,14 +1973,14 @@ O `SpecialistAgent` não precisa de contexto sobre Filament ou Livewire no seu p
 
 ✅ Com Boost MCP do Projeto Alvo — agente só recebe o problema:
 "Crie um Resource Filament para a entidade Produto com campos: nome, preço, estoque."
-→ BoostTool(projectPath=/var/www/html/projetos/portal) → executa boost:* dentro do alvo
+→ BoostTool(projectPath=/var/www/html/projetos/portal) → executa boost:execute-tool dentro do alvo
 → Retorna scaffold na versão real instalada do alvo → agente implementa no filesystem do alvo
 → Contexto limpo, zero risco de sugerir API de uma versão que o alvo não tem
 ```
 
 O `DocSearchTool` delega ao `DocsAgent` (Haiku 4.5), que usa o mesmo `BoostTool` escopado ao `local_path` do alvo — logo, a documentação retornada reflete as versões TALL instaladas naquele projeto específico.
 
-> **Implementation status — BoostTool project-path-aware:** A implementação atual do `BoostTool` (`app/Ai/Tools/BoostTool.php`) executa `boost:*` no contexto do ai-dev-core. O alinhamento com a arquitetura descrita aqui — receber `project.local_path` no constructor e rotear os comandos para dentro do alvo — **é trabalho pendente** e está registrado na Fase 1 do roadmap (`README.md`). Até que essa mudança seja feita, o schema/docs retornados refletem o ai-dev-core, não o alvo.
+> **Implementation status — BoostTool project-path-aware:** Implementado. `BoostTool` recebe `project.local_path`, chama `boost:execute-tool` no Projeto Alvo e valida `database-query` contra o schema real retornado por aquele Boost.
 
 #### Desenvolvimento Manual com Claude Code → Boost do próprio projeto que está sendo editado
 

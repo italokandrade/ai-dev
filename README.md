@@ -95,7 +95,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 **Pontos-chave:**
 
 - `SpecialistAgent`, `QAAuditorAgent` e `DocsAgent` recebem o `project.local_path` ao serem instanciados. Todas as ferramentas de filesystem/shell/git (`FileReadTool`, `FileWriteTool`, `ShellExecuteTool`, `GitOperationTool`) já são escopadas ao path do Projeto Alvo via constructor.
-- O `BoostTool` deve ser instanciado com o mesmo `local_path` e roteia para `php artisan boost:*` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core.
+- O `BoostTool` é instanciado com o mesmo `local_path` e roteia para `php artisan boost:execute-tool` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core.
 - `DocsAgent` (`BoostTool.search-docs`) pesquisa a documentação instalada no **Boost do Projeto Alvo**, refletindo as versões exatas de Laravel/Filament/Livewire que aquele projeto tem instaladas.
 
 ---
@@ -119,24 +119,25 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 
 Todas as tabelas abaixo vivem no banco **`ai_dev_core`**. Elas descrevem e auditam a operação do ai-dev-core sobre os Projetos Alvo.
 
-A estrutura hierárquica é: **Projeto → Módulos → Submódulos (opcional) → Tasks em folhas → Subtasks**.
+A estrutura hierárquica é: **Projeto → PRD Master → Blueprint Técnico → Módulos → Submódulos (opcional) → Tasks em folhas → Subtasks**.
 
 O sistema adota **granularidade progressiva**:
 1. **Projeto** → gera PRD Master com apenas os **módulos de alto nível** (sem submódulos)
-2. **Módulo** → gera PRD Técnico próprio que decide se precisa de `submódulos`
-3. **Submódulo** (se necessário) → repete o processo recursivamente
-4. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico
-5. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
+2. **Blueprint Técnico Global** → gera o desenho inicial do domínio antes dos módulos: MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações e superfície de API em alto nível
+3. **Módulo** → gera PRD Técnico próprio, usando o Blueprint como trilho e evoluindo entidades, campos, relacionamentos, workflows e componentes
+4. **Submódulo** (se necessário) → repete o processo recursivamente, enriquecendo o Blueprint no seu domínio
+5. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico
+6. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
 
-> **Regra:** tasks são criadas **apenas nos nós folha**, nunca em cascata. O PRD de cada nível decide o próximo passo.
+> **Regra:** tasks são criadas apenas nos nós folha. O Projeto Alvo pode ainda não ter diretório físico durante PRD e Blueprint; diretório, scaffold TALL + Filament v5 + Anime.js e Boost do alvo são necessários apenas na fase de implementação.
 
 **Tabelas implementadas (Fase 1 — operacionais):**
 
 | Tabela | Propósito |
 |---|---|
-| `projects` | Cadastro de Projetos Alvo (repo, `local_path`, stack, env, com PRD do Sistema Inteiro em JSON) |
+| `projects` | Cadastro de Projetos Alvo (repo, `local_path`, stack, env, PRD Master em `prd_payload` e Blueprint Técnico em `blueprint_payload`) |
 | `project_specifications` | Especificação técnica legada (mantida para retrocompatibilidade); o fluxo ativo usa `projects.prd_payload` |
-| `project_modules` | Módulos e submódulos (hierárquico via `parent_id`), cada um com seu próprio `prd_payload` JSON técnico |
+| `project_modules` | Módulos e submódulos (hierárquico via `parent_id`), cada um com seu próprio `prd_payload` técnico e `blueprint_payload` com a contribuição ao desenho global |
 | `project_features` | Funcionalidades geradas por IA por camada (`backend` ou `frontend`) via `GenerateFeaturesAgent`; refinadas individualmente via `RefineFeatureAgent` |
 | `project_quotations` | Orçamentos com comparativo de custo humano vs. AI-Dev e cálculo de ROI |
 | `tasks` | Tarefas vinculadas a módulos folha (sem filhos), com PRD em JSON |
@@ -209,12 +210,12 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 
 | # | Ferramenta | Ações Principais | Escopo |
 |---|---|---|---|
-| 1 | **BoostTool** | `database-schema`, `search-docs`, `browser-logs`, `last-error` via `php artisan boost:mcp` | Boost do Projeto Alvo |
+| 1 | **BoostTool** | `database-schema`, `search-docs`, `database-query`, `browser-logs`, `last-error` via `php artisan boost:execute-tool` | Boost do Projeto Alvo |
 | 2 | **DocSearchTool** | Busca focada em docs TALL Stack via Boost `search-docs` | Boost do Projeto Alvo |
 | 3 | **FileReadTool** | Leitura de arquivos (com limites de linhas/tamanho) | Filesystem do Projeto Alvo |
 | 4 | **FileWriteTool** | Escrita/edição de arquivos (com validação de path) | Filesystem do Projeto Alvo |
 | 5 | **GitOperationTool** | `status`, `diff`, `add`, `commit`, `branch` | Repo git do Projeto Alvo |
-| 6 | **ShellExecuteTool** | Execução controlada de `artisan`, `composer`, `npm`, `php` | Shell no cwd do Projeto Alvo |
+| 6 | **ShellExecuteTool** | Execução allowlisted de `php artisan`, `composer`, `npm`, `npx` e binários QA | Shell no cwd do Projeto Alvo |
 
 ---
 
@@ -225,10 +226,12 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 - Agent classes com `HasTools` (SDK nativo) + BoostTool obrigatório antes de escrever código
 - Provider strategy: openrouter único — Opus 4.7 (planejamento) | Sonnet 4.6 (código/QA) | Haiku 4.5 (docs)
 - PostgreSQL 16 + Redis 7 + Laravel Horizon v5
-- **Pendente:** tornar `BoostTool` project-path-aware (rotear para `php artisan boost:*` no path do alvo)
+- BoostTool project-path-aware via `boost:execute-tool` no path do alvo, com `database-query` estruturado por schema real, redação de campos sensíveis e cap de saída
+- Cascata de PRDs protegida contra explosão: até 40 módulos raiz por projeto, até 8 submódulos por módulo, até 120 módulos totais por projeto e até 30 tasks por módulo
+- Blueprint Técnico Progressivo entre PRD Master e módulos: MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface; PRDs de módulo enriquecem esse desenho com campos e relacionamentos
 
 ### Fase 2: Qualidade, Segurança e UI — prioridades atualizadas
-- **[Alta — segurança]** Hardening `BoostTool.database-query`: allowlist tabelas/colunas/operadores, redação de `_token`/`_secret`/`_password`/`_key`, conexão `readonly`, cap 8 000 chars — ver `FERRAMENTAS.md §1`
+- **[Alta — segurança]** Conexão `readonly` por Projeto Alvo para `BoostTool.database-query` em produção — o wrapper já valida tabela/coluna/operador contra o schema real do alvo e redige campos sensíveis; falta provisionar credenciais read-only em cada alvo
 - **[Alta — auditoria]** `Tool::dispatched()` listener → populate `tool_calls_log` automaticamente
 - **[Alta — validação]** `HasStructuredOutput` em `OrchestratorAgent`, `QAAuditorAgent`, `QuotationAgent` — validação de schema JSON pelo SDK, sem parsing manual
 - Security Specialist + Performance Analyst

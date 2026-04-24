@@ -40,6 +40,7 @@ Este `README.md` é a única fonte de verdade do projeto. Ferramentas de IA deve
 | Agent | Função | Provider | Modelo |
 |---|---|---|---|
 | `ProjectPrdAgent` | Gera PRD Master do projeto (módulos de alto nível) | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `ProjectBlueprintAgent` | Gera Blueprint Técnico Global após o PRD e antes dos módulos | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
 | `ModulePrdAgent` | Gera PRD Técnico de um módulo/submódulo | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
 | `GenerateFeaturesAgent` | Gera features backend/frontend por camada | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
 | `RefineDescriptionAgent` | Refina descrição do projeto com IA | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
@@ -109,14 +110,17 @@ php artisan make:test --pest NomeDoTeste         # criar
 
 ### Fluxo de PRD em Cascata (Auto Aprovação)
 
-O botão **"Auto Aprovar PRD — Cascata Completa"** em `ViewProject` dispara o `CascadeModulePrdJob` recursivamente:
+O fluxo completo passa por PRD Master, Blueprint Técnico e só então módulos. O Blueprint combina MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface. Campos de entidades são enriquecidos progressivamente pelos PRDs de módulo/submódulo.
 
-1. Aprova o PRD Master do projeto e cria módulos raiz
+O botão **"Auto Aprovar Blueprint — Cascata Completa"** em `ViewProject` dispara o `CascadeModulePrdJob` recursivamente:
+
+1. Aprova o Blueprint Técnico e cria módulos raiz a partir do PRD Master aprovado
 2. Para cada módulo raiz, despacha `CascadeModulePrdJob`
-3. O job gera o PRD técnico do módulo via `ModulePrdAgent`
-4. Se `needs_submodules: true` → cria submódulos e despacha `CascadeModulePrdJob` para cada um
-5. Se `needs_submodules: false` → cria tasks (status `pending` — **nunca executadas automaticamente**)
-6. O processo se repete recursivamente até todas as folhas terem tasks
+3. O job gera o PRD técnico do módulo via `ModulePrdAgent`, usando o Blueprint atual como trilho
+4. O PRD técnico retorna `blueprint_contribution`, que atualiza entidades, campos, relacionamentos, workflows, componentes e APIs
+5. Se `needs_submodules: true` → cria submódulos e despacha `CascadeModulePrdJob` para cada um
+6. Se `needs_submodules: false` → cria tasks (status `pending` — **nunca executadas automaticamente**)
+7. O processo se repete recursivamente até todas as folhas terem tasks
 
 **Resiliência:** se o job já encontrar um PRD válido salvo, pula a geração e vai direto para auto-aprovação. Não duplica submódulos ou tasks se já existirem. O `failed()` só salva fallback se não houver PRD válido já gravado.
 
@@ -126,8 +130,10 @@ O botão **"Auto Aprovar PRD — Cascata Completa"** em `ViewProject` dispara o 
 |---|---|
 | Sem PRD / falhou | "Gerar PRD" (cinza) |
 | `_status: generating` | "Gerando PRD..." (cinza, desabilitado) |
-| PRD pronto, não aprovado | "Ver PRD Completo" + "Aprovar PRD" + "Auto Aprovar PRD — Cascata Completa" |
-| PRD aprovado | "Ver PRD Completo" |
+| PRD pronto, não aprovado | "Ver PRD Completo" + "Aprovar PRD — Gerar Blueprint" |
+| PRD aprovado, sem Blueprint | "Gerar Blueprint" |
+| Blueprint pronto, não aprovado | "Ver Blueprint" + "Aprovar Blueprint — Criar Módulos" |
+| Blueprint aprovado | "Ver PRD Completo" + "Ver Blueprint" + "Auto Aprovar Blueprint — Cascata Completa" |
 
 ### Paleta de cores (Enums)
 

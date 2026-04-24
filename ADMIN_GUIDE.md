@@ -42,17 +42,21 @@ Este documento descreve o funcionamento do **Admin Panel do ai-dev-core** (Maste
 ## 1. Gestão de Projetos (`Projects`)
 O ponto de partida para qualquer automação. Cada linha em `projects` representa um **Projeto Alvo** — uma aplicação Laravel externa, com repositório próprio, banco próprio e Boost MCP próprio, que o ai-dev-core vai desenvolver/refatorar/manter.
 
-### 1.1 Fluxo de Criação e PRD Master
+### 1.1 Fluxo de Criação, PRD Master e Blueprint Técnico
 
-O sistema adota **granularidade progressiva** — o PRD do projeto gera apenas os módulos de alto nível. Submódulos e tasks são decididos nos níveis subsequentes.
+O sistema adota **granularidade progressiva** — o PRD do projeto gera apenas os módulos de alto nível. Antes dos módulos, o sistema gera um **Blueprint Técnico Global** com MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface.
 
 **Passo a passo:**
 
 1. **Criar Projeto** — preencha `name`, `github_repo`, `local_path`, `db_password`
 2. **Descrever o Projeto** — na aba "Descrição do Projeto", escreva livremente o que o sistema deve fazer. Use "Refinar com IA" se quiser melhorar o texto.
 3. **Gerar PRD do Projeto** — na página de visualização do projeto, clique no botão **"Gerar PRD do Projeto"** (header da página). O `ProjectPrdAgent` analisa a descrição + funcionalidades e gera o PRD Master com os módulos de alto nível. O PRD também pode ser gerado via a aba "PRD do Projeto" no formulário de edição. **Isso pode levar alguns minutos.**
-4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"✅ Aprovar PRD — Criar Módulos"** (header da página de visualização). O sistema cria automaticamente os módulos raiz no banco e redireciona para a lista de módulos.
-5. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
+4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"Aprovar PRD — Gerar Blueprint"**. O sistema aprova o PRD e dispara a geração do Blueprint em background.
+5. **Revisar Blueprint** — confira entidades conceituais, relacionamentos, casos de uso, workflows, arquitetura e integrações. Neste nível, as entidades ainda não precisam ter campos.
+6. **Aprovar Blueprint** — clique em **"Aprovar Blueprint — Criar Módulos"**. Só aqui os módulos raiz são criados no banco do ai-dev-core.
+7. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
+
+> Durante PRD e Blueprint, o Projeto Alvo pode existir apenas como registro no banco do ai-dev-core. O diretório físico, scaffold TALL + Filament v5 + Anime.js e Boost do alvo passam a ser obrigatórios somente quando a implementação começar.
 
 - **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama.
 - **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
@@ -67,15 +71,16 @@ Os módulos permitem decompor um projeto complexo em partes menores e gerenciáv
 
 ### 2.2 Fluxo de Trabalho por Módulo (Granularidade Progressiva)
 
-Após aprovar o PRD do projeto, cada módulo raiz precisa passar pelo seguinte:
+Após aprovar o Blueprint e criar os módulos raiz, cada módulo precisa passar pelo seguinte:
 
 1. **Entrar no Módulo** — clique no nome do módulo para abrir a página de visualização
-2. **Gerar PRD do Módulo** — clique em "Gerar PRD do Módulo". O `ModulePrdAgent` gera um PRD técnico detalhado (schema, APIs, workflows, critérios). **Isso pode levar vários minutos.**
+2. **Gerar PRD do Módulo** — clique em "Gerar PRD do Módulo". O `ModulePrdAgent` usa o Blueprint Técnico Global como trilho e gera um PRD técnico detalhado (schema, APIs, workflows, critérios e `blueprint_contribution`). **Isso pode levar vários minutos.**
 3. **Decisão automática:**
    - Se o PRD indicar `needs_submodules = true` → aparece o botão **"✅ Aprovar PRD — Criar Submódulos"**
    - Se o PRD indicar `needs_submodules = false` → aparece o botão **"✅ Aprovar PRD — Criar Tasks"**
 4. **Se criar submódulos:** cada submódulo segue o mesmo processo (entra → gera PRD → decide)
 5. **Se criar tasks:** o sistema gera tasks automaticamente a partir do PRD técnico (componentes, APIs, migrations, testes)
+6. **Evolução do Blueprint:** a cada PRD de módulo/submódulo, campos, relacionamentos, workflows, componentes e APIs são incorporados ao Blueprint global.
 
 ### 2.3 Dependências Estritamente Consolidadas
 - Um módulo pode depender de outros módulos do mesmo projeto.
@@ -120,7 +125,7 @@ Ao criar módulos ou tarefas, você define quais especialistas serão convocados
 
 ## 6. Inteligência Híbrida e Contexto Dinâmico
 O AI-Dev utiliza um sistema de **Context Awareness** (Ciência de Contexto) em tempo real — lendo sempre do **Projeto Alvo**, não do ai-dev-core.
-- **Detecção via Boost do alvo:** o `BoostTool` (a ser tornado project-path-aware — ver README, Fase 1) executa `php artisan boost:*` dentro do `local_path` do alvo e retorna schema, docs instaladas e estado do código daquele projeto.
+- **Detecção via Boost do alvo:** o `BoostTool` executa `php artisan boost:execute-tool` dentro do `local_path` do alvo e retorna schema, docs instaladas e estado do código daquele projeto.
 - **Sincronização da Stack:** As versões exatas de Laravel, Filament, Livewire, Tailwind e Anime.js **instaladas no Projeto Alvo** são a fonte de verdade — não as versões do ai-dev-core. Projetos podem divergir em versão de pacote e cada um é tratado pelo seu próprio Boost.
 - **Benefício:** A IA nunca sugerirá sintaxe de Filament v4 para um projeto com Filament v5, nem vice-versa — mesmo que o ai-dev-core esteja em versão diferente.
 
@@ -274,4 +279,3 @@ Se você encontrar erros ao operar o sistema, consulte esta seção de lições 
 - **Solução:** Adicione um novo servidor MCP do tipo `command` nas configurações da IDE. O comando deve criar um túnel SSH e executar o boost silenciosamente.
 - **Requisito:** A máquina local DEVE ter acesso via chave pública (SSH Keys) ao servidor remoto (ex: `ssh-copy-id root@10.1.1.86`). Se o SSH pedir senha, a IDE não conseguirá iniciar o MCP.
 - **Comando de Exemplo:** `ssh root@10.1.1.86 "cd /var/www/html/projetos/ai-dev/ai-dev-core && php artisan boost:mcp"`
-
