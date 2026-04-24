@@ -116,11 +116,20 @@ class CascadeModulePrdJob implements ShouldQueue
                 default  => Priority::Normal,
             };
 
+            $name = $submoduleData['name'] ?? '';
+            if (is_array($name)) {
+                $name = implode(' ', $name);
+            }
+            $description = $submoduleData['description'] ?? '';
+            if (is_array($description)) {
+                $description = implode(' ', $description);
+            }
+
             $submodule = ProjectModule::create([
                 'project_id'  => $this->module->project_id,
                 'parent_id'   => $this->module->id,
-                'name'        => $submoduleData['name'],
-                'description' => $submoduleData['description'] ?? '',
+                'name'        => $name,
+                'description' => $description,
                 'status'      => ModuleStatus::Planned,
                 'priority'    => $priorityEnum,
             ]);
@@ -196,7 +205,7 @@ class CascadeModulePrdJob implements ShouldQueue
                 'description' => $taskData['description'],
                 'status'      => \App\Enums\TaskStatus::Pending,
                 'priority'    => $taskData['priority'],
-                'source'      => \App\Enums\TaskSource::Prd,
+                'source'      => \App\Enums\TaskSource::Specification,
                 'max_retries' => 3,
             ]);
         }
