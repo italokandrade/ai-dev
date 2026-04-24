@@ -206,6 +206,7 @@ class CascadeModulePrdJob implements ShouldQueue
                 'status'      => \App\Enums\TaskStatus::Pending,
                 'priority'    => $taskData['priority'],
                 'source'      => \App\Enums\TaskSource::Specification,
+                'prd_payload' => $prd,
                 'max_retries' => 3,
             ]);
         }
