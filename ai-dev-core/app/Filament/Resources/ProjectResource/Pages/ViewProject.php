@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ProjectResource\Pages;
 
+use App\Filament\Components\BlueprintRenderer;
 use App\Filament\Components\NavigationTree;
 use App\Filament\Components\PrdRenderer;
 use App\Filament\Resources\ProjectModuleResource;
@@ -13,7 +14,6 @@ use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Contracts\Support\Htmlable;
-use Illuminate\Support\HtmlString;
 
 class ViewProject extends ViewRecord
 {
@@ -147,15 +147,7 @@ class ViewProject extends ViewRecord
                 ->modalHeading(fn () => $this->record->blueprint_payload['title'] ?? 'Blueprint Técnico')
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('Fechar')
-                ->modalContent(function () {
-                    $blueprint = $this->record->blueprint_payload;
-
-                    return new HtmlString(
-                        '<pre class="text-xs overflow-auto max-h-[70vh] bg-gray-100 dark:bg-gray-800 p-4 rounded whitespace-pre-wrap">'
-                        .e(json_encode($blueprint, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))
-                        .'</pre>'
-                    );
-                })
+                ->modalContent(fn () => BlueprintRenderer::render($this->record->blueprint_payload))
                 ->visible(fn () => ! empty($this->record->blueprint_payload)
                     && ($this->record->blueprint_payload['_status'] ?? '') !== 'generating'
                 ),
