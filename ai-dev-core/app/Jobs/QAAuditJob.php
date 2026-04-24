@@ -7,14 +7,13 @@ use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
-use App\Jobs\ProcessSubtaskJob;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Process;
 
 class QAAuditJob implements ShouldQueue
@@ -134,14 +133,21 @@ PROMPT;
         }
 
         try {
+            $statusResult = Process::path($workDir)->timeout(10)->run(['git', 'status', '--porcelain']);
+            if (trim($statusResult->output()) === '') {
+                $hashResult = Process::path($workDir)->timeout(10)->run(['git', 'rev-parse', 'HEAD']);
+                $hash = trim($hashResult->output());
+
+                return $hash ?: null;
+            }
+
             // Stage all changes
-            Process::path($workDir)->timeout(30)->run('git add -A');
+            Process::path($workDir)->timeout(30)->run(['git', 'add', '-A']);
 
             // Commit with descriptive message
-            $subtaskTitle = addslashes($this->subtask->title);
-            $message = "ai-dev: {$subtaskTitle} [subtask:{$this->subtask->id}]";
+            $message = "ai-dev: {$this->subtask->title} [subtask:{$this->subtask->id}]";
             $commitResult = Process::path($workDir)->timeout(30)
-                ->run('git commit -m '.escapeshellarg($message).' --allow-empty');
+                ->run(['git', 'commit', '-m', $message]);
 
             if (! $commitResult->successful()) {
                 Log::warning("QAAuditJob: git commit failed for subtask {$this->subtask->id}: {$commitResult->errorOutput()}");
@@ -150,7 +156,7 @@ PROMPT;
             }
 
             // Capture the commit hash
-            $hashResult = Process::path($workDir)->timeout(10)->run('git rev-parse HEAD');
+            $hashResult = Process::path($workDir)->timeout(10)->run(['git', 'rev-parse', 'HEAD']);
             $hash = trim($hashResult->output());
 
             Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
@@ -245,9 +251,15 @@ PROMPT;
             ->orderBy('execution_order')
             ->get();
 
+        $reservedLocks = [];
+
         foreach ($pendingSubtasks as $subtask) {
-            if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict()) {
+            $locks = $subtask->file_locks ?? [];
+            $hasReservedConflict = $locks !== [] && array_intersect($locks, $reservedLocks) !== [];
+
+            if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict() && ! $hasReservedConflict) {
                 ProcessSubtaskJob::dispatch($subtask);
+                $reservedLocks = array_values(array_unique([...$reservedLocks, ...$locks]));
             }
         }
     }

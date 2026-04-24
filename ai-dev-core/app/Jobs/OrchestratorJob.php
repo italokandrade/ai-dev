@@ -8,7 +8,6 @@ use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
 use App\Models\Task;
-use App\Jobs\ProcessSubtaskJob;
 use App\Services\AiRuntimeConfigService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -156,9 +155,15 @@ PROMPT;
             ->orderBy('execution_order')
             ->get();
 
+        $reservedLocks = [];
+
         foreach ($subtasks as $subtask) {
-            if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict()) {
+            $locks = $subtask->file_locks ?? [];
+            $hasReservedConflict = $locks !== [] && array_intersect($locks, $reservedLocks) !== [];
+
+            if ($subtask->areDependenciesMet() && ! $subtask->hasFileLockConflict() && ! $hasReservedConflict) {
                 ProcessSubtaskJob::dispatch($subtask);
+                $reservedLocks = array_values(array_unique([...$reservedLocks, ...$locks]));
             }
         }
     }

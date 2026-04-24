@@ -18,7 +18,7 @@ class Subtask extends Model
     {
         return LogOptions::defaults()
             ->logOnly(['task_id', 'title', 'status', 'assigned_agent', 'execution_order',
-                       'retry_count', 'commit_hash', 'started_at', 'completed_at'])
+                'retry_count', 'commit_hash', 'started_at', 'completed_at'])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "Subtarefa {$eventName}");
     }
@@ -111,7 +111,7 @@ class Subtask extends Model
         }
 
         return Subtask::where('id', '!=', $this->id)
-            ->where('status', SubtaskStatus::Running->value)
+            ->whereIn('status', [SubtaskStatus::Running->value, SubtaskStatus::QaAudit->value])
             ->whereNotNull('file_locks')
             ->get()
             ->contains(function (Subtask $other) {

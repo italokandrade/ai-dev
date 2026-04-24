@@ -7,13 +7,13 @@ use App\Enums\SubtaskStatus;
 use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
+use App\Services\AiRuntimeConfigService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use App\Services\AiRuntimeConfigService;
 use Illuminate\Support\Facades\Process;
 
 class ProcessSubtaskJob implements ShouldQueue
@@ -74,8 +74,15 @@ class ProcessSubtaskJob implements ShouldQueue
         // Capture git diff for QA audit
         $diff = '';
         if (is_dir("{$workDir}/.git")) {
-            $diffResult = Process::path($workDir)->timeout(30)->run('git diff HEAD~1 HEAD');
-            $diff = $diffResult->output();
+            $unstaged = Process::path($workDir)->timeout(30)->run(['git', 'diff']);
+            $staged = Process::path($workDir)->timeout(30)->run(['git', 'diff', '--cached']);
+            $stat = Process::path($workDir)->timeout(30)->run(['git', 'diff', '--stat']);
+
+            $diff = implode("\n\n", array_filter([
+                $stat->output() ? "## Git Diff Stat\n".$stat->output() : null,
+                $unstaged->output() ? "## Unstaged Diff\n".$unstaged->output() : null,
+                $staged->output() ? "## Staged Diff\n".$staged->output() : null,
+            ]));
         }
 
         $this->subtask->update([
