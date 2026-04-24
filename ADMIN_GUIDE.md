@@ -141,6 +141,7 @@ O widget `DashboardChat` é um componente Livewire embarcado na página inicial 
 - **Componente:** `App\Filament\Widgets\DashboardChat` + blade `filament.widgets.dashboard-chat`
 - **Agente:** Utiliza o `SystemAssistantAgent`, que possui instruções de sistema (system prompt) rígidas em português.
 - **Modelo:** Configurado via `SystemSetting` (chaves `ai_system_provider` e `ai_system_model`). Não há mais fallback hardcoded — o sistema usa obrigatoriamente os valores configurados na UI de Configuração do Sistema.
+- **Autorização:** o widget só aparece para `super_admin` ou usuários com a permissão Shield `View:DashboardChat`.
 
 ### 8.2 Persistência da Conversa
 - O histórico é salvo na **sessão PHP** (não no banco), sobrevivendo à navegação entre páginas.
@@ -157,15 +158,21 @@ O widget `DashboardChat` é um componente Livewire embarcado na página inicial 
 O `SystemAssistantAgent` possui restrições explícitas no system prompt:
 - **Proibido:** revelar estrutura do banco de dados, caminhos de arquivos, configurações `.env`, chaves API, credenciais ou detalhes de arquitetura.
 - **Permitido:** informações sobre projetos, módulos, tarefas, dados cadastrados e uso funcional do sistema.
+- **Ferramentas expostas:** no chat do dashboard, o `BoostTool` fica restrito a `database-query` e `search-docs`; `browser-logs` e `last-error` não são disponibilizados para evitar vazamento de logs internos.
+- **Leitura de arquivos:** `FileReadTool` bloqueia `.env`, chaves, `bootstrap/cache`, `storage/logs`, sessões e arquivos de configuração sensíveis.
+- **Auditoria:** cada uso do chat é registrado no `activity_log` sem gravar o conteúdo da conversa.
 
-## 9. Administração
+## 9. Segurança
 
 ### 9.1 Perfis de Usuários (Roles)
 Módulo baseado no **Filament Shield** (`BezhanSalleh\FilamentShield`). Permite criar e gerenciar perfis de acesso (roles) com permissões granulares por Resource/Page/Widget.
 
 - **Resource:** `App\Filament\Resources\RoleResource` (estende `BaseRoleResource` do Shield)
-- **Rótulos:** Exibido como "Perfis de Usuários" na navegação, grupo "Administração"
+- **Rótulos:** Exibido como "Perfis de Usuários" na navegação, grupo "Segurança"
 - **Roles padrão:** `super_admin` (acesso total), `developer` (desenvolvimento), demais criados conforme necessidade
+- **Mapeamento automático:** `FilamentShieldPermissionSyncService` lê Resources, Pages e Widgets descobertos pelo Shield em cada boot seguro da aplicação.
+- **Regra de acesso inicial:** novas permissões são criadas no banco e atribuídas automaticamente apenas ao `super_admin`. Os demais perfis recebem a permissão desabilitada até configuração manual.
+- **Formato de permissões:** as policies usam o mesmo padrão gerado pelo Shield (`ViewAny:Project`, `Create:Task`, `View:DashboardChat`), evitando divergência entre o cadastro de perfis e a autorização real.
 
 ### 9.2 Usuários
 Gerencia os usuários com acesso ao painel administrativo.
@@ -177,7 +184,7 @@ Gerencia os usuários com acesso ao painel administrativo.
   - Senha com `dehydrated(fn ($state) => filled($state))` — só atualiza se preenchida na edição
   - Coluna de roles exibida como badges na listagem
 - **Model:** `App\Models\User` — implementa `FilamentUser`, `HasRoles` (Spatie Permission)
-- **Controle de Acesso:** `canAccessPanel()` retorna `true` para todos, com permissões granulares via Shield
+- **Controle de Acesso:** `canAccessPanel()` exige que o usuário tenha ao menos um role Spatie atribuído. As permissões granulares ficam sob o Shield.
 
 ### 9.3 Logs de Atividades
 Módulo de auditoria que registra automaticamente todas as ações CRUD em todos os Models do sistema.
@@ -186,8 +193,13 @@ Módulo de auditoria que registra automaticamente todas as ações CRUD em todos
 - **Pacote:** `spatie/laravel-activitylog` v4.12
 - **Somente leitura:** `canCreate()`, `canEdit()` e `canDelete()` retornam `false`
 
-#### 9.3.1 Registro Automático (LogsActivity)
-Todos os Models principais usam a trait `LogsActivity` do Spatie, que registra automaticamente operações `created`, `updated` e `deleted`:
+#### 9.3.1 Registro Automático
+O registro tem duas camadas:
+- **Camada principal:** Models críticos usam a trait `LogsActivity` do Spatie, registrando `created`, `updated` e `deleted` com diff de atributos.
+- **Fallback global:** `App\Services\ActivityAuditService` escuta eventos Eloquent de `App\Models\*` e dos models Spatie `Role`/`Permission`. Assim, um novo Model futuro passa a ser auditado mesmo se o desenvolvedor esquecer de adicionar `LogsActivity`.
+- **Eventos de ACL:** vínculos de roles/permissões (`RoleAttached`, `RoleDetached`, `PermissionAttached`, `PermissionDetached`) também são gravados.
+
+Models principais com `LogsActivity`:
 
 | Model | Log Name | Descrição gerada |
 |---|---|---|
@@ -216,12 +228,21 @@ public function getActivitylogOptions(): LogOptions
 
 #### 9.3.2 Filtros Dinâmicos
 Os filtros da listagem são **dinâmicos**, carregados direto do banco:
-- **Módulo (subject_type):** `SELECT DISTINCT subject_type FROM activity_log` — qualquer novo Model adicionado aparece automaticamente
-- **Evento:** Criação, Atualização, Exclusão
+- **Módulo (subject_type):** une `SELECT DISTINCT subject_type FROM activity_log` com `SystemSurfaceMapService::activitySubjectFilterOptions()` — qualquer novo Model em `App\Models` aparece automaticamente
+- **Aliases:** models equivalentes, como `Spatie\Permission\Models\Role` e `App\Models\Role`, são agrupados em uma única opção visual para evitar repetição no filtro.
+- **Evento:** carregado dinamicamente a partir do `activity_log` (`created`, `updated`, `deleted`, eventos de ACL, chat e futuros fluxos)
 - **Usuário:** Select do relacionamento `causer`
 
-#### 9.3.3 Tradução de Models
-Os FQCNs (`App\Models\Project`) são traduzidos para nomes amigáveis em PT-BR via mapa estático no Resource:
+#### 9.3.3 Mapa Vivo do Sistema
+`App\Services\SystemSurfaceMapService` mantém um mapa automático do painel:
+- Models auditáveis (`App\Models`, Spatie Role e Spatie Permission)
+- Resources, Pages e Widgets descobertos pelo Filament Panel
+- Rotas administrativas `admin/*`
+
+Isso permite que o sistema enxergue novos módulos, telas e gráficos/widgets sem hardcode manual. Um novo gráfico implementado como Widget Filament entra automaticamente no mapa de superfícies; eventos gravados por ele ou por Models relacionados passam a aparecer no `activity_log`.
+
+#### 9.3.4 Tradução de Models
+Os FQCNs (`App\Models\Project`) são traduzidos para nomes amigáveis em PT-BR via `SystemSurfaceMapService`:
 ```php
 'App\Models\Project' => 'Projeto',
 'App\Models\Task'    => 'Tarefa',

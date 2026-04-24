@@ -192,10 +192,13 @@ O sistema adota **granularidade progressiva**:
 | **Autenticação** | Laravel Sanctum + Filament Authenticate middleware | Apenas usuários autenticados acessam o painel |
 | **Autorização de Painel** | `User::canAccessPanel()` | Exige ao menos um role Spatie atribuído (`roles()->exists()`) |
 | **Roles & Permissions** | Spatie Permission + FilamentShield | Roles: `super_admin`, `developer`, `panel_user` |
-| **Resource Policies** | `UserPolicy`, `ProjectPolicy`, `TaskPolicy`, `ProjectModulePolicy`, `AgentConfigPolicy` | Granularidade por operação (view/create/update/delete) |
-| **Logs Imutáveis** | `ActivityLogResource` (read-only, apenas `super_admin`) | canCreate/canEdit/canDelete = false |
+| **Permissões Automáticas** | `FilamentShieldPermissionSyncService` | Novas Resources/Pages/Widgets entram no cadastro de perfis e são atribuídas só ao `super_admin` |
+| **Resource Policies** | `UserPolicy`, `ProjectPolicy`, `TaskPolicy`, `ProjectModulePolicy`, `AgentConfigPolicy` | Granularidade por operação usando nomes Shield (`ViewAny:Task`, `Create:Project`, etc.) |
+| **Logs Imutáveis** | `ActivityLogResource` + `ActivityAuditService` (read-only, apenas `super_admin`) | CRUD via `LogsActivity`, fallback automático para novos Models e eventos Spatie de roles/permissões |
+| **Mapa Vivo do Sistema** | `SystemSurfaceMapService` | Descobre Models, Resources, Pages, Widgets e rotas `admin/*`; agrupa aliases para não duplicar filtros |
 | **Mascaramento de Secrets** | `SystemSetting::tapActivity()` | Valores de settings com `key`/`secret`/`password`/`token` no nome são mascarados nos logs |
 | **Isolamento de Agentes** | Ferramentas escopadas ao `local_path` do Projeto Alvo | Agentes nunca escrevem fora do projeto alvo |
+| **Chat do Dashboard** | `DashboardChat` + `SystemAssistantAgent` | Widget autorizado por Shield; Boost restrito a `database-query`/`search-docs`; leitura bloqueia `.env`, logs e caches |
 
 **Hierarquia de roles:**
 - `super_admin` — acesso total, pode gerenciar usuários, logs e configurações

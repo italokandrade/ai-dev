@@ -447,30 +447,37 @@ Cada registro é um exemplo de código perfeito que os agentes DEVEM seguir ao g
 
 De acordo com o `STANDARD_MODULES.md`, **TODOS os projetos (inclusive o próprio `ai-dev-core`)** possuem um conjunto de módulos e tabelas pré-fabricadas que gerenciam Segurança, Auditoria e Configurações Globais. Estas tabelas existem em todos os bancos de dados do ecossistema.
 
-**`audit_logs`** — Log de Ações Globais (Activity Log).
-Tabela estritamente de leitura (append-only) que rastreia TODAS as ações executadas no sistema (Insert, Update, Delete) em qualquer módulo.
+**`activity_log`** — Log de Ações Globais (Spatie Activitylog).
+Tabela estritamente de leitura no painel que rastreia ações CRUD e eventos relevantes do sistema. A cobertura vem de duas camadas: Models críticos usam `LogsActivity`; `ActivityAuditService` atua como fallback automático para novos Models em `App\Models`, Models Spatie de roles/permissões e eventos de atribuição/remoção de roles/permissões.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `id` | UUID / PK | Identificador único do log |
-| `user_id` | FK → `users.id` / Nullable | Quem executou a ação (null se via automação/sistema) |
-| `action` | Enum: `insert`, `update`, `delete`, `login`, `logout` | Ação executada |
-| `table_name` | String(100) | Nome da tabela/módulo afetado |
-| `record_id` | String(100) / Nullable | ID do registro afetado |
-| `old_data` | JSON / Nullable | Estado do registro *antes* da ação |
-| `new_data` | JSON / Nullable | Estado do registro *depois* da ação |
-| `ip_address` | String(45) / Nullable | IP do usuário/requisição |
-| `user_agent` | Text / Nullable | Browser/dispositivo |
+| `id` | BigInt / PK | Identificador único do log |
+| `log_name` | String / Nullable | Canal lógico do log |
+| `description` | Text | Descrição amigável do evento |
+| `subject_type` / `subject_id` | Morph / Nullable | Model afetado |
+| `causer_type` / `causer_id` | Morph / Nullable | Usuário/ator causador |
+| `event` | String / Nullable | Evento (`created`, `updated`, `deleted`, `role_attached`, etc.) |
+| `properties` | JSON / Nullable | Estado anterior/novo ou metadados do evento |
+| `batch_uuid` | UUID / Nullable | Agrupamento opcional de logs |
 | `created_at` | Timestamp | Quando ocorreu |
 
-**`roles` & `role_permissions`** — Controle de Acesso (ACL) e Perfis de Usuários.
-Gerenciam quais funções do "CRUD" cada perfil está autorizado a acessar ou manipular em cada módulo.
+**`roles`, `permissions`, `model_has_roles`, `role_has_permissions`** — Controle de Acesso (ACL) e Perfis de Usuários.
+Gerenciados pelo Spatie Permission + Filament Shield. Cada perfil recebe permissões granulares por Resource, Page e Widget do painel.
 
 | Tabela | Função principal |
 |---|---|
-| `roles` | `id`, `name`, `description` (ex: Administrador, Editor, Visualizador) |
-| `role_permissions` | `role_id`, `module_name`, `can_create`, `can_read`, `can_update`, `can_delete` |
-| `users` | Tabela padrão do Laravel, expandida com FK `role_id` |
+| `roles` | Perfis de acesso com `name` e `guard_name` |
+| `permissions` | Permissões geradas pelo Shield (`View:DashboardChat`, `Create:Project`, etc.) |
+| `model_has_roles` | Atribuição de perfis a usuários |
+| `role_has_permissions` | Permissões vinculadas a cada perfil |
+| `users` | Tabela padrão do Laravel; acesso ao painel exige ao menos um role Spatie |
+
+**`FilamentShieldPermissionSyncService`** — Sincronização automática de permissões.
+Em cada boot seguro da aplicação, lê Resources, Pages, Widgets e permissões customizadas descobertas pelo Shield. Permissões novas são criadas em `permissions` e concedidas automaticamente somente ao perfil `super_admin`; os demais perfis continuam sem a permissão até configuração manual. As policies do core usam o mesmo padrão de nomes do Shield (`ViewAny:Model`, `View:Model`, `Create:Model`, `Update:Model`, `Delete:Model`), evitando permissões visíveis no cadastro que não tenham efeito real.
+
+**`SystemSurfaceMapService`** — Mapa Vivo do Sistema.
+Descobre automaticamente Models, Resources, Pages, Widgets e rotas administrativas. Esse mapa alimenta filtros de auditoria e permite que novas superfícies, como um gráfico criado como Widget Filament, entrem no inventário do sistema sem hardcode manual. Classes equivalentes são agrupadas por aliases (`security.roles`, `security.permissions`) para que filtros como "Módulo" não exibam rótulos repetidos.
 
 **`system_settings`** — Configurações do Sistema e Configurações de IA.
 Evita hardcoding no `.env` para credenciais das **IAs de interação** e chaves gerais de APIs.
