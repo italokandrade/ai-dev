@@ -45,8 +45,12 @@ REGRAS DE CONTEÚDO:
 5. Cada módulo e submódulo deve ter descrição direta e única.
 6. Respeite as funcionalidades já cadastradas pelo usuário — não as ignore.
 
+REGRAS DE FORMATO — CRÍTICO:
+- Seja direto e conciso em todos os campos de texto. Frases curtas.
+- O JSON DEVE estar completo e válido. Priorize fechar o JSON corretamente acima de qualquer detalhe extra.
+
 SAÍDA:
-- Retorne APENAS um JSON válido no formato exato abaixo, sem markdown, sem introduções:
+- Retorne APENAS um JSON válido, sem markdown, sem introduções, sem texto fora do JSON:
 
 {
   "title": "Nome do Projeto — PRD Master",
