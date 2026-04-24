@@ -5,11 +5,14 @@ namespace App\Filament\Resources;
 use App\Ai\Agents\RefineDescriptionAgent;
 use App\Ai\Agents\RefineFeatureAgent;
 use App\Enums\ProjectStatus;
-use App\Services\AiRuntimeConfigService;
 use App\Filament\Resources\ProjectResource\Pages;
+use App\Jobs\GenerateProjectBlueprintJob;
+use App\Jobs\GenerateProjectFeaturesJob;
+use App\Jobs\GenerateProjectPrdJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectQuotation;
+use App\Services\AiRuntimeConfigService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -17,13 +20,18 @@ use Filament\Forms;
 use Filament\Infolists;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 class ProjectResource extends Resource
@@ -46,9 +54,9 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                \Filament\Schemas\Components\Tabs::make('Project Tabs')
+                Tabs::make('Project Tabs')
                     ->tabs([
-                        \Filament\Schemas\Components\Tabs\Tab::make('Dados do Projeto')
+                        Tab::make('Dados do Projeto')
                             ->schema([
                                 Forms\Components\TextInput::make('name')
                                     ->label('Nome do Projeto')
@@ -90,7 +98,7 @@ class ProjectResource extends Resource
                             ])
                             ->columns(1),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Descrição do Projeto')
+                        Tab::make('Descrição do Projeto')
                             ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
                                 Forms\Components\Textarea::make('description')
@@ -179,10 +187,10 @@ class ProjectResource extends Resource
                                     ),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Backend')
+                        Tab::make('Funcionalidades Backend')
                             ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
-                                \Filament\Schemas\Components\Actions::make([
+                                Actions::make([
                                     Action::make('generateBackendFeatures')
                                         ->label('🤖 Gerar Funcionalidades Backend com IA')
                                         ->icon('heroicon-o-sparkles')
@@ -194,15 +202,16 @@ class ProjectResource extends Resource
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
 
-                                            if (!$project) {
+                                            if (! $project) {
                                                 Notification::make()
                                                     ->title('Projeto não encontrado')
                                                     ->danger()
                                                     ->send();
+
                                                 return;
                                             }
 
-                                            \App\Jobs\GenerateProjectFeaturesJob::dispatch($project, 'backend');
+                                            GenerateProjectFeaturesJob::dispatch($project, 'backend');
 
                                             Notification::make()
                                                 ->title('Geração iniciada')
@@ -218,6 +227,7 @@ class ProjectResource extends Resource
                                     ->label('')
                                     ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
                                         $data['type'] = 'backend';
+
                                         return $data;
                                     })
                                     ->schema([
@@ -237,10 +247,10 @@ class ProjectResource extends Resource
                                     ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Funcionalidades Frontend')
+                        Tab::make('Funcionalidades Frontend')
                             ->visible(fn ($livewire) => $livewire->record !== null)
                             ->schema([
-                                \Filament\Schemas\Components\Actions::make([
+                                Actions::make([
                                     Action::make('generateFrontendFeatures')
                                         ->label('🤖 Gerar Funcionalidades Frontend com IA')
                                         ->icon('heroicon-o-sparkles')
@@ -252,15 +262,16 @@ class ProjectResource extends Resource
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
 
-                                            if (!$project) {
+                                            if (! $project) {
                                                 Notification::make()
                                                     ->title('Projeto não encontrado')
                                                     ->danger()
                                                     ->send();
+
                                                 return;
                                             }
 
-                                            \App\Jobs\GenerateProjectFeaturesJob::dispatch($project, 'frontend');
+                                            GenerateProjectFeaturesJob::dispatch($project, 'frontend');
 
                                             Notification::make()
                                                 ->title('Geração iniciada')
@@ -276,6 +287,7 @@ class ProjectResource extends Resource
                                     ->label('')
                                     ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
                                         $data['type'] = 'frontend';
+
                                         return $data;
                                     })
                                     ->schema([
@@ -295,10 +307,12 @@ class ProjectResource extends Resource
                                     ->itemLabel(fn (array $state): ?string => $state['title'] ?? null),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('PRD do Projeto')
+                        Tab::make('PRD do Projeto')
                             ->schema([
                                 Forms\Components\Hidden::make('prd_payload'),
                                 Forms\Components\Hidden::make('prd_approved_at'),
+                                Forms\Components\Hidden::make('blueprint_payload'),
+                                Forms\Components\Hidden::make('blueprint_approved_at'),
 
                                 Forms\Components\Placeholder::make('prd_status')
                                     ->label('Status do PRD')
@@ -310,12 +324,46 @@ class ProjectResource extends Resource
                                             return 'Nenhum PRD gerado. Clique em "Gerar PRD do Projeto" para criar.';
                                         }
 
-                                        if (!empty($approvedAt)) {
-                                            return '✅ PRD aprovado em ' . \Illuminate\Support\Carbon::parse($approvedAt)->format('d/m/Y H:i');
+                                        if (! empty($approvedAt)) {
+                                            return '✅ PRD aprovado em '.Carbon::parse($approvedAt)->format('d/m/Y H:i');
                                         }
 
                                         $moduleCount = count($prd['modules'] ?? []);
+
                                         return "⏳ PRD gerado com {$moduleCount} módulo(s). Aguardando aprovação.";
+                                    })
+                                    ->columnSpanFull(),
+
+                                Forms\Components\Placeholder::make('blueprint_status')
+                                    ->label('Status do Blueprint Técnico')
+                                    ->content(function (Get $get) {
+                                        $blueprint = $get('blueprint_payload');
+                                        $approvedAt = $get('blueprint_approved_at');
+
+                                        if (empty($get('prd_approved_at'))) {
+                                            return 'Aguardando aprovação do PRD Master.';
+                                        }
+
+                                        if (empty($blueprint) || ! is_array($blueprint)) {
+                                            return 'Blueprint ainda não gerado.';
+                                        }
+
+                                        if (($blueprint['_status'] ?? null) === 'generating') {
+                                            return 'Blueprint em geração.';
+                                        }
+
+                                        if (! empty($blueprint['_status'] ?? null)) {
+                                            return 'Falha na geração do Blueprint. Gere novamente.';
+                                        }
+
+                                        if (! empty($approvedAt)) {
+                                            return '✅ Blueprint aprovado em '.Carbon::parse($approvedAt)->format('d/m/Y H:i');
+                                        }
+
+                                        $entityCount = count($blueprint['domain_model']['entities'] ?? []);
+                                        $workflowCount = count($blueprint['workflows'] ?? []);
+
+                                        return "⏳ Blueprint gerado com {$entityCount} entidade(s) e {$workflowCount} workflow(s). Aguardando aprovação.";
                                     })
                                     ->columnSpanFull(),
 
@@ -323,34 +371,38 @@ class ProjectResource extends Resource
                                     ->label('Resumo do PRD')
                                     ->visible(function (Get $get) {
                                         $prd = $get('prd_payload');
-                                        return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+
+                                        return ! empty($prd) && is_array($prd) && ! empty($prd['modules'] ?? []);
                                     })
                                     ->content(function (Get $get) {
                                         $prd = $get('prd_payload');
-                                        if (empty($prd) || !is_array($prd)) return '';
+                                        if (empty($prd) || ! is_array($prd)) {
+                                            return '';
+                                        }
 
                                         $lines = [];
-                                        $lines[] = '**Título:** ' . ($prd['title'] ?? '—');
-                                        $lines[] = '**Objetivo:** ' . ($prd['objective'] ?? '—');
-                                        $lines[] = '**Complexidade:** ' . ($prd['estimated_complexity'] ?? '—');
+                                        $lines[] = '**Título:** '.($prd['title'] ?? '—');
+                                        $lines[] = '**Objetivo:** '.($prd['objective'] ?? '—');
+                                        $lines[] = '**Complexidade:** '.($prd['estimated_complexity'] ?? '—');
                                         $lines[] = '';
                                         $lines[] = '**Módulos:**';
 
                                         foreach ($prd['modules'] ?? [] as $mod) {
-                                            $lines[] = '- **' . ($mod['name'] ?? '—') . '** (' . ($mod['priority'] ?? '—') . ')';
+                                            $lines[] = '- **'.($mod['name'] ?? '—').'** ('.($mod['priority'] ?? '—').')';
                                         }
 
-                                        return new \Illuminate\Support\HtmlString(implode('<br>', $lines));
+                                        return new HtmlString(implode('<br>', $lines));
                                     })
                                     ->columnSpanFull(),
 
-                                \Filament\Schemas\Components\Actions::make([
+                                Actions::make([
                                     Action::make('generateProjectPrd')
                                         ->label('🤖 Gerar PRD do Projeto')
                                         ->icon('heroicon-o-sparkles')
                                         ->color('primary')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
+
                                             return empty($prd) || (is_array($prd) && empty($prd['modules'] ?? []));
                                         })
                                         ->requiresConfirmation()
@@ -360,15 +412,16 @@ class ProjectResource extends Resource
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
 
-                                            if (!$project) {
+                                            if (! $project) {
                                                 Notification::make()
                                                     ->title('Projeto não encontrado')
                                                     ->danger()
                                                     ->send();
+
                                                 return;
                                             }
 
-                                            \App\Jobs\GenerateProjectPrdJob::dispatch($project);
+                                            GenerateProjectPrdJob::dispatch($project);
 
                                             Notification::make()
                                                 ->title('Geração do PRD iniciada')
@@ -378,41 +431,138 @@ class ProjectResource extends Resource
                                         }),
 
                                     Action::make('approveProjectPrd')
-                                        ->label('✅ Aprovar PRD e Criar Módulos')
+                                        ->label('✅ Aprovar PRD e Gerar Blueprint')
                                         ->icon('heroicon-o-check-circle')
                                         ->color('success')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
                                             $approvedAt = $get('prd_approved_at');
-                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []) && empty($approvedAt);
+
+                                            return ! empty($prd) && is_array($prd) && ! empty($prd['modules'] ?? []) && empty($approvedAt);
                                         })
                                         ->requiresConfirmation()
-                                        ->modalHeading('Aprovar PRD e Criar Módulos')
-                                        ->modalDescription('Ao aprovar, o sistema irá criar automaticamente os MÓDULOS de alto nível do projeto com base no PRD gerado. Submódulos serão definidos posteriormente dentro de cada módulo. Esta ação não pode ser desfeita.')
-                                        ->modalSubmitActionLabel('Aprovar e Criar')
+                                        ->modalHeading('Aprovar PRD e Gerar Blueprint')
+                                        ->modalDescription('Ao aprovar, o sistema irá gerar o Blueprint Técnico Global: MER/ERD conceitual, casos de uso, workflows, arquitetura e integrações. Os módulos só serão criados depois da aprovação do Blueprint.')
+                                        ->modalSubmitActionLabel('Aprovar e Gerar Blueprint')
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
 
-                                            if (!$project) {
+                                            if (! $project) {
                                                 Notification::make()
                                                     ->title('Projeto não encontrado')
                                                     ->danger()
                                                     ->send();
+
                                                 return;
                                             }
 
                                             try {
                                                 $project->approvePrd();
-                                                $project->createModulesFromPrd();
+                                                $project->update([
+                                                    'blueprint_payload' => ['_status' => 'generating'],
+                                                    'blueprint_approved_at' => null,
+                                                ]);
+                                                GenerateProjectBlueprintJob::dispatch($project->fresh());
 
                                                 Notification::make()
-                                                    ->title('PRD aprovado — Módulos criados!')
-                                                    ->body('Os módulos foram criados. Acesse cada módulo e gere seu PRD individual para definir submódulos ou tasks.')
+                                                    ->title('PRD aprovado — Blueprint em geração')
+                                                    ->body('O Blueprint Técnico está sendo gerado em background. Recarregue a página em alguns instantes.')
                                                     ->success()
                                                     ->send();
                                             } catch (\Exception $e) {
                                                 Notification::make()
                                                     ->title('Erro ao aprovar PRD')
+                                                    ->body($e->getMessage())
+                                                    ->danger()
+                                                    ->send();
+                                            }
+                                        }),
+
+                                    Action::make('generateProjectBlueprint')
+                                        ->label('Gerar Blueprint Técnico')
+                                        ->icon('heroicon-o-map')
+                                        ->color('primary')
+                                        ->visible(function (Get $get) {
+                                            $prd = $get('prd_payload');
+                                            $approvedAt = $get('prd_approved_at');
+                                            $blueprint = $get('blueprint_payload');
+                                            $blueprintStatus = is_array($blueprint) ? ($blueprint['_status'] ?? null) : null;
+
+                                            return ! empty($approvedAt)
+                                                && ! empty($prd)
+                                                && is_array($prd)
+                                                && (empty($blueprint) || ! is_array($blueprint) || ($blueprintStatus !== null && $blueprintStatus !== 'generating'));
+                                        })
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Gerar Blueprint Técnico')
+                                        ->modalDescription('A IA irá gerar MER/ERD conceitual, casos de uso, workflows, arquitetura e contratos de API em alto nível.')
+                                        ->modalSubmitActionLabel('Gerar Blueprint')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (! $project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+
+                                                return;
+                                            }
+
+                                            $project->update([
+                                                'blueprint_payload' => ['_status' => 'generating'],
+                                                'blueprint_approved_at' => null,
+                                            ]);
+                                            GenerateProjectBlueprintJob::dispatch($project->fresh());
+
+                                            Notification::make()
+                                                ->title('Geração do Blueprint iniciada')
+                                                ->body('O Blueprint Técnico está sendo gerado em background.')
+                                                ->success()
+                                                ->send();
+                                        }),
+
+                                    Action::make('approveProjectBlueprint')
+                                        ->label('✅ Aprovar Blueprint e Criar Módulos')
+                                        ->icon('heroicon-o-check-badge')
+                                        ->color('success')
+                                        ->visible(function (Get $get) {
+                                            $blueprint = $get('blueprint_payload');
+
+                                            return ! empty($get('prd_approved_at'))
+                                                && empty($get('blueprint_approved_at'))
+                                                && ! empty($blueprint)
+                                                && is_array($blueprint)
+                                                && empty($blueprint['_status'] ?? null);
+                                        })
+                                        ->requiresConfirmation()
+                                        ->modalHeading('Aprovar Blueprint e Criar Módulos')
+                                        ->modalDescription('Os módulos raiz serão criados a partir do PRD aprovado. A partir daqui, cada PRD de módulo evolui o Blueprint com campos, relacionamentos, workflows e componentes.')
+                                        ->modalSubmitActionLabel('Aprovar e Criar Módulos')
+                                        ->action(function ($livewire) {
+                                            $project = $livewire->record;
+
+                                            if (! $project) {
+                                                Notification::make()
+                                                    ->title('Projeto não encontrado')
+                                                    ->danger()
+                                                    ->send();
+
+                                                return;
+                                            }
+
+                                            try {
+                                                $project->approveBlueprint();
+                                                $project->createModulesFromPrd();
+
+                                                Notification::make()
+                                                    ->title('Blueprint aprovado — Módulos criados!')
+                                                    ->body('Os PRDs de módulo agora usarão o Blueprint como trilho técnico.')
+                                                    ->success()
+                                                    ->send();
+                                            } catch (\Exception $e) {
+                                                Notification::make()
+                                                    ->title('Erro ao aprovar Blueprint')
                                                     ->body($e->getMessage())
                                                     ->danger()
                                                     ->send();
@@ -425,7 +575,8 @@ class ProjectResource extends Resource
                                         ->color('gray')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
-                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+
+                                            return ! empty($prd) && is_array($prd) && ! empty($prd['modules'] ?? []);
                                         })
                                         ->requiresConfirmation()
                                         ->modalHeading('Regenerar PRD')
@@ -434,20 +585,23 @@ class ProjectResource extends Resource
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
 
-                                            if (!$project) {
+                                            if (! $project) {
                                                 Notification::make()
                                                     ->title('Projeto não encontrado')
                                                     ->danger()
                                                     ->send();
+
                                                 return;
                                             }
 
                                             $project->update([
                                                 'prd_payload' => null,
                                                 'prd_approved_at' => null,
+                                                'blueprint_payload' => null,
+                                                'blueprint_approved_at' => null,
                                             ]);
 
-                                            \App\Jobs\GenerateProjectPrdJob::dispatch($project);
+                                            GenerateProjectPrdJob::dispatch($project);
 
                                             Notification::make()
                                                 ->title('Regeneração do PRD iniciada')
@@ -462,16 +616,40 @@ class ProjectResource extends Resource
                                         ->color('gray')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
-                                            return !empty($prd) && is_array($prd) && !empty($prd['modules'] ?? []);
+
+                                            return ! empty($prd) && is_array($prd) && ! empty($prd['modules'] ?? []);
                                         })
                                         ->modalHeading('PRD Completo do Projeto')
                                         ->modalSubmitAction(false)
                                         ->modalCancelActionLabel('Fechar')
                                         ->modalContent(function (Get $get) {
                                             $prd = $get('prd_payload');
-                                            return new \Illuminate\Support\HtmlString(
-                                                '<pre class="text-xs overflow-auto max-h-96 bg-gray-100 p-4 rounded">' .
-                                                json_encode($prd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) .
+
+                                            return new HtmlString(
+                                                '<pre class="text-xs overflow-auto max-h-96 bg-gray-100 p-4 rounded">'.
+                                                json_encode($prd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE).
+                                                '</pre>'
+                                            );
+                                        }),
+
+                                    Action::make('viewBlueprint')
+                                        ->label('Ver Blueprint')
+                                        ->icon('heroicon-o-map')
+                                        ->color('gray')
+                                        ->visible(function (Get $get) {
+                                            $blueprint = $get('blueprint_payload');
+
+                                            return ! empty($blueprint) && is_array($blueprint);
+                                        })
+                                        ->modalHeading('Blueprint Técnico do Projeto')
+                                        ->modalSubmitAction(false)
+                                        ->modalCancelActionLabel('Fechar')
+                                        ->modalContent(function (Get $get) {
+                                            $blueprint = $get('blueprint_payload');
+
+                                            return new HtmlString(
+                                                '<pre class="text-xs overflow-auto max-h-96 bg-gray-100 p-4 rounded">'.
+                                                json_encode($blueprint, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE).
                                                 '</pre>'
                                             );
                                         }),
@@ -532,7 +710,7 @@ class ProjectResource extends Resource
                                         : "Reescreva a descrição da funcionalidade '{$featureTitle}' ({$featureType}) ajustando-a conforme solicitado:\n\n{$currentText}\n\nAjuste solicitado:\n{$query}";
 
                                     $promptText .= "\n\n---\nCONTEXTO DO PROJETO '{$projectName}':\n{$projectDescription}\n---\n";
-                                    $promptText .= "IMPORTANTE: A descrição refinada deve estar alinhada com o propósito geral do projeto acima. NÃO inclua especificações técnicas de frameworks, ferramentas, versões ou arquitetura no texto final.";
+                                    $promptText .= 'IMPORTANTE: A descrição refinada deve estar alinhada com o propósito geral do projeto acima. NÃO inclua especificações técnicas de frameworks, ferramentas, versões ou arquitetura no texto final.';
 
                                     $refined = (new RefineFeatureAgent(base_path()))
                                         ->prompt(
@@ -615,8 +793,7 @@ class ProjectResource extends Resource
 
                 Tables\Columns\TextColumn::make('modules_count')
                     ->label('Módulos / Submódulos')
-                    ->getStateUsing(fn (Project $record) =>
-                        ($record->root_modules_count ?? 0).' / '.($record->sub_modules_count ?? 0)
+                    ->getStateUsing(fn (Project $record) => ($record->root_modules_count ?? 0).' / '.($record->sub_modules_count ?? 0)
                     ),
 
                 Tables\Columns\TextColumn::make('overall_progress')
@@ -645,10 +822,10 @@ class ProjectResource extends Resource
     {
         return $schema
             ->schema([
-                \Filament\Schemas\Components\Tabs::make()
+                Tabs::make()
                     ->tabs([
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Visão Geral')
+                        Tab::make('Visão Geral')
                             ->icon('heroicon-o-information-circle')
                             ->schema([
                                 Grid::make(3)
@@ -681,7 +858,7 @@ class ProjectResource extends Resource
                                     ->columnSpanFull(),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Módulos')
+                        Tab::make('Módulos')
                             ->icon('heroicon-o-squares-2x2')
                             ->schema([
                                 Infolists\Components\RepeatableEntry::make('rootModules')
@@ -779,22 +956,35 @@ class ProjectResource extends Resource
                                     ->columnSpanFull(),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('PRD')
+                        Tab::make('PRD')
                             ->icon('heroicon-o-document-text')
                             ->schema([
                                 Infolists\Components\TextEntry::make('prd_status')
                                     ->label('Status')
                                     ->getStateUsing(fn (Project $record) => match (true) {
-                                        empty($record->prd_payload)  => 'Nenhum PRD gerado',
-                                        $record->isPrdApproved()     => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
-                                        default                      => 'Aguardando aprovação',
+                                        empty($record->prd_payload) => 'Nenhum PRD gerado',
+                                        $record->isPrdApproved() => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
+                                        default => 'Aguardando aprovação',
                                     })
                                     ->color(fn (Project $record) => $record->isPrdApproved() ? 'success' : 'gray')
                                     ->columnSpanFull(),
 
-                                \Filament\Schemas\Components\Tabs::make('Funcionalidades')
+                                Infolists\Components\TextEntry::make('blueprint_status')
+                                    ->label('Blueprint Técnico')
+                                    ->getStateUsing(fn (Project $record) => match (true) {
+                                        ! $record->isPrdApproved() => 'Aguardando PRD aprovado',
+                                        empty($record->blueprint_payload) => 'Não gerado',
+                                        ($record->blueprint_payload['_status'] ?? null) === 'generating' => 'Gerando',
+                                        ! empty($record->blueprint_payload['_status'] ?? null) => 'Falhou',
+                                        $record->isBlueprintApproved() => 'Blueprint aprovado em '.$record->blueprint_approved_at->format('d/m/Y H:i'),
+                                        default => 'Aguardando aprovação',
+                                    })
+                                    ->color(fn (Project $record) => $record->isBlueprintApproved() ? 'success' : 'gray')
+                                    ->columnSpanFull(),
+
+                                Tabs::make('Funcionalidades')
                                     ->tabs([
-                                        \Filament\Schemas\Components\Tabs\Tab::make('Backend')
+                                        Tab::make('Backend')
                                             ->schema([
                                                 Infolists\Components\RepeatableEntry::make('backendFeatures')
                                                     ->label('')
@@ -807,7 +997,7 @@ class ProjectResource extends Resource
                                                     ])
                                                     ->columns(1)->grid(1)->columnSpanFull(),
                                             ]),
-                                        \Filament\Schemas\Components\Tabs\Tab::make('Frontend')
+                                        Tab::make('Frontend')
                                             ->schema([
                                                 Infolists\Components\RepeatableEntry::make('frontendFeatures')
                                                     ->label('')
@@ -824,7 +1014,7 @@ class ProjectResource extends Resource
                                     ->columnSpanFull(),
                             ]),
 
-                        \Filament\Schemas\Components\Tabs\Tab::make('Orçamento')
+                        Tab::make('Orçamento')
                             ->icon('heroicon-o-calculator')
                             ->schema([
                                 Grid::make(2)
@@ -837,8 +1027,8 @@ class ProjectResource extends Resource
                                             ->badge()
                                             ->color(fn (Project $record) => match ($record->activeQuotation?->status) {
                                                 'approved', 'completed' => 'success',
-                                                'rejected'              => 'danger',
-                                                default                 => 'gray',
+                                                'rejected' => 'danger',
+                                                default => 'gray',
                                             }),
                                         Infolists\Components\TextEntry::make('quotation_hours')
                                             ->label('Horas Humanas')

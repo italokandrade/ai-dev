@@ -10,6 +10,7 @@ use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
 use App\Models\Task;
 use App\Services\AiRuntimeConfigService;
+use App\Services\ProjectBlueprintService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -21,6 +22,14 @@ use Illuminate\Support\Facades\Log;
 class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    private const int MAX_SUBMODULE_DEPTH = 1;
+
+    private const int MAX_SUBMODULES_PER_MODULE = 8;
+
+    private const int MAX_MODULES_PER_PROJECT = 120;
+
+    private const int MAX_TASKS_PER_MODULE = 30;
 
     public int $tries = 3;
 
@@ -39,7 +48,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $this->onQueue('orchestrator');
     }
 
-    public function handle(): void
+    public function handle(ProjectBlueprintService $blueprintService): void
     {
         $this->module->refresh();
 
@@ -47,6 +56,8 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $existingPrd = $this->module->prd_payload;
         if (! empty($existingPrd) && empty($existingPrd['_status'] ?? '')) {
             Log::info("CascadeModulePrdJob: PRD já existe para '{$this->module->name}', pulando geração.");
+            $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $existingPrd);
+            $this->module->refresh();
             $this->autoApprove($existingPrd);
 
             return;
@@ -64,6 +75,8 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $prdPayload);
+        $this->module->refresh();
         $this->autoApprove($prdPayload);
     }
 
@@ -98,11 +111,18 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
     private function autoApprove(array $prd): void
     {
-        if ($prd['needs_submodules'] ?? false) {
+        if ($this->shouldCreateSubmodules($prd)) {
             $this->createSubmodules($prd);
         } else {
             $this->createTasks($prd);
         }
+    }
+
+    private function shouldCreateSubmodules(array $prd): bool
+    {
+        return (bool) ($prd['needs_submodules'] ?? false)
+            && ! empty($prd['submodules'])
+            && $this->moduleDepth() < self::MAX_SUBMODULE_DEPTH;
     }
 
     private function createSubmodules(array $prd): void
@@ -123,22 +143,35 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         }
 
         $created = [];
+        $existingNames = $this->module->children()
+            ->pluck('name')
+            ->map(fn (string $name): string => $this->normalizeName($name))
+            ->all();
+        $seenNames = array_fill_keys($existingNames, true);
+        $remainingProjectSlots = max(0, self::MAX_MODULES_PER_PROJECT - $this->module->project->modules()->count());
 
         foreach ($prd['submodules'] as $submoduleData) {
+            if (count($created) >= self::MAX_SUBMODULES_PER_MODULE || count($created) >= $remainingProjectSlots) {
+                break;
+            }
+
+            if (! is_array($submoduleData)) {
+                continue;
+            }
+
             $priorityEnum = match ($submoduleData['priority'] ?? 'normal') {
                 'high' => Priority::High,
                 'medium' => Priority::Medium,
                 default => Priority::Normal,
             };
 
-            $name = $submoduleData['name'] ?? '';
-            if (is_array($name)) {
-                $name = implode(' ', $name);
+            $name = $this->stringValue($submoduleData['name'] ?? '');
+            $normalizedName = $this->normalizeName($name);
+            if ($name === '' || isset($seenNames[$normalizedName])) {
+                continue;
             }
-            $description = $submoduleData['description'] ?? '';
-            if (is_array($description)) {
-                $description = implode(' ', $description);
-            }
+
+            $description = $this->stringValue($submoduleData['description'] ?? '');
 
             $submodule = ProjectModule::create([
                 'project_id' => $this->module->project_id,
@@ -150,6 +183,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             ]);
 
             $created[] = $submodule;
+            $seenNames[$normalizedName] = true;
         }
 
         Log::info('CascadeModulePrdJob: '.count($created)." submódulos criados para '{$this->module->name}'. Despachando cascata.");
@@ -171,46 +205,89 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $tasks = [];
 
         foreach ($prd['components'] ?? [] as $component) {
-            $tasks[] = [
-                'title' => "Implementar {$component['type']}: {$component['name']}",
+            if (! is_array($component)) {
+                continue;
+            }
+
+            $componentType = $this->stringValue($component['type'] ?? 'Componente');
+            $componentName = $this->stringValue($component['name'] ?? '');
+
+            $this->pushTask($tasks, [
+                'title' => "Implementar {$componentType}: {$componentName}",
                 'description' => $component['description'] ?? '',
                 'priority' => Priority::High,
-            ];
+            ]);
         }
 
         foreach ($prd['workflows'] ?? [] as $workflow) {
+            if (! is_array($workflow)) {
+                continue;
+            }
+
             $steps = collect($workflow['steps'] ?? [])
                 ->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)
                 ->implode(' → ');
-            $tasks[] = [
-                'title' => "Fluxo: {$workflow['name']}",
+            $workflowName = $this->stringValue($workflow['name'] ?? 'Fluxo');
+            $this->pushTask($tasks, [
+                'title' => "Fluxo: {$workflowName}",
                 'description' => 'Steps: '.$steps,
                 'priority' => Priority::High,
-            ];
+            ]);
         }
 
         foreach ($prd['api_endpoints'] ?? [] as $api) {
-            $tasks[] = [
-                'title' => "API {$api['method']} {$api['uri']}",
+            if (! is_array($api)) {
+                continue;
+            }
+
+            $method = $this->stringValue($api['method'] ?? 'GET');
+            $uri = $this->stringValue($api['uri'] ?? '/');
+            $this->pushTask($tasks, [
+                'title' => "API {$method} {$uri}",
                 'description' => $api['description'] ?? '',
                 'priority' => Priority::Medium,
-            ];
+            ]);
         }
 
         foreach ($prd['database_schema']['tables'] ?? [] as $table) {
-            $tasks[] = [
-                'title' => "Migration: {$table['name']}",
+            if (! is_array($table)) {
+                continue;
+            }
+
+            $tableName = $this->stringValue($table['name'] ?? '');
+            $this->pushTask($tasks, [
+                'title' => "Migration: {$tableName}",
                 'description' => $table['description'] ?? '',
                 'priority' => Priority::High,
-            ];
+            ]);
         }
 
         foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
-            $tasks[] = [
+            $criteriaText = is_array($criteria) ? json_encode($criteria, JSON_UNESCAPED_UNICODE) : (string) $criteria;
+            $this->pushTask($tasks, [
                 'title' => 'Teste: '.(is_array($criteria) ? json_encode($criteria) : $criteria),
-                'description' => is_array($criteria) ? json_encode($criteria) : $criteria,
+                'description' => $criteriaText,
                 'priority' => Priority::Medium,
-            ];
+            ]);
+        }
+
+        if ($tasks === [] && ! empty($prd['submodules'])) {
+            foreach ($prd['submodules'] as $submodule) {
+                if (! is_array($submodule)) {
+                    continue;
+                }
+
+                $name = $this->stringValue($submodule['name'] ?? '');
+                if ($name === '') {
+                    continue;
+                }
+
+                $this->pushTask($tasks, [
+                    'title' => "Implementar submódulo: {$name}",
+                    'description' => $this->stringValue($submodule['description'] ?? ''),
+                    'priority' => Priority::High,
+                ]);
+            }
         }
 
         foreach ($tasks as $taskData) {
@@ -218,16 +295,64 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
                 'project_id' => $this->module->project_id,
                 'module_id' => $this->module->id,
                 'title' => $taskData['title'],
-                'description' => $taskData['description'],
                 'status' => TaskStatus::Pending,
                 'priority' => $taskData['priority'],
                 'source' => TaskSource::Specification,
-                'prd_payload' => $prd,
+                'prd_payload' => $this->taskPrdPayload($taskData, $prd),
                 'max_retries' => 3,
             ]);
         }
 
         Log::info('CascadeModulePrdJob: '.count($tasks)." tasks criadas para '{$this->module->name}'");
+    }
+
+    /**
+     * @param  array<int, array{title: string, description: mixed, priority: Priority}>  $tasks
+     * @param  array{title: string, description: mixed, priority: Priority}  $task
+     */
+    private function pushTask(array &$tasks, array $task): void
+    {
+        if (count($tasks) >= self::MAX_TASKS_PER_MODULE) {
+            return;
+        }
+
+        $title = $this->stringValue($task['title']);
+        $normalizedTitle = $this->normalizeName($title);
+
+        if ($title === '' || collect($tasks)->contains(fn (array $existing): bool => $this->normalizeName($existing['title']) === $normalizedTitle)) {
+            return;
+        }
+
+        $tasks[] = [
+            'title' => $title,
+            'description' => $this->stringValue($task['description'] ?? ''),
+            'priority' => $task['priority'],
+        ];
+    }
+
+    /**
+     * @param  array{title: string, description: string, priority: Priority}  $taskData
+     * @return array<string, mixed>
+     */
+    private function taskPrdPayload(array $taskData, array $modulePrd): array
+    {
+        return [
+            'objective' => $taskData['description'] !== '' ? $taskData['description'] : $taskData['title'],
+            'acceptance_criteria' => $modulePrd['acceptance_criteria'] ?? [],
+            'constraints' => [
+                'Usar a stack TALL + Filament v5 definida pelo projeto alvo.',
+                'Consultar Boost do projeto alvo antes de implementar.',
+            ],
+            'knowledge_areas' => ['laravel', 'filament', 'livewire', 'tailwind'],
+            'module_context' => [
+                'module_id' => $this->module->id,
+                'module_name' => $this->module->name,
+                'module_prd_title' => $modulePrd['title'] ?? null,
+            ],
+            'blueprint_context' => [
+                'module_blueprint' => $this->module->blueprint_payload,
+            ],
+        ];
     }
 
     private function buildPrompt(): string
@@ -245,6 +370,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
         $typeLabel = $isSubmodule ? 'SUBMÓDULO' : 'MÓDULO';
         $parentInfo = $isSubmodule ? "\nMÓDULO PAI: {$parentName}\n" : '';
+        $blueprintContext = $this->blueprintContext();
 
         return <<<PROMPT
 PROJETO: {$project->name}
@@ -257,11 +383,32 @@ DESCRIÇÃO DO PROJETO:
 DESCRIÇÃO DO {$typeLabel}:
 {$moduleDescription}
 
+BLUEPRINT TÉCNICO GLOBAL ATUAL:
+{$blueprintContext}
+
 ---
 INSTRUÇÃO: Gere o PRD Técnico deste {$typeLabel}.
 Este PRD será usado por desenvolvedores para implementar o código.
 Especifique: tabelas de banco, APIs, componentes, regras de negócio, validações, permissões e fluxos.
+Atualize também o `blueprint_contribution` com entidades, campos, relacionamentos, casos de uso, workflows e componentes que este {$typeLabel} adiciona ou detalha.
 PROMPT;
+    }
+
+    private function blueprintContext(): string
+    {
+        $blueprint = $this->module->project->blueprint_payload;
+
+        if (empty($blueprint) || ! is_array($blueprint)) {
+            return 'Nenhum Blueprint Técnico Global aprovado ou gerado. Reutilize apenas o PRD Master e não invente entidades fora do escopo do módulo.';
+        }
+
+        $json = json_encode($blueprint, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        if (strlen((string) $json) > 10000) {
+            return substr((string) $json, 0, 10000)."\n\n[...Blueprint truncado para otimização...]";
+        }
+
+        return (string) $json;
     }
 
     private function parsePrd(string $raw): array
@@ -288,6 +435,33 @@ PROMPT;
             '_status' => 'ai_generation_failed',
             '_error' => $error,
         ];
+    }
+
+    private function moduleDepth(): int
+    {
+        $depth = 0;
+        $parent = $this->module->parent;
+
+        while ($parent !== null) {
+            $depth++;
+            $parent = $parent->parent;
+        }
+
+        return $depth;
+    }
+
+    private function normalizeName(string $name): string
+    {
+        return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? ''));
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return trim(implode(' ', array_map($this->stringValue(...), $value)));
+        }
+
+        return trim((string) $value);
     }
 
     public function failed(\Throwable $exception): void

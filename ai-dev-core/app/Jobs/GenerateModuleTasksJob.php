@@ -19,6 +19,7 @@ class GenerateModuleTasksJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
+
     public int $timeout = 60;
 
     public function __construct(
@@ -34,7 +35,8 @@ class GenerateModuleTasksJob implements ShouldQueue
         $prd = $this->module->prd_payload;
 
         if (empty($prd)) {
-            Log::info("GenerateModuleTasksJob: Nenhum PRD encontrado.");
+            Log::info('GenerateModuleTasksJob: Nenhum PRD encontrado.');
+
             return;
         }
 
@@ -53,9 +55,9 @@ class GenerateModuleTasksJob implements ShouldQueue
         foreach ($prd['workflows'] ?? [] as $workflow) {
             $steps = collect($workflow['steps'] ?? [])->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)->implode(' → ');
             $tasks[] = [
-                'title'       => "Fluxo: {$workflow['name']}",
-                'description' => 'Steps: ' . $steps,
-                'priority'    => Priority::High,
+                'title' => "Fluxo: {$workflow['name']}",
+                'description' => 'Steps: '.$steps,
+                'priority' => Priority::High,
             ];
         }
 
@@ -93,7 +95,23 @@ class GenerateModuleTasksJob implements ShouldQueue
                 'project_id' => $this->module->project_id,
                 'module_id' => $this->module->id,
                 'title' => $taskData['title'],
-                'description' => $taskData['description'],
+                'prd_payload' => [
+                    'objective' => $taskData['description'],
+                    'acceptance_criteria' => $prd['acceptance_criteria'] ?? [],
+                    'constraints' => [
+                        'Usar a stack TALL + Filament v5 definida pelo projeto alvo.',
+                        'Consultar Boost do projeto alvo antes de implementar.',
+                    ],
+                    'knowledge_areas' => ['laravel', 'filament', 'livewire', 'tailwind'],
+                    'module_context' => [
+                        'module_id' => $this->module->id,
+                        'module_name' => $this->module->name,
+                        'module_prd_title' => $prd['title'] ?? null,
+                    ],
+                    'blueprint_context' => [
+                        'module_blueprint' => $this->module->blueprint_payload,
+                    ],
+                ],
                 'status' => TaskStatus::Pending,
                 'priority' => $taskData['priority'],
                 'source' => TaskSource::Prd,

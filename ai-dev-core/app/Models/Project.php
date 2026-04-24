@@ -2,19 +2,23 @@
 
 namespace App\Models;
 
+use App\Enums\ModuleStatus;
+use App\Enums\Priority;
 use App\Enums\ProjectStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Concerns\RemembersConversations;
-use Spatie\Activitylog\Traits\LogsActivity;
+use Laravel\Ai\Contracts\Conversational;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Project extends Model implements Conversational
 {
-    use HasUuids, RemembersConversations, LogsActivity;
+    use HasUuids, LogsActivity, RemembersConversations;
+
+    public const int MAX_ROOT_MODULES = 40;
 
     public function getActivitylogOptions(): LogOptions
     {
@@ -32,6 +36,8 @@ class Project extends Model implements Conversational
         'status',
         'prd_payload',
         'prd_approved_at',
+        'blueprint_payload',
+        'blueprint_approved_at',
     ];
 
     public function features(): HasMany
@@ -55,6 +61,8 @@ class Project extends Model implements Conversational
             'status' => ProjectStatus::class,
             'prd_payload' => 'json',
             'prd_approved_at' => 'datetime',
+            'blueprint_payload' => 'json',
+            'blueprint_approved_at' => 'datetime',
         ];
     }
 
@@ -105,13 +113,16 @@ class Project extends Model implements Conversational
             $totalTasks = $this->tasks()->count();
             if ($totalTasks > 0) {
                 $completedTasks = $this->tasks()->where('status', 'completed')->count();
+
                 return round(($completedTasks / $totalTasks) * 100, 1);
             }
             $totalModules = $this->modules()->count();
             if ($totalModules > 0) {
                 $completedModules = $this->modules()->where('status', 'completed')->count();
+
                 return round(($completedModules / $totalModules) * 100, 1);
             }
+
             return 0.0;
         });
     }
@@ -131,9 +142,13 @@ class Project extends Model implements Conversational
     public function addExecutionCost(float $tokenCostUsd, float $infraCostBrl = 0): void
     {
         $quotation = $this->activeQuotation;
-        if (! $quotation) return;
+        if (! $quotation) {
+            return;
+        }
         $quotation->increment('actual_token_cost_usd', $tokenCostUsd);
-        if ($infraCostBrl > 0) $quotation->increment('actual_infra_cost', $infraCostBrl);
+        if ($infraCostBrl > 0) {
+            $quotation->increment('actual_infra_cost', $infraCostBrl);
+        }
         $quotation->recalculate();
         $quotation->save();
     }
@@ -148,9 +163,37 @@ class Project extends Model implements Conversational
         return $this->prd_approved_at !== null;
     }
 
+    public function isBlueprintReady(): bool
+    {
+        $blueprint = $this->blueprint_payload;
+
+        if (empty($blueprint) || ! is_array($blueprint) || ! empty($blueprint['_status'] ?? null)) {
+            return false;
+        }
+
+        return ! empty($blueprint['domain_model']['entities'] ?? [])
+            || ! empty($blueprint['use_cases'] ?? [])
+            || ! empty($blueprint['workflows'] ?? [])
+            || ! empty($blueprint['architecture']['components'] ?? []);
+    }
+
+    public function isBlueprintApproved(): bool
+    {
+        return $this->blueprint_approved_at !== null;
+    }
+
     public function approvePrd(): void
     {
         $this->update(['prd_approved_at' => now()]);
+    }
+
+    public function approveBlueprint(): void
+    {
+        if (! $this->isBlueprintReady()) {
+            throw new \RuntimeException('O Blueprint Técnico precisa estar pronto antes da criação dos módulos.');
+        }
+
+        $this->update(['blueprint_approved_at' => now()]);
     }
 
     /**
@@ -166,40 +209,84 @@ class Project extends Model implements Conversational
         }
 
         $moduleIdMap = [];
+        $existingRootModules = $this->modules()
+            ->whereNull('parent_id')
+            ->get()
+            ->keyBy(fn (ProjectModule $module): string => $this->normalizeModuleName($module->name));
 
-        foreach ($prd['modules'] as $moduleData) {
-            $priorityEnum = match ($moduleData['priority'] ?? 'normal') {
-                'high' => \App\Enums\Priority::High,
-                'medium' => \App\Enums\Priority::Medium,
-                default => \App\Enums\Priority::Normal,
+        foreach ($existingRootModules as $normalizedName => $module) {
+            $moduleIdMap[$normalizedName] = $module->id;
+        }
+
+        $modules = collect($prd['modules'])
+            ->filter(fn (mixed $moduleData): bool => is_array($moduleData))
+            ->map(function (array $moduleData): array {
+                $name = $this->stringValue($moduleData['name'] ?? '');
+
+                return [
+                    'name' => $name,
+                    'normalized_name' => $this->normalizeModuleName($name),
+                    'description' => $this->stringValue($moduleData['description'] ?? ''),
+                    'priority' => $moduleData['priority'] ?? 'normal',
+                    'dependencies' => $moduleData['dependencies'] ?? [],
+                ];
+            })
+            ->filter(fn (array $moduleData): bool => $moduleData['name'] !== '' && $moduleData['normalized_name'] !== '')
+            ->unique('normalized_name')
+            ->take(self::MAX_ROOT_MODULES)
+            ->values();
+
+        foreach ($modules as $moduleData) {
+            if ($existingRootModules->has($moduleData['normalized_name'])) {
+                continue;
+            }
+
+            $priorityEnum = match ($moduleData['priority']) {
+                'high' => Priority::High,
+                'medium' => Priority::Medium,
+                default => Priority::Normal,
             };
 
             $module = ProjectModule::create([
                 'project_id' => $this->id,
                 'name' => $moduleData['name'],
-                'description' => $moduleData['description'] ?? '',
-                'status' => \App\Enums\ModuleStatus::Planned,
+                'description' => $moduleData['description'],
+                'status' => ModuleStatus::Planned,
                 'priority' => $priorityEnum,
                 'dependencies' => null,
             ]);
 
-            $moduleIdMap[$moduleData['name']] = $module->id;
+            $moduleIdMap[$moduleData['normalized_name']] = $module->id;
         }
 
         // Resolver dependências entre módulos
-        foreach ($prd['modules'] as $moduleData) {
+        foreach ($modules as $moduleData) {
             if (! empty($moduleData['dependencies'])) {
                 $depIds = collect($moduleData['dependencies'])
-                    ->map(fn ($depName) => $moduleIdMap[$depName] ?? null)
+                    ->map(fn ($depName) => $moduleIdMap[$this->normalizeModuleName($this->stringValue($depName))] ?? null)
                     ->filter()
                     ->values()
                     ->all();
 
-                if (! empty($depIds) && isset($moduleIdMap[$moduleData['name']])) {
-                    ProjectModule::where('id', $moduleIdMap[$moduleData['name']])
+                if (! empty($depIds) && isset($moduleIdMap[$moduleData['normalized_name']])) {
+                    ProjectModule::where('id', $moduleIdMap[$moduleData['normalized_name']])
                         ->update(['dependencies' => $depIds]);
                 }
             }
         }
+    }
+
+    private function normalizeModuleName(string $name): string
+    {
+        return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? ''));
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return trim(implode(' ', array_map($this->stringValue(...), $value)));
+        }
+
+        return trim((string) $value);
     }
 }

@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\Enums\ModuleStatus;
+use App\Enums\Priority;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
-use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class ProjectModule extends Model
 {
@@ -33,6 +33,7 @@ class ProjectModule extends Model
         'dependencies',
         'progress_percentage',
         'prd_payload',
+        'blueprint_payload',
         'started_at',
         'completed_at',
     ];
@@ -41,10 +42,11 @@ class ProjectModule extends Model
     {
         return [
             'status' => ModuleStatus::class,
-            'priority' => \App\Enums\Priority::class,
+            'priority' => Priority::class,
             'dependencies' => 'array',
             'progress_percentage' => 'float',
             'prd_payload' => 'json',
+            'blueprint_payload' => 'json',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
@@ -89,6 +91,7 @@ class ProjectModule extends Model
 
         if ($total === 0) {
             $this->update(['progress_percentage' => 0]);
+
             return;
         }
 

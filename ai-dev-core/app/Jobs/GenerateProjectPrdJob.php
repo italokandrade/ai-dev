@@ -17,6 +17,7 @@ class GenerateProjectPrdJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
+
     public int $timeout = 600;
 
     public function __construct(
@@ -34,7 +35,7 @@ class GenerateProjectPrdJob implements ShouldQueue
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-            $response = (new ProjectPrdAgent())
+            $response = (new ProjectPrdAgent)
                 ->prompt(
                     $prompt,
                     provider: $aiConfig['provider'],
@@ -47,7 +48,7 @@ class GenerateProjectPrdJob implements ShouldQueue
                 'modules' => count($prdPayload['modules'] ?? []),
             ]);
         } catch (\Throwable $e) {
-            Log::error("GenerateProjectPrdJob: Falha na geração do PRD", [
+            Log::error('GenerateProjectPrdJob: Falha na geração do PRD', [
                 'project' => $this->project->name,
                 'error' => $e->getMessage(),
             ]);
@@ -69,7 +70,7 @@ class GenerateProjectPrdJob implements ShouldQueue
 
         // Trunca descrição para evitar prompt gigante e timeout na IA
         if (strlen($description) > 1500) {
-            $description = substr($description, 0, 1500) . "\n\n[...descrição truncada para otimização...]";
+            $description = substr($description, 0, 1500)."\n\n[...descrição truncada para otimização...]";
         }
 
         // Usa apenas título das funcionalidades para reduzir tamanho do prompt
@@ -98,7 +99,8 @@ FUNCIONALIDADES FRONTEND:
 INSTRUÇÃO: Com base nas informações acima, gere o PRD Master deste projeto.
 O PRD deve respeitar EXATAMENTE as funcionalidades já cadastradas.
 Não invente módulos ou funcionalidades que não foram solicitadas.
-Divida tudo em módulos e submódulos pequenos, atômicos e de responsabilidade única.
+Divida tudo apenas em módulos de alto nível, sem submódulos, sem campos de banco e sem endpoints finais.
+Depois do PRD, outro agente irá gerar o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
 PROMPT;
     }
 
@@ -114,7 +116,7 @@ PROMPT;
                 'raw_preview' => substr($raw, 0, 500),
                 'json_error' => json_last_error_msg(),
             ]);
-            throw new \RuntimeException('JSON inválido retornado pela IA: ' . json_last_error_msg());
+            throw new \RuntimeException('JSON inválido retornado pela IA: '.json_last_error_msg());
         }
 
         return $data;
@@ -122,7 +124,7 @@ PROMPT;
 
     public function failed(\Throwable $exception): void
     {
-        Log::error("GenerateProjectPrdJob: Job falhou por completo", [
+        Log::error('GenerateProjectPrdJob: Job falhou por completo', [
             'project' => $this->project->name,
             'error' => $exception->getMessage(),
         ]);
