@@ -24,28 +24,37 @@ class GitOperationTool implements Tool
         $action = $request['action'];
 
         $git = Process::path($this->workingDirectory)->timeout(60);
+        $path = $request['path'] ?? null;
+        $branch = $request['branch'] ?? null;
+        $message = $request['message'] ?? 'feat: AI-Dev agent commit';
 
         $result = match ($action) {
             'status' => $git->run('git status --short'),
             'diff' => $git->run('git diff'),
             'log' => $git->run('git log --oneline -20'),
 
-            'branch_create' => $git->run('git checkout -b '.escapeshellarg($request['branch'] ?? '')),
-            'branch_checkout' => $git->run('git checkout '.escapeshellarg($request['branch'] ?? '')),
+            'branch_create' => is_string($branch) && $branch !== ''
+                ? $git->run(['git', 'checkout', '-b', $branch])
+                : null,
+            'branch_checkout' => is_string($branch) && $branch !== ''
+                ? $git->run(['git', 'checkout', $branch])
+                : null,
             'branch_list' => $git->run('git branch -a'),
 
-            'add' => $git->run('git add '.($request['path'] ? escapeshellarg($request['path']) : '-A')),
-            'commit' => $git->run('git commit -m '.escapeshellarg($request['message'] ?? 'feat: AI-Dev agent commit')),
-            'push' => $git->run('git push origin HEAD'),
+            'add' => is_string($path) && $path !== ''
+                ? $git->run(['git', 'add', $path])
+                : $git->run(['git', 'add', '-A']),
+            'commit' => $git->run(['git', 'commit', '-m', $message]),
+            'push' => $git->run(['git', 'push', 'origin', 'HEAD']),
 
-            'reset_hard' => $git->run('git reset --hard HEAD'),
-            'stash' => $git->run('git stash'),
+            'reset_hard' => null,
+            'stash' => $git->run(['git', 'stash', 'push', '-u']),
 
             default => null,
         };
 
         if ($result === null) {
-            return json_encode(['success' => false, 'error' => "Unknown git action: {$action}"]);
+            return json_encode(['success' => false, 'error' => "Unknown, incomplete, or disabled git action: {$action}"]);
         }
 
         return json_encode([
@@ -64,14 +73,11 @@ class GitOperationTool implements Tool
                 ->enum(['status', 'diff', 'log', 'branch_create', 'branch_checkout', 'branch_list', 'add', 'commit', 'push', 'reset_hard', 'stash'])
                 ->required(),
             'branch' => $schema->string()
-                ->description('Branch name for branch_create or branch_checkout actions.')
-                ->required(),
+                ->description('Branch name for branch_create or branch_checkout actions.'),
             'path' => $schema->string()
-                ->description('File path for git add. If omitted, stages all changed files (-A).')
-                ->required(),
+                ->description('File path for git add. If omitted, stages all changed files (-A).'),
             'message' => $schema->string()
-                ->description('Commit message for the commit action.')
-                ->required(),
+                ->description('Commit message for the commit action.'),
         ];
     }
 }

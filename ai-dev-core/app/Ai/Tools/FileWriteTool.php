@@ -86,7 +86,12 @@ class FileWriteTool implements Tool
         }
 
         $newContent = str_replace($oldString, $newString, $content);
-        @file_put_contents($path, $newContent);
+        $bytes = @file_put_contents($path, $newContent);
+        if ($bytes === false) {
+            Log::error("FileWriteTool: Failed to write replacement to '{$path}'");
+
+            return json_encode(['success' => false, 'error' => "Cannot write file: {$path}"]);
+        }
 
         Log::info("FileWriteTool: Successfully applied 1 replacement in '{$path}'");
 
