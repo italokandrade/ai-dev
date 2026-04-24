@@ -237,6 +237,26 @@ class ViewProjectModule extends ViewRecord
                             : !$this->record->tasks()->exists()
                     )
                 ),
+
+            Actions\Action::make('viewModulePrd')
+                ->label('Ver PRD Completo')
+                ->icon('heroicon-o-document-text')
+                ->color('gray')
+                ->modalHeading(fn () => $this->record->prd_payload['title'] ?? 'PRD do Módulo')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Fechar')
+                ->modalContent(function () {
+                    $prd = $this->record->prd_payload;
+                    return new \Illuminate\Support\HtmlString(
+                        '<pre class="text-xs overflow-auto max-h-[70vh] bg-gray-100 dark:bg-gray-800 p-4 rounded whitespace-pre-wrap">'
+                        . e(json_encode($prd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))
+                        . '</pre>'
+                    );
+                })
+                ->visible(fn () =>
+                    !empty($this->record->prd_payload)
+                    && empty($this->record->prd_payload['_status'] ?? '')
+                ),
         ];
     }
 }
