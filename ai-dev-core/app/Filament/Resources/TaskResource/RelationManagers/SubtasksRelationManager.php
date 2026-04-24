@@ -8,6 +8,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Actions\Action;
 use Filament\Tables;
 use Filament\Tables\Table;
 
@@ -70,7 +71,7 @@ class SubtasksRelationManager extends RelationManager
             ])
             ->defaultSort('execution_order')
             ->actions([
-                Tables\Actions\Action::make('view_detail')
+                Action::make('view_detail')
                     ->label('')
                     ->icon('heroicon-o-eye')
                     ->modalHeading(fn (Subtask $record) => "Sub-PRD #{$record->execution_order}: {$record->title}")
