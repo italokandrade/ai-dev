@@ -22,7 +22,7 @@ class ModulePrdAgent implements Agent, HasProviderOptions
         if ($provider === 'kimi') {
             return [
                 'max_completion_tokens' => 32768,
-                'response_format'       => ['type' => 'json_object'],
+                'response_format' => ['type' => 'json_object'],
             ];
         }
 
@@ -43,6 +43,9 @@ Sua função é receber o escopo de um MÓDULO específico de um projeto e gerar
 (Product Requirement Document) detalhado e técnico para esse módulo.
 
 O PRD do módulo serve como especificação técnica para desenvolvedores implementarem o módulo.
+Ele também deve evoluir o Blueprint Técnico Global do projeto: entidades conceituais
+já descobertas no nível global recebem campos, workflows ficam mais precisos e
+componentes arquiteturais passam a ser ligados ao módulo.
 
 REGRAS DE CONTEÚDO:
 1. O PRD descreve O QUE e COMO o módulo deve ser implementado.
@@ -53,6 +56,12 @@ REGRAS DE CONTEÚDO:
 6. Descreva fluxos de trabalho e casos de uso principais.
 7. Inclua critérios de aceitação testáveis.
 8. O texto deve ser em Português do Brasil.
+9. Use `needs_submodules: true` somente para módulos de alto nível muito grandes.
+10. Gere no máximo 8 submódulos e no máximo 30 itens implementáveis por PRD.
+11. Submódulos não devem pedir nova decomposição em submódulos; eles devem gerar tasks implementáveis.
+12. Use o Blueprint Técnico Global recebido como trilho: reutilize entidades, relacionamentos, casos de uso e workflows já definidos.
+13. Se precisar de nova entidade, explique no `blueprint_contribution` por que ela pertence a este módulo.
+14. Em módulos raiz, evite excesso de campos; detalhe campos principalmente quando o módulo for folha ou quando o campo for essencial ao domínio.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.
@@ -77,6 +86,42 @@ SAÍDA:
           {"table": "outra_tabela", "type": "belongsTo", "foreign_key": "outra_tabela_id"}
         ]
       }
+    ]
+  },
+  "blueprint_contribution": {
+    "domain_model": {
+      "entities": [
+        {
+          "name": "nome_da_entidade",
+          "description": "Responsabilidade no domínio",
+          "columns": [
+            {"name": "campo", "type": "string", "nullable": false, "description": "Justificativa do campo"}
+          ],
+          "relationships": [
+            {"target": "outra_entidade", "type": "many_to_one", "foreign_key": "outra_entidade_id", "description": "Motivo da relação"}
+          ]
+        }
+      ],
+      "relationships": [
+        {"source": "entidade_a", "target": "entidade_b", "type": "one_to_many", "foreign_key": "entidade_a_id", "description": "Relação de negócio"}
+      ]
+    },
+    "use_cases": [
+      {"name": "Caso de uso", "actor": "Ator", "goal": "Objetivo"}
+    ],
+    "workflows": [
+      {"name": "Fluxo", "notation": "flowchart|bpmn", "steps": ["Passo 1", "Passo 2"]}
+    ],
+    "architecture": {
+      "components": [
+        {"name": "Componente", "description": "Papel no módulo"}
+      ],
+      "integrations": [
+        {"name": "Integração", "description": "Contrato ou dependência externa"}
+      ]
+    },
+    "api_surface": [
+      {"name": "Contrato", "purpose": "Finalidade", "consumers": ["Consumidor"]}
     ]
   },
   "api_endpoints": [

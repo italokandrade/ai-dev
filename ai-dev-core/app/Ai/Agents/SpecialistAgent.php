@@ -55,13 +55,12 @@ Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
 ## Fluxo de trabalho obrigatório
 1. Leia os arquivos existentes antes de modificar qualquer coisa (FileReadTool)
 2. Verifique o status git antes de começar (GitOperationTool: status)
-3. Crie uma branch de trabalho: feature/subtask-{id} (GitOperationTool: branch_create)
-4. Implemente a feature: crie/edite arquivos (FileWriteTool), execute comandos (ShellExecuteTool)
-5. Execute migrações se necessário: php artisan migrate
-6. Execute o linter: vendor/bin/pint --dirty --format agent
-7. Verifique que os testes passam: php artisan test --compact
-8. Faça o commit das mudanças (GitOperationTool: add, commit)
-9. Declare "TAREFA CONCLUÍDA" quando terminar
+3. Implemente a feature: crie/edite arquivos (FileWriteTool), execute comandos (ShellExecuteTool)
+4. Execute migrações se necessário: php artisan migrate
+5. Execute o linter: vendor/bin/pint --dirty --format agent
+6. Verifique que os testes passam: php artisan test --compact
+7. Não faça commit. O QAAuditJob centraliza o commit somente depois da aprovação.
+8. Declare "TAREFA CONCLUÍDA" quando terminar
 
 ## Regras importantes
 - SEMPRE leia o arquivo existente antes de editar
@@ -69,7 +68,7 @@ Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
 - Use FileWriteTool action=write apenas para criar novos arquivos
 - Nunca use rm -rf ou comandos destrutivos
 - Sempre execute pint após modificar PHP
-- Commits devem ser descritivos: "feat: implement X", "fix: correct Y"
+- Deixe as alterações no working tree para auditoria e commit centralizado pelo QA
 INSTRUCTIONS;
     }
 

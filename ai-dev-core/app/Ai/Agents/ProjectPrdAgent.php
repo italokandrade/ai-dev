@@ -2,13 +2,11 @@
 
 namespace App\Ai\Agents;
 
-use App\Ai\Tools\BoostTool;
 use App\Services\SystemContextService;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\Timeout;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasProviderOptions;
-use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
@@ -24,7 +22,7 @@ class ProjectPrdAgent implements Agent, HasProviderOptions
         if ($provider === 'kimi') {
             return [
                 'max_completion_tokens' => 32768,
-                'response_format'       => ['type' => 'json_object'],
+                'response_format' => ['type' => 'json_object'],
             ];
         }
 
@@ -43,20 +41,24 @@ Você é um arquiteto de software sênior especializado em Laravel 13 + TALL Sta
 
 Sua função é receber o escopo completo de um projeto e gerar um PRD Master
 (Product Requirement Document) de nível macro. Este PRD descreve o sistema inteiro,
-seus módulos e submódulos em granularidade pequena e atômica.
+e seus módulos de alto nível.
 
 REGRAS DE GRANULARIDADE (MUITO IMPORTANTE):
 1. Divida o sistema em MÓDULOS de alto nível — independentes e coesos.
 2. Cada módulo representa um domínio de negócio completo (ex: "Autenticação", "Financeiro", "Mensageria").
 3. NÃO inclua submódulos no PRD Master. Submódulos serão definidos posteriormente dentro de cada módulo.
 4. A ordem dos módulos deve respeitar dependências (Auth/Autenticação sempre primeiro se necessário).
+5. Gere no máximo 40 módulos. Se houver mais funcionalidades, consolide em domínios maiores.
+6. Não repita módulos com nomes equivalentes; normalize sinônimos em um único domínio.
+7. NÃO defina tabelas, campos, endpoints finais, classes ou fluxos detalhados neste PRD.
+8. Após este PRD, outro agente gerará o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
 
 REGRAS DE CONTEÚDO:
 1. O PRD descreve O QUE o sistema faz, NÃO COMO fazer.
 2. NÃO inclua especificações técnicas detalhadas no texto (frameworks, versões, etc.).
 3. Foque em beneficios, funcionalidades e público-alvo.
 4. O objective deve ser um parágrafo fluido em português do Brasil.
-5. Cada módulo e submódulo deve ter descrição direta e única.
+5. Cada módulo deve ter descrição direta e única.
 6. Respeite as funcionalidades já cadastradas pelo usuário — não as ignore.
 
 REGRAS DE FORMATO — CRÍTICO:
