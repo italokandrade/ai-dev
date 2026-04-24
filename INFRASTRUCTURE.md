@@ -48,74 +48,53 @@ A infraestrutura base já é de alto nível e atende perfeitamente ao ecossistem
 
 Para tirar o sistema do campo "teórico/frágil" (como scripts `nohup` soltos) e transformá-lo em uma máquina assíncrona, robusta e com memória real, precisaremos provisionar os seguintes componentes:
 
-### 2.1. Supervisor (Orquestração de Workers) — PRIORIDADE MÁXIMA
+### 2.1. Supervisor + Laravel Horizon (Orquestração de Workers) — OPERACIONAL
 
-**O que é:** O Supervisor é o padrão da indústria para monitorar processos de longa duração no Linux. Ele substitui o uso frágil de `nohup` e `&` para rodar scripts em background.
+**Status:** ✅ Instalado e rodando.
 
-**Por que precisamos:** O padrão anterior usava `gemini_watchdog.sh` com `nohup` — descontinuado. O Supervisor substitui esses scripts frágeis: se um worker crashar (estouro de memória, timeout, falha de rede), ele reinicia automaticamente em milissegundos sem intervenção humana.
+**Arquitetura atual:** Um único processo `php artisan horizon` gerenciado pelo Supervisor substitui múltiplos `queue:work` individuais. O Horizon distribui os jobs entre workers internamente, com dashboard web em `/horizon` e reinício automático pelo Supervisor em caso de crash.
 
-**O que ele vai monitorar no AI-Dev:**
+**Config ativa no servidor:**
 
-Todos os workers abaixo rodam o `artisan queue:work` **do ai-dev-core** (portanto, leem/escrevem no banco `ai_dev_core`). Quando um job dispara um agente de desenvolvimento (Orchestrator, Specialist, QAAuditor), o agente carrega `project.local_path` do Projeto Alvo e a partir daí **toda operação de ferramenta** (Shell, File, Git, Boost, DB) é executada dentro daquele path — não dentro do ai-dev-core. O worker continua sendo o mesmo processo; apenas o escopo de execução das tools é o Projeto Alvo.
-
-| Programa | Arquivo de Config | Workers | Fila Redis |
-|---|---|---|---|
-| Orchestrator Worker | `/etc/supervisor/conf.d/aidev-orchestrator.conf` | 1 | `queue:orchestrator` |
-| Executor Workers | `/etc/supervisor/conf.d/aidev-executors.conf` | 3 | `queue:executors` |
-| QA Auditor Worker | `/etc/supervisor/conf.d/aidev-qa.conf` | 1 | `queue:qa-auditor` |
-| Security Worker | `/etc/supervisor/conf.d/aidev-security.conf` | 1 | `queue:security` |
-| Performance Worker | `/etc/supervisor/conf.d/aidev-performance.conf` | 1 | `queue:performance` |
-| Context Compressor | `/etc/supervisor/conf.d/aidev-compressor.conf` | 1 | `queue:compressor` |
-| Sentinel Watcher | `/etc/supervisor/conf.d/aidev-sentinel.conf` | 1 | `queue:sentinel` |
-
-> Os proxies Python legados (Gemini Proxy :8001 e Claude Proxy :8002) foram descontinuados. Toda inferência externa hoje sai direto do Laravel AI SDK via HTTPS para o OpenRouter — sem proxy local intermediário. Os entries de Supervisor correspondentes foram removidos do servidor.
-
-> Projetos Alvo que precisem de workers próprios (jobs de negócio — p.ex. envio de e-mail, processamento de pagamento) instalam suas próprias entradas no Supervisor, apontando para `/var/www/html/projetos/<alvo>/artisan queue:work` e usando filas Redis com prefixo próprio para não colidir com as filas do ai-dev-core. Estes workers são completamente separados dos workers de agentes do ai-dev-core.
-
-**Exemplo de config do Supervisor para o Orchestrator Worker:**
+Arquivo: `/etc/supervisor/conf.d/ai-dev-horizon.conf`
 
 ```ini
-[program:aidev-orchestrator]
+[program:ai-dev-horizon]
 process_name=%(program_name)s
-command=php /var/www/html/projetos/ai-dev-core/artisan queue:work redis --queue=orchestrator --sleep=3 --tries=3 --max-time=3600
+command=php /var/www/html/projetos/ai-dev/ai-dev-core/artisan horizon
 autostart=true
 autorestart=true
-stopasgroup=true
-killasgroup=true
 user=www-data
-numprocs=1
 redirect_stderr=true
-stdout_logfile=/var/www/html/projetos/ai-dev-core/storage/logs/orchestrator-worker.log
+stdout_logfile=/var/www/html/projetos/ai-dev/ai-dev-core/storage/logs/horizon.log
 stopwaitsecs=3600
 ```
 
-**Instalação:**
+**Filas gerenciadas pelo Horizon** (configuradas em `config/horizon.php`):
+
+| Fila Redis | Uso |
+|---|---|
+| `orchestrator` | PRD cascade, geração de módulos/submódulos/tasks |
+| `default` | Jobs gerais |
+
+> Os proxies Python legados (Gemini Proxy :8001 e Claude Proxy :8002) foram descontinuados. Toda inferência externa sai direto do Laravel AI SDK via HTTPS para o OpenRouter. Os entries de Supervisor correspondentes foram removidos do servidor — **nunca adicioná-los novamente**, pois causam falha de inicialização do Supervisor quando o diretório de log não existe.
+
+> Projetos Alvo que precisem de workers próprios instalam suas próprias entradas no Supervisor, apontando para `/var/www/html/projetos/<alvo>/artisan queue:work` com prefixo Redis próprio para não colidir com as filas do ai-dev-core.
+
+**Comandos de operação:**
 ```bash
-# 1. Instalar
-sudo apt install supervisor -y
+# Status geral
+supervisorctl status
 
-# 2. Criar os configs (um por programa)
-sudo nano /etc/supervisor/conf.d/aidev-orchestrator.conf
+# Reiniciar Horizon (após deploy)
+supervisorctl restart ai-dev-horizon
 
-# 3. Recarregar
-sudo supervisorctl reread
-sudo supervisorctl update
+# Ver logs em tempo real
+tail -f /var/www/html/projetos/ai-dev/ai-dev-core/storage/logs/horizon.log
 
-# 4. Verificar status
-sudo supervisorctl status
+# Terminar Horizon graciosamente (aguarda jobs em andamento)
+php artisan horizon:terminate
 ```
-
-**Integração com Laravel Horizon (Alternativa ao queue:work puro):**
-O Laravel Horizon é um dashboard web para monitorar filas Redis. Ele se integra com o Supervisor e oferece métricas visuais (jobs processados, falhados, tempo médio). Recomendado instalar depois do MVP 1:
-
-```bash
-cd /var/www/html/projetos/ai-dev-core
-composer require laravel/horizon
-php artisan horizon:install
-php artisan horizon:publish
-```
-
-O Horizon substituiría o `queue:work` nos configs do Supervisor por `php artisan horizon`.
 
 ---
 
@@ -564,15 +543,20 @@ Três arquivos compõem o pipeline de sincronização:
 - *(Proxies Python Gemini/Claude foram descontinuados — os arquivos `gemini-proxy.log` / `claude-proxy.log` não são mais gerados.)*
 
 ### 8.2. Reinício de Serviços
-Após qualquer mudança em `config/ai.php`:
+Após qualquer mudança em `config/ai.php` ou deploy de código:
 ```bash
-# Reiniciar Horizon e Workers
+# Terminar Horizon graciosamente (aguarda jobs em andamento finalizarem)
 php artisan horizon:terminate
+
+# O Supervisor reinicia automaticamente. Para forçar imediatamente:
+supervisorctl restart ai-dev-horizon
 
 # Limpar caches
 php artisan config:clear
 php artisan cache:clear
 ```
+
+**Atenção ao editar `/etc/supervisor/conf.d/ai-dev-horizon.conf`:** nunca referenciar caminhos de log em diretórios que não existam — o Supervisor aborta na inicialização antes de subir qualquer processo, derrubando também o Horizon.
 
 ---
 
