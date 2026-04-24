@@ -280,6 +280,15 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master gerado pelo `ProjectPrdAgen
 3. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo
 4. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
 
+**Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
+1. Acionado pelo botão "Auto Aprovar PRD — Cascata Completa" em `ViewProject`
+2. Aprova PRD Master + cria módulos raiz + despacha `CascadeModulePrdJob` para cada um
+3. Cada job gera o PRD técnico via `ModulePrdAgent`, auto-aprova e:
+   - Se `needs_submodules: true` → cria submódulos e despacha o job para cada filho
+   - Se `needs_submodules: false` → cria tasks (`status: pending`) — **nunca executadas automaticamente**
+4. O ciclo repete recursivamente até todas as folhas terem tasks
+5. Resiliência: pula geração se PRD válido já existe; não duplica submódulos/tasks; `failed()` preserva PRD válido já salvo
+
 **Estrutura do `ai_specification` JSON (legado):**
 ```json
 {
@@ -736,7 +745,7 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 
 | Fila Redis | Agente | Workers | Descrição |
 |---|---|---|---|
-| `queue:orchestrator` | Orchestrator | 1 | Apenas 1 worker — o planejador é sequencial (não pode planejar 2 tasks ao mesmo tempo) |
+| `orchestrator` | PRD + Cascata + Orchestrator | N (ajustável) | Compartilhada por todos os jobs de geração de PRD e cascata. Pode-se subir múltiplos workers para paralelizar geração de módulos. |
 | `queue:executors` | Subagentes | 3 | Até 3 subagentes executando em paralelo (configurável via Horizon) |
 | `queue:qa-auditor` | QA Auditor | 1 | Apenas 1 worker — a auditoria é sequencial |
 | `queue:security` | Security Specialist | 1 | Apenas 1 worker — auditoria de segurança pós-QA |
@@ -744,7 +753,7 @@ Cada "classe" de agente tem sua própria fila Redis, permitindo escalar, pausar 
 | `queue:compressor` | Context Compressor | 1 | Apenas 1 worker — compressão de contexto em background |
 | `queue:sentinel` | Sentinel Watcher | 1 | Apenas 1 worker — processa erros runtime |
 
-**Por que 1 worker para o Orchestrator?** Porque se dois OrchestratorJobs rodarem ao mesmo tempo, ambos podem pegar a MESMA task pendente (race condition). Com 1 worker, a execução é FIFO (First In, First Out) e nunca há conflito. O Redis garante a atomicidade.
+**Workers da fila `orchestrator`:** durante cascata de PRD, múltiplos workers em paralelo aceleram a geração (cada módulo leva 3-7 minutos de chamada LLM). O `CascadeModulePrdJob` é seguro para múltiplos workers porque cada job é vinculado a um módulo específico via `module_id`. Com `tries=3` e `timeout=660s`, jobs individuais podem ser retentados sem duplicar dados (checagem de existência antes de criar submódulos/tasks).
 
 **Como escalar os subagentes?** Basta alterar o `processes` no config do Horizon para a fila `executors`. Em um servidor com mais RAM, pode-se subir para 5 ou 10 workers paralelos. O sistema se adapta automaticamente porque cada SubagentJob já sabe qual subtask processar (via `subtask_id`).
 
@@ -779,9 +788,10 @@ app/
 │
 ├── Jobs/
 │   ├── GenerateProjectPrdJob.php        ← Gera PRD Master via ProjectPrdAgent → salva em projects.prd_payload
-│   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva em project_modules.prd_payload
-│   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo
-│   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha
+│   ├── GenerateModulePrdJob.php         ← Gera PRD Técnico via ModulePrdAgent → salva em project_modules.prd_payload (manual)
+│   ├── CascadeModulePrdJob.php          ← Gera PRD + auto-aprova + despacha filhos recursivamente (cascata automática)
+│   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo (aprovação manual)
+│   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha (aprovação manual)
 │   ├── GenerateProjectFeaturesJob.php   ← Gera project_features via GenerateFeaturesAgent (type: backend|frontend)
 │   ├── OrchestratorJob.php              ← Despacha OrchestratorAgent → grava subtasks → enfileira workers
 │   ├── ProcessSubtaskJob.php            ← Executa um SpecialistAgent para uma Subtask específica
@@ -840,14 +850,20 @@ app/
 │   ├── TaskStatus.php               ← pending, in_progress, qa_audit, testing, completed, etc.
 │   ├── SubtaskStatus.php            ← pending, running, qa_audit, success, error, blocked
 │   ├── AgentProvider.php            ← openrouter, ollama
-│   ├── TaskSource.php               ← manual, webhook, sentinel, ci_cd
+│   ├── TaskSource.php               ← manual, specification, webhook, sentinel, ci_cd
 │   ├── KnowledgeArea.php            ← backend, frontend, database, filament, devops, security, performance
 │   └── SecuritySeverity.php         ← critical, high, medium, low, informational
 │
 └── Filament/
     └── Resources/
-        ├── ProjectResource.php              ← CRUD de projetos + ações de geração de PRD, features, modules
-        ├── ProjectModuleResource.php        ← CRUD de módulos/submódulos + ações de geração de PRD
+        ├── ProjectResource.php              ← CRUD + infolist com tabs (Visão Geral, Módulos, PRD, Orçamento)
+        │                                      Aba Módulos: hierarquia colapsável (rootModules → Nível 1 → Nível 2)
+        │                                      Botões: Gerar PRD, Gerando PRD... (desabilitado), Ver PRD Completo,
+        │                                              Aprovar PRD, Auto Aprovar PRD — Cascata Completa
+        ├── ProjectModuleResource.php        ← CRUD de módulos/submódulos + ações de PRD
+        │                                      $shouldRegisterNavigation = false (oculto do sidebar)
+        │                                      Botões: Gerar PRD, Gerando PRD... (desabilitado), Ver PRD Completo,
+        │                                              Aprovar PRD (cria submódulos ou tasks), Iniciar/Concluir
         ├── ProjectSpecificationResource.php ← CRUD de especificações (legado)
         ├── ProjectQuotationResource.php     ← CRUD de orçamentos
         ├── TaskResource.php                 ← CRUD de tasks + visualização de status em tempo real

@@ -39,13 +39,21 @@ Este `README.md` é a única fonte de verdade do projeto. Ferramentas de IA deve
 
 | Agent | Função | Provider | Modelo |
 |---|---|---|---|
-| `OrchestratorAgent` | Decompõe PRD em Sub-PRDs atômicos | openrouter | `anthropic/claude-opus-4.7` |
-| `SpecificationAgent` | Transforma descrição informal em spec técnica JSON | openrouter | `anthropic/claude-opus-4.7` |
+| `ProjectPrdAgent` | Gera PRD Master do projeto (módulos de alto nível) | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `ModulePrdAgent` | Gera PRD Técnico de um módulo/submódulo | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `GenerateFeaturesAgent` | Gera features backend/frontend por camada | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `RefineDescriptionAgent` | Refina descrição do projeto com IA | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `RefineFeatureAgent` | Refina feature individual com IA | Dinâmico (`LEVEL_PREMIUM`) | Dinâmico |
+| `OrchestratorAgent` | Decompõe PRD em Sub-PRDs atômicos (execução de código) | openrouter | `anthropic/claude-opus-4.7` |
+| `SpecificationAgent` | Transforma descrição informal em spec técnica JSON (legado) | openrouter | `anthropic/claude-opus-4.7` |
 | `QuotationAgent` | Estima horas e custos por área profissional | openrouter | `anthropic/claude-opus-4.7` |
-| `RefineDescriptionAgent` | Refina a descrição do projeto antes da especificação | Dinâmico (via AiRuntimeConfigService::LEVEL_PREMIUM) | Dinâmico |
 | `SpecialistAgent` | Lê e escreve código — implementa o Sub-PRD | openrouter | `anthropic/claude-sonnet-4-6` |
 | `QAAuditorAgent` | Audita o código entregue e aprova ou rejeita | openrouter | `anthropic/claude-sonnet-4-6` |
 | `DocsAgent` | Busca documentação TALL Stack via BoostTool | openrouter | `anthropic/claude-haiku-4-5-20251001` |
+
+**Configuração de provider por agente:** todos os agentes de geração de PRD/features usam `AiRuntimeConfigService::LEVEL_PREMIUM`, configurável via SystemSettingsPage (provider + modelo + API key por nível). Não há provider hardcoded nesses agentes.
+
+**Compatibilidade Kimi:** `ModulePrdAgent` e `ProjectPrdAgent` implementam `HasProviderOptions`. Quando o provider configurado for `kimi`, enviam automaticamente `max_completion_tokens: 32768` e `response_format: json_object` para contornar o default de 1024 tokens da API Moonshot.
 
 ### Regra obrigatória — BoostTool antes de escrever código
 
@@ -93,10 +101,41 @@ php artisan make:test --pest NomeDoTeste         # criar
 
 ## Componentes Filament (UI administrativa)
 
-- **`ProjectModuleResource`** — decomposição de projetos em módulos hierárquicos
+- **`ProjectResource`** — CRUD de projetos + fluxo de PRD Master + aba Módulos hierárquica com submódulos colapsáveis
+- **`ProjectModuleResource`** — visualização e ações de módulos/submódulos; oculto do sidebar (`$shouldRegisterNavigation = false`), acessado via links da aba Módulos
 - **`TaskResource`** — unidade de trabalho dos agentes; armazena PRD JSON e controla ciclo de vida
 - **`AgentConfigResource`** — configuração de system_prompt, model e temperature por agente
 - **`ProjectQuotationResource`** — comparação de custo humano vs. AI-Dev; rastreia consumo de tokens
+
+### Fluxo de PRD em Cascata (Auto Aprovação)
+
+O botão **"Auto Aprovar PRD — Cascata Completa"** em `ViewProject` dispara o `CascadeModulePrdJob` recursivamente:
+
+1. Aprova o PRD Master do projeto e cria módulos raiz
+2. Para cada módulo raiz, despacha `CascadeModulePrdJob`
+3. O job gera o PRD técnico do módulo via `ModulePrdAgent`
+4. Se `needs_submodules: true` → cria submódulos e despacha `CascadeModulePrdJob` para cada um
+5. Se `needs_submodules: false` → cria tasks (status `pending` — **nunca executadas automaticamente**)
+6. O processo se repete recursivamente até todas as folhas terem tasks
+
+**Resiliência:** se o job já encontrar um PRD válido salvo, pula a geração e vai direto para auto-aprovação. Não duplica submódulos ou tasks se já existirem. O `failed()` só salva fallback se não houver PRD válido já gravado.
+
+### Estados dos botões de PRD (ViewProject e ViewProjectModule)
+
+| Estado | Botão exibido |
+|---|---|
+| Sem PRD / falhou | "Gerar PRD" (cinza) |
+| `_status: generating` | "Gerando PRD..." (cinza, desabilitado) |
+| PRD pronto, não aprovado | "Ver PRD Completo" + "Aprovar PRD" + "Auto Aprovar PRD — Cascata Completa" |
+| PRD aprovado | "Ver PRD Completo" |
+
+### Paleta de cores (Enums)
+
+Sistema de cores uniformizado — apenas 4 cores semânticas:
+- `gray` → estados dormentes (planejado, pausado, em teste, pendente)
+- `primary` (azul) → estado ativo / em progresso
+- `success` (verde) → concluído
+- `danger` (vermelho) → erro / falha / rejeitado
 
 ---
 
@@ -126,4 +165,4 @@ tests/Feature/
 
 ---
 
-*Atualizado em 20/04/2026*
+*Atualizado em 24/04/2026*
