@@ -5,21 +5,33 @@ namespace App\Jobs;
 use App\Ai\Agents\ModulePrdAgent;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
+use App\Enums\TaskSource;
+use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
+use App\Models\Task;
 use App\Services\AiRuntimeConfigService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class CascadeModulePrdJob implements ShouldQueue
+class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 660;
+
+    public int $uniqueFor = 3600;
+
+    public function uniqueId(): string
+    {
+        return $this->module->id;
+    }
 
     public function __construct(
         public ProjectModule $module,
@@ -33,9 +45,10 @@ class CascadeModulePrdJob implements ShouldQueue
 
         // Se já tem PRD válido, pula geração e vai direto para auto-aprovação
         $existingPrd = $this->module->prd_payload;
-        if (!empty($existingPrd) && empty($existingPrd['_status'] ?? '')) {
+        if (! empty($existingPrd) && empty($existingPrd['_status'] ?? '')) {
             Log::info("CascadeModulePrdJob: PRD já existe para '{$this->module->name}', pulando geração.");
             $this->autoApprove($existingPrd);
+
             return;
         }
 
@@ -45,8 +58,9 @@ class CascadeModulePrdJob implements ShouldQueue
 
         $this->module->update(['prd_payload' => $prdPayload]);
 
-        if (!empty($prdPayload['_status'])) {
+        if (! empty($prdPayload['_status'])) {
             Log::error("CascadeModulePrdJob: PRD falhou para '{$this->module->name}', cascata interrompida neste ramo.");
+
             return;
         }
 
@@ -60,7 +74,7 @@ class CascadeModulePrdJob implements ShouldQueue
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-            $response = (new ModulePrdAgent())
+            $response = (new ModulePrdAgent)
                 ->prompt(
                     $prompt,
                     provider: $aiConfig['provider'],
@@ -73,9 +87,9 @@ class CascadeModulePrdJob implements ShouldQueue
 
             return $prdPayload;
         } catch (\Throwable $e) {
-            Log::error("CascadeModulePrdJob: Falha na geração do PRD", [
+            Log::error('CascadeModulePrdJob: Falha na geração do PRD', [
                 'module' => $this->module->name,
-                'error'  => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
 
             return $this->fallbackPrd($e->getMessage());
@@ -104,6 +118,7 @@ class CascadeModulePrdJob implements ShouldQueue
             foreach ($existingChildren as $child) {
                 self::dispatch($child);
             }
+
             return;
         }
 
@@ -111,9 +126,9 @@ class CascadeModulePrdJob implements ShouldQueue
 
         foreach ($prd['submodules'] as $submoduleData) {
             $priorityEnum = match ($submoduleData['priority'] ?? 'normal') {
-                'high'   => Priority::High,
+                'high' => Priority::High,
                 'medium' => Priority::Medium,
-                default  => Priority::Normal,
+                default => Priority::Normal,
             };
 
             $name = $submoduleData['name'] ?? '';
@@ -126,18 +141,18 @@ class CascadeModulePrdJob implements ShouldQueue
             }
 
             $submodule = ProjectModule::create([
-                'project_id'  => $this->module->project_id,
-                'parent_id'   => $this->module->id,
-                'name'        => $name,
+                'project_id' => $this->module->project_id,
+                'parent_id' => $this->module->id,
+                'name' => $name,
                 'description' => $description,
-                'status'      => ModuleStatus::Planned,
-                'priority'    => $priorityEnum,
+                'status' => ModuleStatus::Planned,
+                'priority' => $priorityEnum,
             ]);
 
             $created[] = $submodule;
         }
 
-        Log::info("CascadeModulePrdJob: " . count($created) . " submódulos criados para '{$this->module->name}'. Despachando cascata.");
+        Log::info('CascadeModulePrdJob: '.count($created)." submódulos criados para '{$this->module->name}'. Despachando cascata.");
 
         foreach ($created as $submodule) {
             self::dispatch($submodule);
@@ -149,6 +164,7 @@ class CascadeModulePrdJob implements ShouldQueue
         // Se já tem tasks, não duplicar
         if ($this->module->tasks()->exists()) {
             Log::info("CascadeModulePrdJob: Tasks já existem para '{$this->module->name}'. Nada a fazer.");
+
             return;
         }
 
@@ -156,9 +172,9 @@ class CascadeModulePrdJob implements ShouldQueue
 
         foreach ($prd['components'] ?? [] as $component) {
             $tasks[] = [
-                'title'       => "Implementar {$component['type']}: {$component['name']}",
+                'title' => "Implementar {$component['type']}: {$component['name']}",
                 'description' => $component['description'] ?? '',
-                'priority'    => \App\Enums\Priority::High,
+                'priority' => Priority::High,
             ];
         }
 
@@ -167,51 +183,51 @@ class CascadeModulePrdJob implements ShouldQueue
                 ->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)
                 ->implode(' → ');
             $tasks[] = [
-                'title'       => "Fluxo: {$workflow['name']}",
-                'description' => 'Steps: ' . $steps,
-                'priority'    => \App\Enums\Priority::High,
+                'title' => "Fluxo: {$workflow['name']}",
+                'description' => 'Steps: '.$steps,
+                'priority' => Priority::High,
             ];
         }
 
         foreach ($prd['api_endpoints'] ?? [] as $api) {
             $tasks[] = [
-                'title'       => "API {$api['method']} {$api['uri']}",
+                'title' => "API {$api['method']} {$api['uri']}",
                 'description' => $api['description'] ?? '',
-                'priority'    => \App\Enums\Priority::Medium,
+                'priority' => Priority::Medium,
             ];
         }
 
         foreach ($prd['database_schema']['tables'] ?? [] as $table) {
             $tasks[] = [
-                'title'       => "Migration: {$table['name']}",
+                'title' => "Migration: {$table['name']}",
                 'description' => $table['description'] ?? '',
-                'priority'    => \App\Enums\Priority::High,
+                'priority' => Priority::High,
             ];
         }
 
         foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
             $tasks[] = [
-                'title'       => "Teste: " . (is_array($criteria) ? json_encode($criteria) : $criteria),
+                'title' => 'Teste: '.(is_array($criteria) ? json_encode($criteria) : $criteria),
                 'description' => is_array($criteria) ? json_encode($criteria) : $criteria,
-                'priority'    => \App\Enums\Priority::Medium,
+                'priority' => Priority::Medium,
             ];
         }
 
         foreach ($tasks as $taskData) {
-            \App\Models\Task::create([
-                'project_id'  => $this->module->project_id,
-                'module_id'   => $this->module->id,
-                'title'       => $taskData['title'],
+            Task::create([
+                'project_id' => $this->module->project_id,
+                'module_id' => $this->module->id,
+                'title' => $taskData['title'],
                 'description' => $taskData['description'],
-                'status'      => \App\Enums\TaskStatus::Pending,
-                'priority'    => $taskData['priority'],
-                'source'      => \App\Enums\TaskSource::Specification,
+                'status' => TaskStatus::Pending,
+                'priority' => $taskData['priority'],
+                'source' => TaskSource::Specification,
                 'prd_payload' => $prd,
                 'max_retries' => 3,
             ]);
         }
 
-        Log::info("CascadeModulePrdJob: " . count($tasks) . " tasks criadas para '{$this->module->name}'");
+        Log::info('CascadeModulePrdJob: '.count($tasks)." tasks criadas para '{$this->module->name}'");
     }
 
     private function buildPrompt(): string
@@ -224,7 +240,7 @@ class CascadeModulePrdJob implements ShouldQueue
 
         $projectDescription = $project->description ?? '';
         if (strlen($projectDescription) > 1000) {
-            $projectDescription = substr($projectDescription, 0, 1000) . "\n\n[...descrição truncada...]";
+            $projectDescription = substr($projectDescription, 0, 1000)."\n\n[...descrição truncada...]";
         }
 
         $typeLabel = $isSubmodule ? 'SUBMÓDULO' : 'MÓDULO';
@@ -256,9 +272,9 @@ PROMPT;
         if (json_last_error() !== JSON_ERROR_NONE) {
             Log::warning('CascadeModulePrdJob: Falha ao parsear JSON da IA', [
                 'raw_preview' => substr($raw, 0, 300),
-                'json_error'  => json_last_error_msg(),
+                'json_error' => json_last_error_msg(),
             ]);
-            throw new \RuntimeException('JSON inválido retornado pela IA: ' . json_last_error_msg());
+            throw new \RuntimeException('JSON inválido retornado pela IA: '.json_last_error_msg());
         }
 
         return $data;
@@ -267,24 +283,24 @@ PROMPT;
     private function fallbackPrd(string $error): array
     {
         return [
-            'title'     => "{$this->module->name} — PRD Técnico",
+            'title' => "{$this->module->name} — PRD Técnico",
             'objective' => 'Geração automática do PRD falhou. Por favor, revise os logs e tente novamente.',
-            '_status'   => 'ai_generation_failed',
-            '_error'    => $error,
+            '_status' => 'ai_generation_failed',
+            '_error' => $error,
         ];
     }
 
     public function failed(\Throwable $exception): void
     {
-        Log::error("CascadeModulePrdJob: Job falhou por completo", [
+        Log::error('CascadeModulePrdJob: Job falhou por completo', [
             'module' => $this->module->name,
-            'error'  => $exception->getMessage(),
+            'error' => $exception->getMessage(),
         ]);
 
         // Só salva fallback se não houver PRD válido já salvo
         $this->module->refresh();
         $current = $this->module->prd_payload;
-        if (empty($current) || !empty($current['_status'] ?? '')) {
+        if (empty($current) || ! empty($current['_status'] ?? '')) {
             $this->module->update([
                 'prd_payload' => $this->fallbackPrd($exception->getMessage()),
             ]);
