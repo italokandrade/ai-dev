@@ -22,7 +22,7 @@ class SystemAssistantAgent implements Agent, HasTools
 
     public function instructions(): Stringable|string
     {
-        return <<<INSTRUCTIONS
+        return <<<'INSTRUCTIONS'
         Você é o Assistente do AI-Dev, um painel de gestão de projetos de desenvolvimento de software. Responda SEMPRE em Português do Brasil, de forma clara, objetiva e amigável.
 
         Você possui ferramentas vitais para obter contexto do mundo real:
@@ -58,7 +58,7 @@ class SystemAssistantAgent implements Agent, HasTools
         }
 
         return [
-            new BoostTool($this->projectPath),
+            new BoostTool($this->projectPath, allowedTools: ['database-query', 'search-docs']),
             new FileReadTool($this->projectPath),
         ];
     }

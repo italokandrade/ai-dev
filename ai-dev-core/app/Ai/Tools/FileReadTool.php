@@ -24,12 +24,16 @@ class FileReadTool implements Tool
 
         // Hard block for sensitive files
         $blockedPatterns = [
+            '.env',
             '/.env',
             '.key',
             '.pem',
+            'bootstrap/cache',
             'config/database.php',
             'config/services.php',
             'auth.json',
+            'storage/framework/sessions',
+            'storage/logs',
             'storage/oauth',
         ];
 

@@ -2,14 +2,18 @@
 
 namespace App\Filament\Resources\ActivityLogs;
 
-use App\Filament\Resources\ActivityLogs\Pages;
-use Spatie\Activitylog\Models\Activity;
+use App\Models\User;
+use App\Services\SystemSurfaceMapService;
+use Filament\Actions\ViewAction;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Schemas\Schema;
-use Filament\Actions\ViewAction;
-use Illuminate\Support\HtmlString;
+use Illuminate\Database\Eloquent\Builder;
+use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogResource extends Resource
 {
@@ -25,16 +29,25 @@ class ActivityLogResource extends Resource
 
     protected static ?int $navigationSort = 100;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Administração';
+    protected static string|\UnitEnum|null $navigationGroup = 'Segurança';
 
     public static function canViewAny(): bool
     {
-        return auth()->user()?->isAdmin() ?? false;
+        $user = auth()->user();
+
+        return (bool) ($user?->isAdmin() || $user?->can('ViewAny:Activity'));
     }
 
     public static function canCreate(): bool
     {
         return false;
+    }
+
+    public static function canView($record): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user?->isAdmin() || $user?->can('View:Activity'));
     }
 
     public static function canEdit($record): bool
@@ -53,19 +66,7 @@ class ActivityLogResource extends Resource
      */
     protected static function modelLabelMap(): array
     {
-        return [
-            'App\Models\Project'              => 'Projeto',
-            'App\Models\ProjectModule'        => 'Módulo',
-            'App\Models\ProjectFeature'       => 'Funcionalidade',
-            'App\Models\ProjectSpecification' => 'Especificação',
-            'App\Models\ProjectQuotation'     => 'Orçamento',
-            'App\Models\Task'                 => 'Tarefa',
-            'App\Models\Subtask'              => 'Subtarefa',
-            'App\Models\AgentConfig'          => 'Agente',
-            'App\Models\SocialAccount'        => 'Conta Social',
-            'App\Models\SystemSetting'        => 'Config. Sistema',
-            'App\Models\User'                 => 'Usuário',
-        ];
+        return SystemSurfaceMapService::activitySubjectLabels();
     }
 
     /**
@@ -73,9 +74,11 @@ class ActivityLogResource extends Resource
      */
     protected static function translateModel(?string $fqcn): string
     {
-        if (empty($fqcn)) return '—';
-        return static::modelLabelMap()[$fqcn]
-            ?? class_basename($fqcn); // fallback: nome curto do Model
+        if (empty($fqcn)) {
+            return '—';
+        }
+
+        return SystemSurfaceMapService::modelLabel($fqcn);
     }
 
     /**
@@ -85,15 +88,58 @@ class ActivityLogResource extends Resource
     protected static function dynamicSubjectTypes(): array
     {
         try {
-            return Activity::query()
+            $loggedTypes = Activity::query()
                 ->distinct('subject_type')
                 ->whereNotNull('subject_type')
                 ->pluck('subject_type')
-                ->mapWithKeys(fn (string $fqcn) => [$fqcn => static::translateModel($fqcn)])
+                ->all();
+
+            return collect(SystemSurfaceMapService::activitySubjectFilterOptions($loggedTypes))
                 ->sort()
                 ->all();
         } catch (\Throwable) {
-            return [];
+            return SystemSurfaceMapService::activitySubjectFilterOptions();
+        }
+    }
+
+    protected static function eventLabel(?string $event): string
+    {
+        if (! $event) {
+            return '—';
+        }
+
+        return [
+            'created' => 'Criação',
+            'updated' => 'Atualização',
+            'deleted' => 'Exclusão',
+            'role_attached' => 'Perfil atribuído',
+            'role_detached' => 'Perfil removido',
+            'permission_attached' => 'Permissão atribuída',
+            'permission_detached' => 'Permissão removida',
+            'dashboard_chat_message' => 'Chat utilizado',
+            'dashboard_chat_clear' => 'Chat limpo',
+        ][$event] ?? str($event)->replace('_', ' ')->headline()->toString();
+    }
+
+    protected static function dynamicEvents(): array
+    {
+        try {
+            $events = Activity::query()
+                ->distinct('event')
+                ->whereNotNull('event')
+                ->pluck('event')
+                ->all();
+
+            return collect($events)
+                ->mapWithKeys(fn (string $event) => [$event => static::eventLabel($event)])
+                ->sort()
+                ->all();
+        } catch (\Throwable) {
+            return [
+                'created' => 'Criação',
+                'updated' => 'Atualização',
+                'deleted' => 'Exclusão',
+            ];
         }
     }
 
@@ -124,34 +170,43 @@ class ActivityLogResource extends Resource
                 Tables\Columns\TextColumn::make('event')
                     ->label('Evento')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->formatStateUsing(fn (?string $state): string => static::eventLabel($state))
+                    ->color(fn (?string $state): string => match ($state) {
                         'created' => 'success',
                         'updated' => 'warning',
                         'deleted' => 'danger',
+                        'role_attached', 'permission_attached' => 'success',
+                        'role_detached', 'permission_detached' => 'danger',
+                        'dashboard_chat_message', 'dashboard_chat_clear' => 'info',
                         default => 'gray',
                     }),
             ])
             ->filters([
-                // Filtro de evento (estático — as opções não mudam)
+                // Filtro de evento — dinâmico para cobrir eventos de ACL, chat e futuros fluxos
                 Tables\Filters\SelectFilter::make('event')
                     ->label('Evento')
-                    ->options([
-                        'created' => 'Criação',
-                        'updated' => 'Atualização',
-                        'deleted' => 'Exclusão',
-                    ]),
+                    ->options(fn () => static::dynamicEvents()),
                 // Filtro de módulo — DINÂMICO: carrega os subject_types
                 // presentes na tabela activity_log em tempo real
                 Tables\Filters\SelectFilter::make('subject_type')
                     ->label('Módulo')
-                    ->options(fn () => static::dynamicSubjectTypes()),
+                    ->options(fn () => static::dynamicSubjectTypes())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        if (blank($value)) {
+                            return $query;
+                        }
+
+                        return $query->whereIn('subject_type', SystemSurfaceMapService::subjectTypesForFilter($value));
+                    }),
                 // Filtro de usuário causador — carregado via query manual
                 // (causer é morphTo, ->relationship() não funciona com morphTo)
                 Tables\Filters\SelectFilter::make('causer_id')
                     ->label('Usuário')
                     ->options(function () {
                         try {
-                            return \App\Models\User::query()
+                            return User::query()
                                 ->whereIn('id', Activity::query()->distinct('causer_id')->whereNotNull('causer_id')->pluck('causer_id'))
                                 ->pluck('name', 'id')
                                 ->all();
@@ -170,28 +225,28 @@ class ActivityLogResource extends Resource
     {
         return $schema
             ->schema([
-                \Filament\Schemas\Components\Section::make('Detalhes do Log')
+                Section::make('Detalhes do Log')
                     ->schema([
-                        \Filament\Schemas\Components\Grid::make(3)->schema([
-                            \Filament\Infolists\Components\TextEntry::make('created_at')->label('Data/Hora')->dateTime(),
-                            \Filament\Infolists\Components\TextEntry::make('causer.name')->label('Usuário')->placeholder('Sistema'),
-                            \Filament\Infolists\Components\TextEntry::make('event')->label('Evento')->badge(),
+                        Grid::make(3)->schema([
+                            TextEntry::make('created_at')->label('Data/Hora')->dateTime(),
+                            TextEntry::make('causer.name')->label('Usuário')->placeholder('Sistema'),
+                            TextEntry::make('event')->label('Evento')->badge(),
                         ]),
-                        \Filament\Schemas\Components\Grid::make(2)->schema([
-                            \Filament\Infolists\Components\TextEntry::make('subject_type')
+                        Grid::make(2)->schema([
+                            TextEntry::make('subject_type')
                                 ->label('Módulo')
                                 ->getStateUsing(fn ($record) => static::translateModel($record->subject_type)),
-                            \Filament\Infolists\Components\TextEntry::make('description')->label('Descrição'),
+                            TextEntry::make('description')->label('Descrição'),
                         ]),
                     ]),
-                \Filament\Schemas\Components\Section::make('Alterações')
+                Section::make('Alterações')
                     ->schema([
-                        \Filament\Schemas\Components\Grid::make(2)->schema([
-                            \Filament\Infolists\Components\TextEntry::make('properties.old')
+                        Grid::make(2)->schema([
+                            TextEntry::make('properties.old')
                                 ->label('Dados Anteriores')
                                 ->getStateUsing(fn ($record) => static::formatData($record->properties['old'] ?? null))
                                 ->html(),
-                            \Filament\Infolists\Components\TextEntry::make('properties.attributes')
+                            TextEntry::make('properties.attributes')
                                 ->label('Novos Dados')
                                 ->getStateUsing(fn ($record) => static::formatData($record->properties['attributes'] ?? null))
                                 ->html(),
@@ -202,14 +257,19 @@ class ActivityLogResource extends Resource
 
     protected static function formatData(?array $data): ?string
     {
-        if (empty($data)) return null;
+        if (empty($data)) {
+            return null;
+        }
         $html = '<div class="space-y-1 font-mono text-xs">';
         foreach ($data as $key => $value) {
-            $val = is_array($value) ? json_encode($value) : (string)$value;
-            if (strlen($val) > 50) $val = substr($val, 0, 50) . '...';
-            $html .= "<div><span class='font-bold text-primary-600'>{$key}:</span> <span>{$val}</span></div>";
+            $val = is_array($value) ? json_encode($value) : (string) $value;
+            if (strlen($val) > 50) {
+                $val = substr($val, 0, 50).'...';
+            }
+            $html .= "<div><span class='font-bold text-primary-600'>".e((string) $key).':</span> <span>'.e($val).'</span></div>';
         }
-        return $html . '</div>';
+
+        return $html.'</div>';
     }
 
     public static function getPages(): array

@@ -12,12 +12,12 @@ class RoleResource extends BaseRoleResource
 
     protected static ?string $pluralModelLabel = 'Perfis de Usuários';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Administração';
+    protected static string|\UnitEnum|null $navigationGroup = 'Segurança';
 
     protected static ?int $navigationSort = 70;
 
     protected static ?string $slug = 'perfis-de-usuarios';
-    
+
     protected static bool $shouldRegisterNavigation = true;
 
     public static function getNavigationLabel(): string
@@ -37,7 +37,7 @@ class RoleResource extends BaseRoleResource
 
     public static function getNavigationGroup(): ?string
     {
-        return 'Administração';
+        return 'Segurança';
     }
 
     public static function getNavigationSort(): ?int

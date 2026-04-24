@@ -48,7 +48,8 @@ class BoostTool implements Tool
     ];
 
     public function __construct(
-        private readonly ?string $workingDirectory = null
+        private readonly ?string $workingDirectory = null,
+        private readonly ?array $allowedTools = null,
     ) {}
 
     public function description(): Stringable|string
@@ -60,6 +61,13 @@ class BoostTool implements Tool
     {
         $toolName = $request['tool'];
         $arguments = $request['arguments'] ?? [];
+
+        if ($this->allowedTools !== null && ! in_array($toolName, $this->allowedTools, true)) {
+            return json_encode([
+                'success' => false,
+                'error' => "Boost tool '{$toolName}' is not allowed in this context.",
+            ]);
+        }
 
         if (! $this->workingDirectory || ! is_dir($this->workingDirectory)) {
             return json_encode([

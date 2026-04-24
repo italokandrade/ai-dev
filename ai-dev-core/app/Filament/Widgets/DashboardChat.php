@@ -11,9 +11,13 @@ use Illuminate\Support\Facades\Session;
 class DashboardChat extends Widget
 {
     protected string $view = 'filament.widgets.dashboard-chat';
+
     protected int|string|array $columnSpan = 'full';
+
     public string $message = '';
+
     public array $history = [];
+
     public bool $isProcessing = false;
 
     /**
@@ -28,6 +32,15 @@ class DashboardChat extends Widget
      */
     private const MAX_HISTORY = 40; // 20 pares pergunta/resposta
 
+    private const MAX_MESSAGE_LENGTH = 4000;
+
+    public static function canView(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user?->isAdmin() || $user?->can('View:DashboardChat'));
+    }
+
     public function mount(): void
     {
         // Recupera o histórico da sessão se existir
@@ -37,7 +50,7 @@ class DashboardChat extends Widget
             $this->history = $saved;
         } else {
             $this->history[] = [
-                'role'    => 'assistant',
+                'role' => 'assistant',
                 'content' => 'Olá! Sou o Assistente do AI-Dev. Posso te ajudar com informações sobre projetos, tarefas, módulos e como usar o sistema. Como posso ser útil?',
             ];
             $this->saveHistory();
@@ -49,12 +62,25 @@ class DashboardChat extends Widget
         // Recebe a mensagem diretamente do Alpine (x-model local, sem wire:model)
         $userMessage = trim($messageText ?: $this->message);
 
-        if (empty($userMessage)) return;
+        if (empty($userMessage)) {
+            return;
+        }
 
-        $this->history[]    = ['role' => 'user', 'content' => $userMessage];
-        $this->message      = '';
+        if (mb_strlen($userMessage) > self::MAX_MESSAGE_LENGTH) {
+            $this->history[] = [
+                'role' => 'assistant',
+                'content' => 'Sua mensagem está muito longa. Envie uma pergunta mais objetiva para eu processar com segurança.',
+            ];
+            $this->message = '';
+            $this->saveHistory();
+            $this->dispatch('scroll-chat');
+
+            return;
+        }
+
+        $this->history[] = ['role' => 'user', 'content' => $userMessage];
+        $this->message = '';
         $this->isProcessing = true;
-
 
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_SYSTEM);
@@ -68,16 +94,21 @@ class DashboardChat extends Widget
             );
 
             $responseText = (string) $response;
-            \Illuminate\Support\Facades\Log::info("DashboardChat Response: ", ['text' => $responseText]);
 
             $this->history[] = [
-                'role'    => 'assistant',
+                'role' => 'assistant',
                 'content' => $responseText,
             ];
+
+            activity()
+                ->event('dashboard_chat_message')
+                ->causedBy(auth()->user())
+                ->withProperties(['widget' => static::class])
+                ->log('Chat do dashboard utilizado');
         } catch (\Throwable $e) {
-            Log::error('DashboardChat Error: ' . $e->getMessage());
+            Log::error('DashboardChat Error: '.$e->getMessage());
             $this->history[] = [
-                'role'    => 'assistant',
+                'role' => 'assistant',
                 'content' => 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em instantes.',
             ];
         }
@@ -100,6 +131,11 @@ class DashboardChat extends Widget
         Session::forget(self::SESSION_KEY);
         $this->history = [];
         $this->mount();
+        activity()
+            ->event('dashboard_chat_clear')
+            ->causedBy(auth()->user())
+            ->withProperties(['widget' => static::class])
+            ->log('Histórico do chat do dashboard limpo');
         $this->dispatch('scroll-chat');
     }
 

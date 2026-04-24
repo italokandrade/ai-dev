@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
+use Filament\Pages\Dashboard;
+use Filament\Widgets\AccountWidget;
+use Filament\Widgets\FilamentInfoWidget;
+
 return [
 
     /*
@@ -16,8 +21,7 @@ return [
     */
 
     'shield_resource' => [
-        'should_register_navigation' => false,
-        'slug' => 'shield/roles',
+        'slug' => 'perfis-de-usuarios',
         'show_model_path' => true,
         'cluster' => null,
         'tabs' => [

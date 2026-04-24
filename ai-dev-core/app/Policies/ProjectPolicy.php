@@ -4,32 +4,31 @@ namespace App\Policies;
 
 use App\Models\Project;
 use App\Models\User;
-use Illuminate\Auth\Access\Response;
 
 class ProjectPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true; // Todos logados podem ver a lista
+        return $user->isAdmin() || $user->can('ViewAny:Project');
     }
 
     public function view(User $user, Project $project): bool
     {
-        return true;
+        return $user->isAdmin() || $user->can('View:Project');
     }
 
     public function create(User $user): bool
     {
-        return $user->isDeveloper(); // Admin ou Dev podem criar projetos
+        return $user->isAdmin() || $user->can('Create:Project');
     }
 
     public function update(User $user, Project $project): bool
     {
-        return $user->isDeveloper();
+        return $user->isAdmin() || $user->can('Update:Project');
     }
 
     public function delete(User $user, Project $project): bool
     {
-        return $user->isAdmin(); // Apenas Admin pode deletar projetos
+        return $user->isAdmin() || $user->can('Delete:Project');
     }
 }

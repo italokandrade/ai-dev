@@ -11,7 +11,7 @@
                 </div>
                 <div>
                     <div class="aidev-chat__title dark:text-white">Assistente AI-Dev</div>
-                    <div class="aidev-chat__subtitle">Powered by Claude</div>
+                    <div class="aidev-chat__subtitle">IA do Sistema</div>
                 </div>
             </div>
             <button wire:click="clearChat" class="aidev-chat__clear-btn dark:border-white/10 dark:text-gray-400">

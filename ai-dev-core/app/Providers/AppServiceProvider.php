@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Ai\Providers\FailoverProvider;
 use App\Ai\Providers\KimiProvider;
+use App\Services\ActivityAuditService;
+use App\Services\FilamentShieldPermissionSyncService;
 use GuzzleHttp\Psr7\Stream;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Queue\Events\JobProcessing;
@@ -12,6 +14,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Gateway\Prism\PrismGateway;
+use Laravel\Ai\Providers\OpenRouterProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,12 +29,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        ActivityAuditService::register();
+        FilamentShieldPermissionSyncService::sync();
+
         Ai::extend('failover', function ($app, array $config) {
             return new FailoverProvider(new PrismGateway($app['events']), $config, $app['events']);
         });
 
         Ai::extend('openrouter', function ($app, array $config) {
-            return new \Laravel\Ai\Providers\OpenRouterProvider(new PrismGateway($app['events']), $config, $app['events']);
+            return new OpenRouterProvider(new PrismGateway($app['events']), $config, $app['events']);
         });
 
         Ai::extend('kimi', function ($app, array $config) {
@@ -95,7 +101,7 @@ class AppServiceProvider extends ServiceProvider
                         $bodyStream = $response->getBody();
                         $bodyCopy = Utils::streamFor((string) $bodyStream);
                         $body = json_decode((string) $bodyCopy, true);
-                        
+
                         if (is_array($body) && isset($body['choices'][0]['message'])) {
                             $msg = $body['choices'][0]['message'];
                             if (isset($msg['tool_calls']) && isset($msg['reasoning_content'])) {
@@ -108,6 +114,7 @@ class AppServiceProvider extends ServiceProvider
                             }
                         }
                     }
+
                     return $response;
                 });
             };

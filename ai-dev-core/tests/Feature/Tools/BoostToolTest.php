@@ -112,3 +112,19 @@ test('database query rejects explicit sensitive columns', function () {
 
     expect($result)->toContain('not allowed');
 });
+
+test('boost tool can be restricted to a context allowlist', function () {
+    $target = makeBoostToolTargetDirectory();
+
+    Process::fake();
+
+    $result = json_decode((new BoostTool($target, allowedTools: ['database-query']))->handle(new Request([
+        'tool' => 'browser-logs',
+        'arguments' => ['entries' => 10],
+    ])), true);
+
+    expect($result['success'])->toBeFalse()
+        ->and($result['error'])->toContain('not allowed');
+
+    Process::assertNothingRan();
+});
