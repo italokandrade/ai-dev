@@ -41,7 +41,7 @@ REGRAS DE CONTEÚDO:
 8. O texto deve ser em Português do Brasil.
 
 REGRAS DE FORMATO — CRÍTICO:
-- Seja direto e conciso em todos os campos de texto. Frases curtas.
+- Seja direto e objetivo em todos os campos de texto.
 - O JSON DEVE estar completo e válido. Priorize fechar o JSON corretamente acima de qualquer detalhe extra.
 
 SAÍDA:

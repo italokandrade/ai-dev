@@ -39,14 +39,25 @@ class ViewProject extends ViewRecord
                 ->modalDescription('A IA irá analisar a descrição e gerar o PRD com os módulos de alto nível. Pode levar alguns minutos.')
                 ->modalSubmitActionLabel('Gerar')
                 ->action(function () {
-                    GenerateProjectPrdJob::dispatch($this->record);
+                    $this->record->update(['prd_payload' => ['_status' => 'generating']]);
+                    GenerateProjectPrdJob::dispatch($this->record->fresh());
                     Notification::make()
                         ->title('PRD sendo gerado...')
-                        ->body('Recarregue a aba PRD em alguns instantes.')
+                        ->body('O botão será atualizado quando concluído.')
                         ->success()
                         ->send();
                 })
-                ->visible(fn () => empty($this->record->prd_payload) || !empty($this->record->prd_payload['_status'] ?? '')),
+                ->visible(fn () =>
+                    empty($this->record->prd_payload)
+                    || ($this->record->prd_payload['_status'] ?? '') === 'ai_generation_failed'
+                ),
+
+            Actions\Action::make('generatingProjectPrd')
+                ->label('Gerando PRD...')
+                ->icon('heroicon-o-clock')
+                ->color('gray')
+                ->disabled()
+                ->visible(fn () => ($this->record->prd_payload['_status'] ?? '') === 'generating'),
 
             Actions\Action::make('approveProjectPrd')
                 ->label('Aprovar PRD — Criar Módulos')
