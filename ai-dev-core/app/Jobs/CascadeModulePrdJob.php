@@ -18,8 +18,8 @@ class CascadeModulePrdJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 2;
-    public int $timeout = 600;
+    public int $tries = 3;
+    public int $timeout = 660;
 
     public function __construct(
         public ProjectModule $module,
@@ -29,6 +29,16 @@ class CascadeModulePrdJob implements ShouldQueue
 
     public function handle(): void
     {
+        $this->module->refresh();
+
+        // Se já tem PRD válido, pula geração e vai direto para auto-aprovação
+        $existingPrd = $this->module->prd_payload;
+        if (!empty($existingPrd) && empty($existingPrd['_status'] ?? '')) {
+            Log::info("CascadeModulePrdJob: PRD já existe para '{$this->module->name}', pulando geração.");
+            $this->autoApprove($existingPrd);
+            return;
+        }
+
         Log::info("CascadeModulePrdJob: Gerando PRD para '{$this->module->name}'");
 
         $prdPayload = $this->generatePrd();
@@ -65,7 +75,7 @@ class CascadeModulePrdJob implements ShouldQueue
         } catch (\Throwable $e) {
             Log::error("CascadeModulePrdJob: Falha na geração do PRD", [
                 'module' => $this->module->name,
-                'error' => $e->getMessage(),
+                'error'  => $e->getMessage(),
             ]);
 
             return $this->fallbackPrd($e->getMessage());
@@ -87,6 +97,16 @@ class CascadeModulePrdJob implements ShouldQueue
             return;
         }
 
+        // Se já tem filhos criados, apenas despacha cascata para eles
+        $existingChildren = $this->module->children()->get();
+        if ($existingChildren->isNotEmpty()) {
+            Log::info("CascadeModulePrdJob: Submódulos já existem para '{$this->module->name}'. Despachando cascata para os existentes.");
+            foreach ($existingChildren as $child) {
+                self::dispatch($child);
+            }
+            return;
+        }
+
         $created = [];
 
         foreach ($prd['submodules'] as $submoduleData) {
@@ -97,18 +117,18 @@ class CascadeModulePrdJob implements ShouldQueue
             };
 
             $submodule = ProjectModule::create([
-                'project_id' => $this->module->project_id,
-                'parent_id'  => $this->module->id,
-                'name'       => $submoduleData['name'],
-                'description'=> $submoduleData['description'] ?? '',
-                'status'     => ModuleStatus::Planned,
-                'priority'   => $priorityEnum,
+                'project_id'  => $this->module->project_id,
+                'parent_id'   => $this->module->id,
+                'name'        => $submoduleData['name'],
+                'description' => $submoduleData['description'] ?? '',
+                'status'      => ModuleStatus::Planned,
+                'priority'    => $priorityEnum,
             ]);
 
             $created[] = $submodule;
         }
 
-        Log::info("CascadeModulePrdJob: {count($created)} submódulos criados para '{$this->module->name}'. Despachando cascata.");
+        Log::info("CascadeModulePrdJob: " . count($created) . " submódulos criados para '{$this->module->name}'. Despachando cascata.");
 
         foreach ($created as $submodule) {
             self::dispatch($submodule);
@@ -117,58 +137,67 @@ class CascadeModulePrdJob implements ShouldQueue
 
     private function createTasks(array $prd): void
     {
+        // Se já tem tasks, não duplicar
+        if ($this->module->tasks()->exists()) {
+            Log::info("CascadeModulePrdJob: Tasks já existem para '{$this->module->name}'. Nada a fazer.");
+            return;
+        }
+
         $tasks = [];
 
         foreach ($prd['components'] ?? [] as $component) {
             $tasks[] = [
-                'title'    => "Implementar {$component['type']}: {$component['name']}",
+                'title'       => "Implementar {$component['type']}: {$component['name']}",
                 'description' => $component['description'] ?? '',
-                'priority' => \App\Enums\Priority::High,
+                'priority'    => \App\Enums\Priority::High,
             ];
         }
 
         foreach ($prd['workflows'] ?? [] as $workflow) {
+            $steps = collect($workflow['steps'] ?? [])
+                ->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)
+                ->implode(' → ');
             $tasks[] = [
-                'title'    => "Fluxo: {$workflow['name']}",
-                'description' => 'Steps: ' . implode(' → ', $workflow['steps'] ?? []),
-                'priority' => \App\Enums\Priority::High,
+                'title'       => "Fluxo: {$workflow['name']}",
+                'description' => 'Steps: ' . $steps,
+                'priority'    => \App\Enums\Priority::High,
             ];
         }
 
         foreach ($prd['api_endpoints'] ?? [] as $api) {
             $tasks[] = [
-                'title'    => "API {$api['method']} {$api['uri']}",
+                'title'       => "API {$api['method']} {$api['uri']}",
                 'description' => $api['description'] ?? '',
-                'priority' => \App\Enums\Priority::Medium,
+                'priority'    => \App\Enums\Priority::Medium,
             ];
         }
 
         foreach ($prd['database_schema']['tables'] ?? [] as $table) {
             $tasks[] = [
-                'title'    => "Migration: {$table['name']}",
+                'title'       => "Migration: {$table['name']}",
                 'description' => $table['description'] ?? '',
-                'priority' => \App\Enums\Priority::High,
+                'priority'    => \App\Enums\Priority::High,
             ];
         }
 
         foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
             $tasks[] = [
-                'title'    => "Teste: {$criteria}",
-                'description' => $criteria,
-                'priority' => \App\Enums\Priority::Medium,
+                'title'       => "Teste: " . (is_array($criteria) ? json_encode($criteria) : $criteria),
+                'description' => is_array($criteria) ? json_encode($criteria) : $criteria,
+                'priority'    => \App\Enums\Priority::Medium,
             ];
         }
 
         foreach ($tasks as $taskData) {
             \App\Models\Task::create([
-                'project_id' => $this->module->project_id,
-                'module_id'  => $this->module->id,
-                'title'      => $taskData['title'],
-                'description'=> $taskData['description'],
-                'status'     => \App\Enums\TaskStatus::Pending,
-                'priority'   => $taskData['priority'],
-                'source'     => \App\Enums\TaskSource::Prd,
-                'max_retries'=> 3,
+                'project_id'  => $this->module->project_id,
+                'module_id'   => $this->module->id,
+                'title'       => $taskData['title'],
+                'description' => $taskData['description'],
+                'status'      => \App\Enums\TaskStatus::Pending,
+                'priority'    => $taskData['priority'],
+                'source'      => \App\Enums\TaskSource::Prd,
+                'max_retries' => 3,
             ]);
         }
 
@@ -242,8 +271,13 @@ PROMPT;
             'error'  => $exception->getMessage(),
         ]);
 
-        $this->module->update([
-            'prd_payload' => $this->fallbackPrd($exception->getMessage()),
-        ]);
+        // Só salva fallback se não houver PRD válido já salvo
+        $this->module->refresh();
+        $current = $this->module->prd_payload;
+        if (empty($current) || !empty($current['_status'] ?? '')) {
+            $this->module->update([
+                'prd_payload' => $this->fallbackPrd($exception->getMessage()),
+            ]);
+        }
     }
 }

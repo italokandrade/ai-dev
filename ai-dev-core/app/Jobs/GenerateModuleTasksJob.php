@@ -51,10 +51,11 @@ class GenerateModuleTasksJob implements ShouldQueue
 
         // 2. Workflows → Tasks
         foreach ($prd['workflows'] ?? [] as $workflow) {
+            $steps = collect($workflow['steps'] ?? [])->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)->implode(' → ');
             $tasks[] = [
-                'title' => "Fluxo: {$workflow['name']}",
-                'description' => 'Steps: ' . implode(' → ', $workflow['steps'] ?? []),
-                'priority' => Priority::High,
+                'title'       => "Fluxo: {$workflow['name']}",
+                'description' => 'Steps: ' . $steps,
+                'priority'    => Priority::High,
             ];
         }
 
