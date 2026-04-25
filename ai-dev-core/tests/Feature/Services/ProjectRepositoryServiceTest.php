@@ -80,11 +80,19 @@ test('project repository service writes prd documentation, commits, and pushes',
 
         $origin = Process::path($workDir)->run(['git', 'remote', 'get-url', 'origin']);
         $remoteHead = Process::run(['git', '--git-dir', $remoteDir, 'rev-parse', '--verify', 'refs/heads/main']);
+        $trackedProjectIndex = Process::path($workDir)->run(['git', 'ls-files', '.ai-dev/project.json']);
+        $projectIndex = json_decode(File::get("{$workDir}/.ai-dev/project.json"), true);
 
         expect($result['success'])->toBeTrue()
             ->and($result['committed'])->toBeTrue()
             ->and($result['pushed'])->toBeTrue()
             ->and(trim($origin->output()))->toBe($remoteDir)
+            ->and(trim($trackedProjectIndex->output()))->toBe('.ai-dev/project.json')
+            ->and($projectIndex['artifact_type'])->toBe('project_index')
+            ->and($projectIndex)->not->toHaveKey('prd_payload')
+            ->and($projectIndex)->not->toHaveKey('blueprint_payload')
+            ->and($projectIndex['modules'][0])->not->toHaveKey('prd_payload')
+            ->and(str_ends_with($projectIndex['modules'][0]['artifacts']['json'], '.json'))->toBeTrue()
             ->and(File::exists("{$workDir}/.ai-dev/prd-master.json"))->toBeTrue()
             ->and(File::get("{$workDir}/.ai-dev/prd-master.md"))->toContain('Salvar PRDs no repositorio do projeto')
             ->and(File::exists("{$workDir}/.ai-dev/architecture/domain-model.mmd"))->toBeTrue()

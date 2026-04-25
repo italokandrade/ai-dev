@@ -207,7 +207,6 @@ class ProjectRepositoryService
             [self::ARTIFACTS_DIR],
             'chore(ai-dev): sync project artifacts',
             push: false,
-            exclude: [self::ARTIFACTS_DIR.'/project.json'],
         );
 
         if (! ($commit['success'] ?? false)) {
@@ -294,10 +293,9 @@ class ProjectRepositoryService
 
     /**
      * @param  array<int, string>  $paths
-     * @param  array<int, string>  $exclude  Paths to unstage after force-add (relative to work dir)
      * @return array<string, mixed>
      */
-    public function commitPaths(Project $project, array $paths, string $message, bool $push = true, array $exclude = []): array
+    public function commitPaths(Project $project, array $paths, string $message, bool $push = true): array
     {
         $ensure = $this->ensureRepository($project, requireRemote: $push);
 
@@ -312,10 +310,6 @@ class ProjectRepositoryService
             if (! $add->successful()) {
                 return $this->failedResult('git_add_failed', $add->errorOutput(), $workDir, $ensure['remote_url'] ?? null);
             }
-        }
-
-        foreach ($exclude as $excluded) {
-            $this->git($workDir, ['git', 'restore', '--staged', '--', $excluded], 10);
         }
 
         $diff = $this->git($workDir, ['git', 'diff', '--cached', '--quiet', '--', ...$paths], 30);
@@ -603,7 +597,24 @@ class ProjectRepositoryService
      */
     private function projectPayload(Project $project): array
     {
+        $modules = $project->modules;
+        $tasks = $project->tasks;
+        $childrenByParent = $modules
+            ->groupBy(fn (ProjectModule $module): string => (string) $module->parent_id)
+            ->map(fn ($children): int => $children->count());
+        $moduleArtifacts = $modules
+            ->mapWithKeys(fn (ProjectModule $module): array => [
+                $module->id => 'modules/'.$this->artifactSlug($this->modulePath($module), $module->id),
+            ]);
+        $taskArtifacts = $tasks
+            ->mapWithKeys(fn (Task $task): array => [
+                $task->id => 'tasks/'.$this->artifactSlug($task->title, $task->id),
+            ]);
+
         return [
+            'source' => 'ai-dev-core',
+            'artifact_type' => 'project_index',
+            'schema_version' => 1,
             'id' => $project->id,
             'name' => $project->name,
             'description' => $project->description,
@@ -614,6 +625,31 @@ class ProjectRepositoryService
             'blueprint_approved_at' => $project->blueprint_approved_at?->toISOString(),
             'created_at' => $project->created_at?->toISOString(),
             'updated_at' => $project->updated_at?->toISOString(),
+            'counts' => [
+                'features' => $project->features->count(),
+                'modules' => $modules->count(),
+                'modules_with_prd' => $modules->filter(fn (ProjectModule $module): bool => is_array($module->prd_payload) && empty($module->prd_payload['_status'] ?? null))->count(),
+                'modules_failed_prd' => $modules->filter(fn (ProjectModule $module): bool => is_array($module->prd_payload) && ! empty($module->prd_payload['_status'] ?? null))->count(),
+                'modules_without_prd' => $modules->filter(fn (ProjectModule $module): bool => empty($module->prd_payload))->count(),
+                'modules_without_blueprint' => $modules->filter(fn (ProjectModule $module): bool => empty($module->blueprint_payload))->count(),
+                'tasks' => $tasks->count(),
+                'subtasks' => $tasks->flatMap->subtasks->count(),
+            ],
+            'artifacts' => [
+                'readme' => 'README.md',
+                'project_summary' => 'PROJECT.md',
+                'project_index' => 'project.json',
+                'manifest' => 'manifest.json',
+                'prd_master' => is_array($project->prd_payload) && $project->prd_payload !== [] ? 'prd-master.json' : null,
+                'blueprint_global' => is_array($project->blueprint_payload) && $project->blueprint_payload !== [] ? 'blueprint-global.json' : null,
+                'architecture' => [
+                    'readme' => 'architecture/README.md',
+                    'domain_mermaid' => 'architecture/domain-model.mmd',
+                    'domain_markdown' => 'architecture/domain-model.md',
+                    'domain_json' => 'architecture/domain-model.json',
+                    'checkpoint_protocol' => 'architecture/checkpoint-protocol.md',
+                ],
+            ],
             'features' => $project->features
                 ->sortBy('created_at')
                 ->map(fn ($feature): array => [
@@ -624,18 +660,107 @@ class ProjectRepositoryService
                 ])
                 ->values()
                 ->all(),
-            'prd_payload' => $project->prd_payload,
-            'blueprint_payload' => $project->blueprint_payload,
-            'modules' => $project->modules
+            'modules' => $modules
                 ->sortBy(fn (ProjectModule $module): string => $this->modulePath($module))
-                ->map(fn (ProjectModule $module): array => $this->modulePayload($module))
+                ->map(fn (ProjectModule $module): array => $this->moduleIndexPayload(
+                    $module,
+                    (int) ($childrenByParent->get($module->id) ?? 0),
+                    (string) $moduleArtifacts->get($module->id),
+                ))
                 ->values()
                 ->all(),
-            'tasks' => $project->tasks
+            'tasks' => $tasks
                 ->sortBy('created_at')
-                ->map(fn (Task $task): array => $this->taskPayload($task))
+                ->map(fn (Task $task): array => $this->taskIndexPayload(
+                    $task,
+                    (string) $taskArtifacts->get($task->id),
+                    $moduleArtifacts->all(),
+                ))
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function moduleIndexPayload(ProjectModule $module, int $childCount, string $artifactBase): array
+    {
+        $prd = $module->prd_payload;
+
+        return [
+            'id' => $module->id,
+            'project_id' => $module->project_id,
+            'parent_id' => $module->parent_id,
+            'path' => $this->modulePath($module),
+            'name' => $module->name,
+            'description' => $module->description,
+            'status' => $this->enumValue($module->status),
+            'priority' => $this->enumValue($module->priority),
+            'dependencies' => $module->dependencies,
+            'progress_percentage' => $module->progress_percentage,
+            'has_prd_payload' => is_array($prd) && $prd !== [],
+            'prd_status' => is_array($prd) ? ($prd['_status'] ?? 'ready') : 'missing',
+            'has_blueprint_payload' => is_array($module->blueprint_payload) && $module->blueprint_payload !== [],
+            'child_count' => $childCount,
+            'task_count' => $module->tasks->count(),
+            'artifacts' => [
+                'markdown' => "{$artifactBase}.md",
+                'json' => "{$artifactBase}.json",
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $moduleArtifacts
+     * @return array<string, mixed>
+     */
+    private function taskIndexPayload(Task $task, string $artifactBase, array $moduleArtifacts): array
+    {
+        return [
+            'id' => $task->id,
+            'project_id' => $task->project_id,
+            'module_id' => $task->module_id,
+            'module_artifact' => $task->module_id ? (($moduleArtifacts[$task->module_id] ?? null) ? "{$moduleArtifacts[$task->module_id]}.json" : null) : null,
+            'title' => $task->title,
+            'status' => $this->enumValue($task->status),
+            'priority' => $this->enumValue($task->priority),
+            'source' => $this->enumValue($task->source),
+            'commit_hash' => $task->commit_hash,
+            'has_prd_payload' => is_array($task->prd_payload) && $task->prd_payload !== [],
+            'subtask_count' => $task->subtasks->count(),
+            'artifacts' => [
+                'markdown' => "{$artifactBase}.md",
+                'json' => "{$artifactBase}.json",
+            ],
+            'subtasks' => $task->subtasks
+                ->sortBy('execution_order')
+                ->map(fn (Subtask $subtask): array => $this->subtaskIndexPayload($subtask))
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function subtaskIndexPayload(Subtask $subtask): array
+    {
+        $artifactBase = 'subtasks/'.$this->artifactSlug($subtask->title, $subtask->id);
+
+        return [
+            'id' => $subtask->id,
+            'task_id' => $subtask->task_id,
+            'title' => $subtask->title,
+            'status' => $this->enumValue($subtask->status),
+            'assigned_agent' => $subtask->assigned_agent,
+            'execution_order' => $subtask->execution_order,
+            'commit_hash' => $subtask->commit_hash,
+            'has_sub_prd_payload' => is_array($subtask->sub_prd_payload) && $subtask->sub_prd_payload !== [],
+            'artifacts' => [
+                'markdown' => "{$artifactBase}.md",
+                'json' => "{$artifactBase}.json",
+            ],
         ];
     }
 
@@ -713,7 +838,7 @@ class ProjectRepositoryService
             'Arquivos principais:',
             '',
             '- `PROJECT.md`: resumo humano do projeto.',
-            '- `project.json`: estado estruturado completo exportado do ai-dev-core.',
+            '- `project.json`: indice estruturado dos artefatos versionados; os payloads completos ficam nos arquivos especificos.',
             '- `prd-master.*`: PRD Master do projeto.',
             '- `blueprint-global.*`: Blueprint Tecnico Global.',
             '- `architecture/`: MER em Mermaid, dominio normalizado e protocolo de checkpoint fisico.',
