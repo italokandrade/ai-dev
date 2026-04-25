@@ -6,6 +6,7 @@ use App\Ai\Agents\GenerateFeaturesAgent;
 use App\Models\Project;
 use App\Models\ProjectFeature;
 use App\Services\AiRuntimeConfigService;
+use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,6 +19,7 @@ class GenerateProjectFeaturesJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
+
     public int $timeout = 600;
 
     public function __construct(
@@ -36,7 +38,7 @@ class GenerateProjectFeaturesJob implements ShouldQueue
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-            $response = (new GenerateFeaturesAgent())
+            $response = (new GenerateFeaturesAgent)
                 ->prompt(
                     $prompt,
                     provider: $aiConfig['provider'],
@@ -46,9 +48,9 @@ class GenerateProjectFeaturesJob implements ShouldQueue
             $raw = (string) $response;
             $features = $this->parseFeatures($raw);
 
-            Log::info("GenerateProjectFeaturesJob: IA gerou " . count($features) . " funcionalidades {$this->type}");
+            Log::info('GenerateProjectFeaturesJob: IA gerou '.count($features)." funcionalidades {$this->type}");
         } catch (\Throwable $e) {
-            Log::error("GenerateProjectFeaturesJob: Falha na geração de funcionalidades", [
+            Log::error('GenerateProjectFeaturesJob: Falha na geração de funcionalidades', [
                 'project' => $this->project->name,
                 'type' => $this->type,
                 'error' => $e->getMessage(),
@@ -68,7 +70,7 @@ class GenerateProjectFeaturesJob implements ShouldQueue
                 ]);
                 $created++;
             } catch (\Exception $e) {
-                Log::warning("GenerateProjectFeaturesJob: Falha ao inserir funcionalidade", [
+                Log::warning('GenerateProjectFeaturesJob: Falha ao inserir funcionalidade', [
                     'title' => $featureData['title'] ?? '—',
                     'error' => $e->getMessage(),
                 ]);
@@ -80,21 +82,22 @@ class GenerateProjectFeaturesJob implements ShouldQueue
 
     private function parseFeatures(string $raw): array
     {
-        // Remove markdown fences se existirem
-        $clean = preg_replace('/^```json\s*|\s*```$/m', '', trim($raw));
-        $clean = trim($clean);
-
-        $data = json_decode($clean, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        try {
+            $data = AiJson::value($raw, 'funcionalidades do projeto');
+        } catch (\Throwable $e) {
             Log::warning('GenerateProjectFeaturesJob: Falha ao parsear JSON da IA', [
                 'raw_preview' => substr($raw, 0, 500),
-                'json_error' => json_last_error_msg(),
+                'json_error' => $e->getMessage(),
             ]);
+
             return [];
         }
 
-        return $data['features'] ?? [];
+        if (is_array($data) && array_is_list($data)) {
+            return $data;
+        }
+
+        return is_array($data) ? ($data['features'] ?? []) : [];
     }
 
     private function buildPrompt(): string
@@ -104,7 +107,7 @@ class GenerateProjectFeaturesJob implements ShouldQueue
 
         // Trunca descrição muito longa para evitar timeout na IA
         if (strlen($description) > 3000) {
-            $description = substr($description, 0, 3000) . "\n\n[...descrição truncada para otimização...]";
+            $description = substr($description, 0, 3000)."\n\n[...descrição truncada para otimização...]";
         }
         $typeLabel = $this->type === 'backend' ? 'BACKEND' : 'FRONTEND';
         $typeInstruction = $this->type === 'backend'
@@ -112,17 +115,17 @@ class GenerateProjectFeaturesJob implements ShouldQueue
             : 'Gere funcionalidades de FRONTEND: telas, componentes visuais, fluxos do usuário, interações, formulários, dashboards, listagens, filtros, animações, responsividade, acessibilidade.';
 
         $prdContext = '';
-        if (!empty($this->project->prd_payload)) {
+        if (! empty($this->project->prd_payload)) {
             $prd = $this->project->prd_payload;
             $prdContext = "\n\nPRD DO PROJETO:\n";
-            $prdContext .= "Título: " . ($prd['title'] ?? '—') . "\n";
-            $prdContext .= "Objetivo: " . ($prd['objective'] ?? '—') . "\n";
-            if (!empty($prd['modules'])) {
+            $prdContext .= 'Título: '.($prd['title'] ?? '—')."\n";
+            $prdContext .= 'Objetivo: '.($prd['objective'] ?? '—')."\n";
+            if (! empty($prd['modules'])) {
                 $prdContext .= "Módulos:\n";
                 foreach ($prd['modules'] as $mod) {
-                    $prdContext .= "- " . ($mod['name'] ?? '—') . ": " . ($mod['description'] ?? '—') . "\n";
+                    $prdContext .= '- '.($mod['name'] ?? '—').': '.($mod['description'] ?? '—')."\n";
                     foreach ($mod['submodules'] ?? [] as $sub) {
-                        $prdContext .= "  • " . ($sub['name'] ?? '—') . ": " . ($sub['description'] ?? '—') . "\n";
+                        $prdContext .= '  • '.($sub['name'] ?? '—').': '.($sub['description'] ?? '—')."\n";
                     }
                 }
             }

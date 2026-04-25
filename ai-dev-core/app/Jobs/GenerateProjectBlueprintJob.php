@@ -6,6 +6,7 @@ use App\Ai\Agents\ProjectBlueprintAgent;
 use App\Models\Project;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ProjectBlueprintService;
+use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -135,18 +136,16 @@ PROMPT;
      */
     private function parseBlueprint(string $raw): array
     {
-        $clean = preg_replace('/^```json\s*|\s*```$/m', '', trim($raw));
-        $data = json_decode(trim((string) $clean), true);
-
-        if (json_last_error() !== JSON_ERROR_NONE || ! is_array($data)) {
+        try {
+            return AiJson::object($raw, 'Blueprint Tecnico Global');
+        } catch (\Throwable $e) {
             Log::warning('GenerateProjectBlueprintJob: Falha ao parsear JSON da IA', [
                 'raw_preview' => substr($raw, 0, 500),
-                'json_error' => json_last_error_msg(),
+                'json_error' => $e->getMessage(),
             ]);
-            throw new \RuntimeException('JSON inválido retornado pela IA: '.json_last_error_msg());
-        }
 
-        return $data;
+            throw $e;
+        }
     }
 
     /**

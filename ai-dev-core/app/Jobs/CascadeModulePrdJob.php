@@ -12,6 +12,7 @@ use App\Services\AiRuntimeConfigService;
 use App\Services\ModuleTaskPlannerService;
 use App\Services\ProjectBlueprintService;
 use App\Services\StandardProjectModuleService;
+use App\Support\AiJson;
 use App\Support\PlanningLimits;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -294,18 +295,16 @@ PROMPT;
 
     private function parsePrd(string $raw): array
     {
-        $clean = preg_replace('/^```json\s*|\s*```$/m', '', trim($raw));
-        $data = json_decode(trim($clean), true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        try {
+            return AiJson::object($raw, 'PRD de modulo em cascata');
+        } catch (\Throwable $e) {
             Log::warning('CascadeModulePrdJob: Falha ao parsear JSON da IA', [
                 'raw_preview' => substr($raw, 0, 300),
-                'json_error' => json_last_error_msg(),
+                'json_error' => $e->getMessage(),
             ]);
-            throw new \RuntimeException('JSON inválido retornado pela IA: '.json_last_error_msg());
-        }
 
-        return $data;
+            throw $e;
+        }
     }
 
     private function fallbackPrd(string $error): array

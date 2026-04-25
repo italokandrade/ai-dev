@@ -78,6 +78,19 @@ class ProjectRepositoryService
 
         $initialized = false;
 
+        if (is_dir("{$workDir}/.git") && $this->gitRepositoryNeedsRepair($workDir)) {
+            $repair = $this->quarantineGitRepository($workDir);
+
+            if (! $repair) {
+                return $this->failedResult(
+                    'git_repair_quarantine_failed',
+                    'Nao foi possivel colocar o repositorio Git local em quarentena para autoreparo.',
+                    $workDir,
+                    $remoteUrl,
+                );
+            }
+        }
+
         if (! is_dir("{$workDir}/.git")) {
             if ($remoteUrl === null) {
                 return [
@@ -97,6 +110,7 @@ class ProjectRepositoryService
             $initialized = true;
 
             $this->git($workDir, ['git', 'branch', '-M', 'main'], 30);
+            $this->excludeGitRepairQuarantine($workDir);
         }
 
         $this->ensureGitIdentity($workDir);
@@ -139,6 +153,10 @@ class ProjectRepositoryService
             }
 
             $remoteConfigured = true;
+
+            if ($initialized) {
+                $this->restoreRemoteBase($workDir);
+            }
         }
 
         return [
@@ -876,6 +894,83 @@ class ProjectRepositoryService
         if ($email === '') {
             $this->git($workDir, ['git', 'config', 'user.email', self::GIT_USER_EMAIL], 10);
         }
+    }
+
+    private function gitRepositoryNeedsRepair(string $workDir): bool
+    {
+        $gitDir = "{$workDir}/.git";
+
+        foreach ([$gitDir, "{$gitDir}/objects", "{$gitDir}/refs", "{$gitDir}/index", "{$gitDir}/config", "{$gitDir}/HEAD", "{$gitDir}/packed-refs"] as $path) {
+            if (file_exists($path) && ! is_writable($path)) {
+                return true;
+            }
+        }
+
+        return $this->gitPathContainsPermissionDrift("{$gitDir}/objects")
+            || $this->gitPathContainsPermissionDrift("{$gitDir}/refs");
+    }
+
+    private function gitPathContainsPermissionDrift(string $path): bool
+    {
+        if (! is_dir($path)) {
+            return false;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        );
+
+        foreach ($iterator as $item) {
+            if (! is_writable($item->getPathname())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function quarantineGitRepository(string $workDir): bool
+    {
+        $quarantinePath = "{$workDir}/.git-quarantine-".Str::uuid();
+
+        if (! @rename("{$workDir}/.git", $quarantinePath)) {
+            Log::warning('ProjectRepositoryService: falha ao colocar repositorio Git local em quarentena', [
+                'work_dir' => $workDir,
+                'quarantine_path' => $quarantinePath,
+            ]);
+
+            return false;
+        }
+
+        Log::warning('ProjectRepositoryService: repositorio Git local colocado em quarentena para autoreparo', [
+            'work_dir' => $workDir,
+            'quarantine_path' => $quarantinePath,
+        ]);
+
+        return true;
+    }
+
+    private function excludeGitRepairQuarantine(string $workDir): void
+    {
+        $exclude = "{$workDir}/.git/info/exclude";
+        $line = '.git-quarantine-*';
+        $contents = is_file($exclude) ? (string) File::get($exclude) : '';
+
+        if (! str_contains($contents, $line)) {
+            File::append($exclude, "\n{$line}\n");
+        }
+    }
+
+    private function restoreRemoteBase(string $workDir): void
+    {
+        $fetch = $this->git($workDir, ['git', 'fetch', 'origin', 'main'], 120);
+
+        if (! $fetch->successful()) {
+            return;
+        }
+
+        $this->git($workDir, ['git', 'reset', '--mixed', 'origin/main'], 60);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Ai\Agents\ModulePrdAgent;
 use App\Models\ProjectModule;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ProjectBlueprintService;
+use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -146,20 +147,16 @@ PROMPT;
 
     private function parsePrd(string $raw): array
     {
-        $clean = preg_replace('/^```json\s*|\s*```$/m', '', trim($raw));
-        $clean = trim($clean);
-
-        $data = json_decode($clean, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        try {
+            return AiJson::object($raw, 'PRD de modulo');
+        } catch (\Throwable $e) {
             Log::warning('GenerateModulePrdJob: Falha ao parsear JSON da IA', [
                 'raw_preview' => substr($raw, 0, 500),
-                'json_error' => json_last_error_msg(),
+                'json_error' => $e->getMessage(),
             ]);
-            throw new \RuntimeException('JSON inválido retornado pela IA: '.json_last_error_msg());
-        }
 
-        return $data;
+            throw $e;
+        }
     }
 
     public function failed(\Throwable $exception): void
