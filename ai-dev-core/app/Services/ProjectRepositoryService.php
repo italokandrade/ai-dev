@@ -207,6 +207,7 @@ class ProjectRepositoryService
             [self::ARTIFACTS_DIR],
             'chore(ai-dev): sync project artifacts',
             push: false,
+            exclude: [self::ARTIFACTS_DIR.'/project.json'],
         );
 
         if (! ($commit['success'] ?? false)) {
@@ -293,9 +294,10 @@ class ProjectRepositoryService
 
     /**
      * @param  array<int, string>  $paths
+     * @param  array<int, string>  $exclude  Paths to unstage after force-add (relative to work dir)
      * @return array<string, mixed>
      */
-    public function commitPaths(Project $project, array $paths, string $message, bool $push = true): array
+    public function commitPaths(Project $project, array $paths, string $message, bool $push = true, array $exclude = []): array
     {
         $ensure = $this->ensureRepository($project, requireRemote: $push);
 
@@ -310,6 +312,10 @@ class ProjectRepositoryService
             if (! $add->successful()) {
                 return $this->failedResult('git_add_failed', $add->errorOutput(), $workDir, $ensure['remote_url'] ?? null);
             }
+        }
+
+        foreach ($exclude as $excluded) {
+            $this->git($workDir, ['git', 'restore', '--staged', '--', $excluded], 10);
         }
 
         $diff = $this->git($workDir, ['git', 'diff', '--cached', '--quiet', '--', ...$paths], 30);
