@@ -81,3 +81,31 @@ test('generate module tasks creates data architecture checkpoint before implemen
         ->and($tasks->first()->prd_payload['architecture_checkpoint']['is_checkpoint_task'])->toBeTrue()
         ->and($tasks->pluck('title')->all())->not->toContain('Migration: processos');
 });
+
+test('generate module tasks uses configurable planning guardrail instead of old hard cap', function () {
+    config(['ai_dev.planning.max_tasks_per_module' => 20]);
+
+    $project = Project::create([
+        'name' => 'large-module-task-project',
+        'status' => 'active',
+    ]);
+
+    $module = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Atendimento Juridico',
+        'description' => 'Modulo grande com muitos criterios',
+        'status' => 'planned',
+        'prd_payload' => [
+            'title' => 'Atendimento Juridico - PRD Tecnico',
+            'objective' => 'Gerenciar atendimentos.',
+            'needs_submodules' => false,
+            'acceptance_criteria' => collect(range(1, 15))
+                ->map(fn (int $index): string => "Criterio {$index}")
+                ->all(),
+        ],
+    ]);
+
+    (new GenerateModuleTasksJob($module))->handle();
+
+    expect($module->tasks()->count())->toBe(15);
+});

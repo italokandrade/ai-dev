@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\Priority;
 use App\Enums\TaskSource;
 use App\Models\ProjectModule;
+use App\Support\PlanningLimits;
 
 class ModuleTaskPlannerService
 {
@@ -14,8 +15,11 @@ class ModuleTaskPlannerService
      * @param  array<string, mixed>  $prd
      * @return array<int, array<string, mixed>>
      */
-    public function taskDefinitions(ProjectModule $module, array $prd, int $limit = 12): array
+    public function taskDefinitions(ProjectModule $module, array $prd, ?int $limit = null): array
     {
+        $limit ??= PlanningLimits::tasksPerModule();
+        $limit = $limit !== null && $limit <= 0 ? null : $limit;
+
         $tasks = [];
 
         if ($this->requiresArchitectureCheckpoint($prd)) {
@@ -204,9 +208,9 @@ class ModuleTaskPlannerService
      * @param  array<int, array<string, mixed>>  $tasks
      * @param  array<string, mixed>  $task
      */
-    private function pushTask(array &$tasks, array $task, int $limit): void
+    private function pushTask(array &$tasks, array $task, ?int $limit): void
     {
-        if (count($tasks) >= $limit) {
+        if ($limit !== null && count($tasks) >= $limit) {
             return;
         }
 

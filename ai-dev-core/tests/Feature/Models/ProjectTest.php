@@ -89,6 +89,8 @@ test('project calculates overall progress', function () {
 });
 
 test('project creates root modules idempotently with cap and deduplication', function () {
+    config(['ai_dev.planning.max_root_modules_per_project' => 40]);
+
     $path = projectTestCreateReadyScaffold();
 
     try {
@@ -110,7 +112,7 @@ test('project creates root modules idempotently with cap and deduplication', fun
         $project->createModulesFromPrd();
         $project->createModulesFromPrd();
 
-        expect($project->modules()->whereNull('parent_id')->count())->toBe(Project::MAX_ROOT_MODULES)
+        expect($project->modules()->whereNull('parent_id')->count())->toBe(40)
             ->and($project->modules()->where('name', 'Chatbox')->count())->toBe(1)
             ->and($project->modules()->where('name', 'Segurança')->count())->toBe(1)
             ->and($project->modules()->where('name', 'Autenticação')->count())->toBe(1)

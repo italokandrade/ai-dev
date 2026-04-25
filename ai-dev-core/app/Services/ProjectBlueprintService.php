@@ -4,17 +4,10 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\ProjectModule;
+use App\Support\PlanningLimits;
 
 class ProjectBlueprintService
 {
-    private const int MAX_ENTITIES = 200;
-
-    private const int MAX_COLUMNS_PER_ENTITY = 120;
-
-    private const int MAX_RELATIONSHIPS = 500;
-
-    private const int MAX_ARTIFACTS_PER_GROUP = 250;
-
     /**
      * @return array<string, mixed>
      */
@@ -66,8 +59,8 @@ class ProjectBlueprintService
         $relationships = $this->normalizeRelationships($normalized['domain_model']['relationships'] ?? []);
 
         $normalized['domain_model'] = [
-            'entities' => array_slice($entities, 0, self::MAX_ENTITIES),
-            'relationships' => array_slice($relationships, 0, self::MAX_RELATIONSHIPS),
+            'entities' => $this->limit($entities, PlanningLimits::blueprintEntities()),
+            'relationships' => $this->limit($relationships, PlanningLimits::blueprintRelationships()),
         ];
 
         $normalized['use_cases'] = $this->normalizeNamedList($normalized['use_cases'] ?? []);
@@ -183,8 +176,8 @@ class ProjectBlueprintService
             'module_name' => $module->name,
             'module_path' => $this->modulePath($module),
             'domain_model' => [
-                'entities' => array_slice($entities, 0, self::MAX_ENTITIES),
-                'relationships' => array_slice($relationships, 0, self::MAX_RELATIONSHIPS),
+                'entities' => $this->limit($entities, PlanningLimits::blueprintEntities()),
+                'relationships' => $this->limit($relationships, PlanningLimits::blueprintRelationships()),
             ],
             'use_cases' => $this->normalizeNamedList($raw['use_cases'] ?? $modulePrd['use_cases'] ?? [], $module),
             'workflows' => $this->normalizeNamedList($raw['workflows'] ?? $modulePrd['workflows'] ?? [], $module),
@@ -245,8 +238,8 @@ class ProjectBlueprintService
             'name' => $name,
             'description' => $this->stringValue($entity['description'] ?? ''),
             'modules' => $modules,
-            'columns' => array_slice($this->normalizeColumns($entity['columns'] ?? $entity['fields'] ?? []), 0, self::MAX_COLUMNS_PER_ENTITY),
-            'relationships' => array_slice($this->normalizeRelationships($entity['relationships'] ?? $entity['relations'] ?? [], $name, $module), 0, self::MAX_RELATIONSHIPS),
+            'columns' => $this->limit($this->normalizeColumns($entity['columns'] ?? $entity['fields'] ?? []), PlanningLimits::blueprintColumnsPerEntity()),
+            'relationships' => $this->limit($this->normalizeRelationships($entity['relationships'] ?? $entity['relations'] ?? [], $name, $module), PlanningLimits::blueprintRelationships()),
         ];
     }
 
@@ -353,11 +346,11 @@ class ProjectBlueprintService
                 ...($existing['modules'] ?? []),
                 ...($normalized['modules'] ?? []),
             ]));
-            $merged[$key]['columns'] = $this->mergeNamedItems($existing['columns'] ?? [], $normalized['columns'] ?? [], self::MAX_COLUMNS_PER_ENTITY);
+            $merged[$key]['columns'] = $this->mergeNamedItems($existing['columns'] ?? [], $normalized['columns'] ?? [], PlanningLimits::blueprintColumnsPerEntity());
             $merged[$key]['relationships'] = $this->mergeRelationships($existing['relationships'] ?? [], $normalized['relationships'] ?? []);
         }
 
-        return array_slice(array_values($merged), 0, self::MAX_ENTITIES);
+        return $this->limit($merged, PlanningLimits::blueprintEntities());
     }
 
     /**
@@ -382,7 +375,7 @@ class ProjectBlueprintService
             $merged[$this->relationshipKey($normalized)] = array_filter($normalized, fn (mixed $value): bool => $value !== null && $value !== '');
         }
 
-        return array_slice(array_values($merged), 0, self::MAX_RELATIONSHIPS);
+        return $this->limit($merged, PlanningLimits::blueprintRelationships());
     }
 
     /**
@@ -390,8 +383,9 @@ class ProjectBlueprintService
      * @param  array<int, mixed>  $incoming
      * @return array<int, array<string, mixed>>
      */
-    private function mergeNamedItems(array $base, array $incoming, int $limit = self::MAX_ARTIFACTS_PER_GROUP): array
+    private function mergeNamedItems(array $base, array $incoming, ?int $limit = null): array
     {
+        $limit ??= PlanningLimits::blueprintArtifactsPerGroup();
         $merged = [];
 
         foreach ([...$base, ...$incoming] as $item) {
@@ -403,7 +397,7 @@ class ProjectBlueprintService
             $merged[$this->namedItemKey($normalized)] = array_replace($merged[$this->namedItemKey($normalized)] ?? [], $normalized);
         }
 
-        return array_slice(array_values($merged), 0, $limit);
+        return $this->limit($merged, $limit);
     }
 
     /**
@@ -416,13 +410,14 @@ class ProjectBlueprintService
             return [];
         }
 
-        return collect($items)
+        $normalized = collect($items)
             ->map(fn (mixed $item): array => $this->normalizeNamedItem($item, $module))
             ->filter(fn (array $item): bool => $item !== [])
             ->unique(fn (array $item): string => $this->namedItemKey($item))
-            ->take(self::MAX_ARTIFACTS_PER_GROUP)
             ->values()
             ->all();
+
+        return $this->limit($normalized, PlanningLimits::blueprintArtifactsPerGroup());
     }
 
     /**
@@ -469,6 +464,23 @@ class ProjectBlueprintService
             ->unique(fn (string $item): string => $this->normalizeName($item))
             ->values()
             ->all();
+    }
+
+    /**
+     * @template T
+     *
+     * @param  array<int|string, T>  $items
+     * @return array<int, T>
+     */
+    private function limit(array $items, ?int $limit): array
+    {
+        $values = array_values($items);
+
+        if ($limit === null) {
+            return $values;
+        }
+
+        return array_slice($values, 0, $limit);
     }
 
     private function relationshipKey(array $relationship): string

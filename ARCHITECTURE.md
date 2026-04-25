@@ -296,6 +296,8 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_paylo
 4. O ciclo repete recursivamente até todas as folhas terem tasks
 5. Resiliência: pula geração se PRD válido já existe; não duplica submódulos/tasks; `failed()` preserva PRD válido já salvo
 
+**Guardrails de planejamento:** a cascata não usa mais tetos pequenos hardcoded. Os limites operacionais vivem em `config/ai_dev.php` e podem ser ajustados por ambiente (`AI_DEV_MAX_ROOT_MODULES_PER_PROJECT`, `AI_DEV_MAX_MODULES_PER_PROJECT`, `AI_DEV_MAX_SUBMODULE_DEPTH`, `AI_DEV_MAX_SUBMODULES_PER_MODULE`, `AI_DEV_MAX_TASKS_PER_MODULE`). O padrão foi calibrado para sistemas grandes: 200 módulos raiz, 1000 módulos totais, 3 níveis de submódulos, 30 submódulos por módulo e 30 tasks por folha. Valor `0` remove o teto específico.
+
 **Estrutura do `ai_specification` JSON (legado):**
 ```json
 {
@@ -353,7 +355,7 @@ O sistema adota **granularidade progressiva**: cada módulo/submódulo possui se
 - `parent_id = uuid` → submódulo (criado apenas quando o PRD do pai define `needs_submodules = true`)
 - O PRD de cada módulo (`prd_payload`) decide se precisa de submódulos (`needs_submodules` boolean)
 - Tasks são criadas **apenas em nós folha** (módulos/submódulos sem filhos e com `needs_submodules = false`)
-- Submódulos podem ter seus próprios submódulos (hierarquia infinita)
+- Submódulos podem ter seus próprios submódulos; a profundidade automática é governada por `config/ai_dev.php` para evitar loop de planejamento
 - `recalculateProgress()` conta tasks completadas / total tasks do módulo folha
 - `dependenciesMet()` verifica se todos os módulos dependência estão com status `completed`
 

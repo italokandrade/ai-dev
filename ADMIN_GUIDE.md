@@ -69,7 +69,7 @@ Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança`
 Os módulos permitem decompor um projeto complexo em partes menores e gerenciáveis. O sistema adota **granularidade progressiva**: cada módulo decide se precisa de submódulos.
 
 ### 2.1 Hierarquia (Módulos e Submódulos)
-- O sistema suporta **hierarquia infinita**. Um módulo pode ter um "Módulo Pai".
+- O sistema suporta hierarquia profunda de módulos. A cascata automática usa guardrails configuráveis em `config/ai_dev.php` para evitar geração acidental infinita; por padrão permite 3 níveis de submódulos e pode ficar sem teto definindo o limite como `0`.
 - **Exemplo:** `Mensageria` > `WhatsApp` > `Caixa de Entrada`.
 - **Regra de ouro:** Tasks são criadas **apenas nos nós folha** (módulos/submódulos sem filhos).
 

@@ -6,6 +6,7 @@ use App\Enums\ModuleStatus;
 use App\Enums\Priority;
 use App\Enums\ProjectStatus;
 use App\Services\StandardProjectModuleService;
+use App\Support\PlanningLimits;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,8 +19,6 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Project extends Model implements Conversational
 {
     use HasUuids, LogsActivity, RemembersConversations;
-
-    public const int MAX_ROOT_MODULES = 40;
 
     public const array TARGET_SCAFFOLD_REQUIRED_FILES = [
         'artisan',
@@ -294,7 +293,10 @@ class Project extends Model implements Conversational
             $moduleIdMap[$normalizedName] = $module->id;
         }
 
-        $availableSlots = max(0, self::MAX_ROOT_MODULES - $existingRootModules->count());
+        $rootModuleLimit = PlanningLimits::rootModulesPerProject();
+        $availableSlots = $rootModuleLimit === null
+            ? PHP_INT_MAX
+            : max(0, $rootModuleLimit - $existingRootModules->count());
 
         $modules = $standardModules->businessModulesFromPrd($prd)
             ->map(function (array $moduleData): array {

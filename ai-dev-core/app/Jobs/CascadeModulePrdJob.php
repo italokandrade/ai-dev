@@ -13,6 +13,7 @@ use App\Services\AiRuntimeConfigService;
 use App\Services\ModuleTaskPlannerService;
 use App\Services\ProjectBlueprintService;
 use App\Services\StandardProjectModuleService;
+use App\Support\PlanningLimits;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,14 +25,6 @@ use Illuminate\Support\Facades\Log;
 class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    private const int MAX_SUBMODULE_DEPTH = 1;
-
-    private const int MAX_SUBMODULES_PER_MODULE = 5;
-
-    private const int MAX_MODULES_PER_PROJECT = 60;
-
-    private const int MAX_TASKS_PER_MODULE = 12;
 
     public int $tries = 3;
 
@@ -148,9 +141,11 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
     private function shouldCreateSubmodules(array $prd): bool
     {
+        $maxDepth = PlanningLimits::submoduleDepth();
+
         return (bool) ($prd['needs_submodules'] ?? false)
             && ! empty($prd['submodules'])
-            && $this->moduleDepth() < self::MAX_SUBMODULE_DEPTH;
+            && ($maxDepth === null || $this->moduleDepth() < $maxDepth);
     }
 
     private function createSubmodules(array $prd): void
@@ -176,10 +171,14 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             ->map(fn (string $name): string => $this->normalizeName($name))
             ->all();
         $seenNames = array_fill_keys($existingNames, true);
-        $remainingProjectSlots = max(0, self::MAX_MODULES_PER_PROJECT - $this->module->project->modules()->count());
+        $moduleLimit = PlanningLimits::modulesPerProject();
+        $remainingProjectSlots = $moduleLimit === null
+            ? PHP_INT_MAX
+            : max(0, $moduleLimit - $this->module->project->modules()->count());
+        $submoduleLimit = PlanningLimits::submodulesPerModule();
 
         foreach ($prd['submodules'] as $submoduleData) {
-            if (count($created) >= self::MAX_SUBMODULES_PER_MODULE || count($created) >= $remainingProjectSlots) {
+            if (($submoduleLimit !== null && count($created) >= $submoduleLimit) || count($created) >= $remainingProjectSlots) {
                 break;
             }
 
@@ -232,7 +231,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         }
 
         $planner = app(ModuleTaskPlannerService::class);
-        $tasks = $planner->taskDefinitions($this->module, $prd, self::MAX_TASKS_PER_MODULE);
+        $tasks = $planner->taskDefinitions($this->module, $prd, PlanningLimits::tasksPerModule());
 
         foreach ($tasks as $taskData) {
             Task::create([

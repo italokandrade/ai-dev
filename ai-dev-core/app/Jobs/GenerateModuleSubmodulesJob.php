@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
 use App\Models\ProjectModule;
+use App\Support\PlanningLimits;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -15,8 +16,6 @@ use Illuminate\Support\Facades\Log;
 class GenerateModuleSubmodulesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    private const int MAX_SUBMODULES_PER_MODULE = 8;
 
     public int $tries = 1;
 
@@ -46,10 +45,15 @@ class GenerateModuleSubmodulesJob implements ShouldQueue
             ->map(fn (string $name): string => $this->normalizeName($name))
             ->all();
         $seenNames = array_fill_keys($existingNames, true);
+        $submoduleLimit = PlanningLimits::submodulesPerModule();
 
         foreach ($prd['submodules'] as $submoduleData) {
-            if ($created >= self::MAX_SUBMODULES_PER_MODULE || ! is_array($submoduleData)) {
+            if ($submoduleLimit !== null && $created >= $submoduleLimit) {
                 break;
+            }
+
+            if (! is_array($submoduleData)) {
+                continue;
             }
 
             $name = $this->stringValue($submoduleData['name'] ?? '');
