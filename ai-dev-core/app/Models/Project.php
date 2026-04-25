@@ -5,8 +5,8 @@ namespace App\Models;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
 use App\Enums\ProjectStatus;
+use App\Services\ProjectPlanningScopeService;
 use App\Services\StandardProjectModuleService;
-use App\Support\PlanningLimits;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -330,7 +330,7 @@ class Project extends Model implements Conversational
             $moduleIdMap[$normalizedName] = $module->id;
         }
 
-        $rootModuleLimit = PlanningLimits::rootModulesPerProject();
+        $rootModuleLimit = app(ProjectPlanningScopeService::class)->rootModuleLimit($this->fresh(['features']) ?? $this);
         $availableSlots = $rootModuleLimit === null
             ? PHP_INT_MAX
             : max(0, $rootModuleLimit - $existingRootModules->count());

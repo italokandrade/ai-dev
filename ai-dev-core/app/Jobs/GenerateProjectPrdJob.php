@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Ai\Agents\ProjectPrdAgent;
 use App\Models\Project;
 use App\Services\AiRuntimeConfigService;
+use App\Services\ProjectPlanningScopeService;
 use App\Services\StandardProjectModuleService;
 use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
@@ -56,7 +57,8 @@ class GenerateProjectPrdJob implements ShouldBeUnique, ShouldQueue
                     model: $aiConfig['model'],
                 );
 
-            $prdPayload = $this->parsePrd((string) $response);
+            $prdPayload = app(ProjectPlanningScopeService::class)
+                ->sanitizeProjectPrd($this->project->fresh(['features']), $this->parsePrd((string) $response));
 
             Log::info("GenerateProjectPrdJob: PRD gerado com sucesso para '{$this->project->name}'", [
                 'modules' => count($prdPayload['modules'] ?? []),
@@ -93,6 +95,7 @@ class GenerateProjectPrdJob implements ShouldBeUnique, ShouldQueue
             ->implode("\n") ?: 'Nenhuma funcionalidade frontend cadastrada.';
 
         $standardModules = app(StandardProjectModuleService::class)->promptSummary();
+        $scopeGuidance = app(ProjectPlanningScopeService::class)->promptGuidance($this->project->fresh(['features']), 'geracao do PRD Master');
 
         return <<<PROMPT
 PROJETO: {$projectName}
@@ -108,6 +111,8 @@ FUNCIONALIDADES FRONTEND:
 
 {$standardModules}
 
+{$scopeGuidance}
+
 ---
 INSTRUÇÃO: Com base nas informações acima, gere o PRD Master deste projeto.
 O PRD deve respeitar EXATAMENTE as funcionalidades já cadastradas.
@@ -115,6 +120,7 @@ Não invente módulos ou funcionalidades que não foram solicitadas.
 Não inclua os módulos padrão Chatbox e Segurança em "modules"; eles serão anexados automaticamente em "standard_modules".
 Divida tudo apenas em módulos de alto nível, sem submódulos, sem campos de banco e sem endpoints finais.
 Depois do PRD, outro agente irá gerar o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
+Cada módulo deve declarar de quais funcionalidades cadastradas ele nasceu em "source_features"; se não houver funcionalidade fonte, não crie o módulo.
 PROMPT;
     }
 

@@ -11,6 +11,7 @@ use App\Models\Task;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ModuleTaskPlannerService;
 use App\Services\ProjectBlueprintService;
+use App\Services\ProjectPlanningScopeService;
 use App\Services\StandardProjectModuleService;
 use App\Support\AiJson;
 use App\Support\PlanningLimits;
@@ -58,6 +59,12 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         // Se já tem PRD válido, pula geração e vai direto para auto-aprovação
         $existingPrd = $this->module->prd_payload;
         if (! empty($existingPrd) && empty($existingPrd['_status'] ?? '')) {
+            $existingPrd = $this->normalizePrdForModuleRole($existingPrd);
+            if ($existingPrd !== $this->module->prd_payload) {
+                $this->module->update(['prd_payload' => $existingPrd]);
+                $this->module->refresh();
+            }
+
             Log::info("CascadeModulePrdJob: PRD já existe para '{$this->module->name}', pulando geração.");
             $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $existingPrd);
             $this->module->refresh();
@@ -70,7 +77,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
         Log::info("CascadeModulePrdJob: Gerando PRD para '{$this->module->name}'");
 
-        $prdPayload = $this->generatePrd();
+        $prdPayload = $this->normalizePrdForModuleRole($this->generatePrd());
 
         $this->module->update(['prd_payload' => $prdPayload]);
 
@@ -130,9 +137,11 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
     private function shouldCreateSubmodules(array $prd): bool
     {
         $maxDepth = PlanningLimits::submoduleDepth();
+        $submoduleLimit = app(ProjectPlanningScopeService::class)->submoduleLimit($this->module->project);
 
         return (bool) ($prd['needs_submodules'] ?? false)
             && ! empty($prd['submodules'])
+            && $submoduleLimit !== 0
             && ($maxDepth === null || $this->moduleDepth() < $maxDepth);
     }
 
@@ -163,7 +172,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $remainingProjectSlots = $moduleLimit === null
             ? PHP_INT_MAX
             : max(0, $moduleLimit - $this->module->project->modules()->count());
-        $submoduleLimit = PlanningLimits::submodulesPerModule();
+        $submoduleLimit = app(ProjectPlanningScopeService::class)->submoduleLimit($this->module->project);
 
         foreach ($prd['submodules'] as $submoduleData) {
             if (($submoduleLimit !== null && count($created) >= $submoduleLimit) || count($created) >= $remainingProjectSlots) {
@@ -211,6 +220,13 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
     private function createTasks(array $prd): void
     {
+        if (PlanningLimits::deferTaskGenerationUntilProjectPrdsComplete() && $this->projectHasPendingPlanningPrds()) {
+            Log::info("CascadeModulePrdJob: Tasks de '{$this->module->name}' adiadas até todos os PRDs de módulos/submódulos ficarem prontos.");
+            $this->scheduleReconciliation();
+
+            return;
+        }
+
         // Se já tem tasks, não duplicar
         if ($this->module->tasks()->exists()) {
             Log::info("CascadeModulePrdJob: Tasks já existem para '{$this->module->name}'. Nada a fazer.");
@@ -219,7 +235,11 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         }
 
         $planner = app(ModuleTaskPlannerService::class);
-        $tasks = $planner->taskDefinitions($this->module, $prd, PlanningLimits::tasksPerModule());
+        $tasks = $planner->taskDefinitions(
+            $this->module,
+            $prd,
+            app(ProjectPlanningScopeService::class)->taskLimit($this->module->project),
+        );
 
         foreach ($tasks as $taskData) {
             Task::create([
@@ -253,6 +273,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $typeLabel = $isSubmodule ? 'SUBMÓDULO' : 'MÓDULO';
         $parentInfo = $isSubmodule ? "\nMÓDULO PAI: {$parentName}\n" : '';
         $blueprintContext = $this->blueprintContext();
+        $scopeGuidance = app(ProjectPlanningScopeService::class)->promptGuidance($project, "geracao do PRD de {$typeLabel}");
 
         return <<<PROMPT
 PROJETO: {$project->name}
@@ -268,11 +289,15 @@ DESCRIÇÃO DO {$typeLabel}:
 BLUEPRINT TÉCNICO GLOBAL ATUAL:
 {$blueprintContext}
 
+{$scopeGuidance}
+
 ---
 INSTRUÇÃO: Gere o PRD Técnico deste {$typeLabel}.
 Este PRD será usado por desenvolvedores para implementar o código.
 Especifique: tabelas de banco, APIs, componentes, regras de negócio, validações, permissões e fluxos.
 Atualize também o `blueprint_contribution` com entidades, campos, relacionamentos, casos de uso, workflows e componentes que este {$typeLabel} adiciona ou detalha.
+Não crie novo módulo raiz. Não adicione capacidades fora do escopo deste {$typeLabel}.
+Se este {$typeLabel} precisar de submódulos, limite-se a definir a fronteira e os submódulos; detalhes implementáveis ficam para os PRDs dos submódulos.
 PROMPT;
     }
 
@@ -317,6 +342,63 @@ PROMPT;
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $prd
+     * @return array<string, mixed>
+     */
+    private function normalizePrdForModuleRole(array $prd): array
+    {
+        $isSubmodule = $this->module->parent_id !== null;
+        $submoduleLimit = app(ProjectPlanningScopeService::class)->submoduleLimit($this->module->project);
+
+        if ($isSubmodule || $submoduleLimit === 0) {
+            $prd['needs_submodules'] = false;
+            $prd['submodules'] = [];
+
+            return $prd;
+        }
+
+        if ($this->shouldCreateSubmodules($prd)) {
+            $prd['submodules'] = collect($prd['submodules'])
+                ->filter(fn (mixed $submodule): bool => is_array($submodule))
+                ->map(fn (array $submodule): array => [
+                    'name' => $this->stringValue($submodule['name'] ?? ''),
+                    'description' => $this->stringValue($submodule['description'] ?? ''),
+                    'priority' => $this->stringValue($submodule['priority'] ?? 'medium'),
+                ])
+                ->filter(fn (array $submodule): bool => $submodule['name'] !== '')
+                ->unique(fn (array $submodule): string => $this->normalizeName($submodule['name']))
+                ->take($submoduleLimit ?? PHP_INT_MAX)
+                ->values()
+                ->all();
+
+            foreach (['database_schema', 'api_endpoints', 'components', 'acceptance_criteria'] as $implementationKey) {
+                unset($prd[$implementationKey]);
+            }
+
+            $prd['planning_role'] = 'module_boundary';
+        }
+
+        return $prd;
+    }
+
+    private function projectHasPendingPlanningPrds(): bool
+    {
+        $project = $this->module->project->fresh(['modules']);
+
+        if ($project === null) {
+            return false;
+        }
+
+        return $project->modules
+            ->reject(fn (ProjectModule $module): bool => $this->isStandardModuleInstance($module))
+            ->contains(function (ProjectModule $module): bool {
+                $prd = $module->prd_payload;
+
+                return empty($prd) || ! empty($prd['_status'] ?? null);
+            });
+    }
+
     private function moduleDepth(): int
     {
         $depth = 0;
@@ -332,7 +414,12 @@ PROMPT;
 
     private function isStandardModule(): bool
     {
-        $prd = $this->module->prd_payload;
+        return $this->isStandardModuleInstance($this->module);
+    }
+
+    private function isStandardModuleInstance(ProjectModule $module): bool
+    {
+        $prd = $module->prd_payload;
 
         return is_array($prd)
             && (

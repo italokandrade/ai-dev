@@ -53,6 +53,8 @@ REGRAS DE GRANULARIDADE (MUITO IMPORTANTE):
 7. NÃO defina tabelas, campos, endpoints finais, classes ou fluxos detalhados neste PRD.
 8. Após este PRD, outro agente gerará o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
 9. Chatbox e Segurança são módulos padrão herdados do ai-dev-core. NÃO os inclua em "modules"; o sistema os anexa automaticamente em "standard_modules" e os cria como módulos concluídos.
+10. Cada módulo deve nascer de funcionalidades ou descrição explicitamente fornecidas. Não crie módulos de CRM, cotações, agentes, redes sociais, analytics, integrações ou administração se eles só forem temas apresentados no site, e não funcionalidades operacionais pedidas.
+11. Para landing pages e sites públicos simples, prefira 1 a 3 módulos de negócio. Não transforme uma página em uma plataforma.
 
 REGRAS DE CONTEÚDO:
 1. O PRD descreve O QUE o sistema faz, NÃO COMO fazer.
@@ -79,7 +81,8 @@ SAÍDA:
       "name": "Nome do Módulo",
       "description": "Visão geral do domínio de negócio",
       "priority": "high",
-      "dependencies": []
+      "dependencies": [],
+      "source_features": ["Título da funcionalidade de origem"]
     }
   ],
   "non_functional_requirements": ["SEO", "Performance"],

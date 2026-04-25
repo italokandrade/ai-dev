@@ -109,3 +109,38 @@ test('generate module tasks uses configurable planning guardrail instead of old 
 
     expect($module->tasks()->count())->toBe(15);
 });
+
+test('generate module tasks waits until project planning prds are complete', function () {
+    config(['ai_dev.planning.defer_task_generation_until_project_prds_complete' => true]);
+
+    $project = Project::create([
+        'name' => 'deferred-task-project',
+        'status' => 'active',
+    ]);
+
+    $ready = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Modulo pronto',
+        'description' => 'Ja tem PRD',
+        'status' => 'planned',
+        'prd_payload' => [
+            'title' => 'Modulo pronto - PRD',
+            'objective' => 'Implementar modulo pronto.',
+            'needs_submodules' => false,
+            'components' => [
+                ['type' => 'Service', 'name' => 'ReadyService', 'description' => 'Executa a regra principal.'],
+            ],
+        ],
+    ]);
+
+    ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Modulo pendente',
+        'description' => 'Ainda nao tem PRD',
+        'status' => 'planned',
+    ]);
+
+    (new GenerateModuleTasksJob($ready))->handle();
+
+    expect($ready->tasks()->count())->toBe(0);
+});

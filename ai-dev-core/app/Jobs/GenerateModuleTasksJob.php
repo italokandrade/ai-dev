@@ -6,7 +6,9 @@ use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
 use App\Models\Task;
 use App\Services\ModuleTaskPlannerService;
+use App\Services\ProjectPlanningScopeService;
 use App\Services\StandardProjectModuleService;
+use App\Support\PlanningLimits;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,6 +32,8 @@ class GenerateModuleTasksJob implements ShouldQueue
 
     public function handle(): void
     {
+        $this->module->refresh()->loadMissing('project');
+
         Log::info("GenerateModuleTasksJob: Criando tasks para '{$this->module->name}'");
 
         $prd = $this->module->prd_payload;
@@ -52,8 +56,18 @@ class GenerateModuleTasksJob implements ShouldQueue
             return;
         }
 
+        if (PlanningLimits::deferTaskGenerationUntilProjectPrdsComplete() && $this->projectHasPendingPlanningPrds()) {
+            Log::info("GenerateModuleTasksJob: Tasks de '{$this->module->name}' adiadas até todos os PRDs de módulos/submódulos ficarem prontos.");
+
+            return;
+        }
+
         $planner = app(ModuleTaskPlannerService::class);
-        $tasks = $planner->taskDefinitions($this->module, $prd);
+        $tasks = $planner->taskDefinitions(
+            $this->module,
+            $prd,
+            app(ProjectPlanningScopeService::class)->taskLimit($this->module->project),
+        );
 
         $created = 0;
 
@@ -85,5 +99,30 @@ class GenerateModuleTasksJob implements ShouldQueue
                 ($prd['standard_module'] ?? false) === true
                 || ($prd['source'] ?? null) === StandardProjectModuleService::SOURCE
             );
+    }
+
+    private function projectHasPendingPlanningPrds(): bool
+    {
+        $project = $this->module->project->fresh(['modules']);
+
+        if ($project === null) {
+            return false;
+        }
+
+        return $project->modules
+            ->reject(function (ProjectModule $module): bool {
+                $prd = $module->prd_payload;
+
+                return is_array($prd)
+                    && (
+                        ($prd['standard_module'] ?? false) === true
+                        || ($prd['source'] ?? null) === StandardProjectModuleService::SOURCE
+                    );
+            })
+            ->contains(function (ProjectModule $module): bool {
+                $prd = $module->prd_payload;
+
+                return empty($prd) || ! empty($prd['_status'] ?? null);
+            });
     }
 }

@@ -69,6 +69,8 @@ REGRAS:
 4. Prefira poucos artefatos claros a listas enormes.
 5. O Blueprint deve ser útil para que PRDs de módulo herdem entidades, workflows e componentes já descobertos.
 6. Responda em Português do Brasil.
+7. O Blueprint global não deve corrigir ou expandir escopo do PRD. Se uma capacidade não está no PRD ou nas funcionalidades cadastradas, registre em open_questions em vez de criar entidade, workflow ou integração.
+8. Neste nível, use entidades conceituais e relacionamentos macro. Campos detalhados, endpoints finais e componentes específicos pertencem aos PRDs dos módulos.
 
 SAÍDA:
 Retorne APENAS um JSON válido, sem markdown, sem texto fora do JSON:

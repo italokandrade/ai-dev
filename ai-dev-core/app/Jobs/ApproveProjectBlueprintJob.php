@@ -3,6 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Project;
+use App\Models\ProjectModule;
+use App\Services\StandardProjectModuleService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -48,7 +50,11 @@ class ApproveProjectBlueprintJob implements ShouldQueue
         SyncProjectRepositoryJob::dispatch($project);
 
         if ($this->cascade) {
-            $modules = $project->modules()->whereNull('parent_id')->get();
+            $modules = $project->modules()
+                ->whereNull('parent_id')
+                ->get()
+                ->reject(fn (ProjectModule $module): bool => $this->isStandardModule($module))
+                ->values();
 
             foreach ($modules as $module) {
                 CascadeModulePrdJob::dispatch($module);
@@ -65,5 +71,16 @@ class ApproveProjectBlueprintJob implements ShouldQueue
         }
 
         Log::info("ApproveProjectBlueprintJob: Blueprint aprovado para '{$project->name}'");
+    }
+
+    private function isStandardModule(ProjectModule $module): bool
+    {
+        $prd = $module->prd_payload;
+
+        return is_array($prd)
+            && (
+                ($prd['standard_module'] ?? false) === true
+                || ($prd['source'] ?? null) === StandardProjectModuleService::SOURCE
+            );
     }
 }

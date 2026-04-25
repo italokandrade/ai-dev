@@ -6,6 +6,7 @@ use App\Ai\Agents\GenerateFeaturesAgent;
 use App\Models\Project;
 use App\Models\ProjectFeature;
 use App\Services\AiRuntimeConfigService;
+use App\Services\ProjectPlanningScopeService;
 use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,6 +32,15 @@ class GenerateProjectFeaturesJob implements ShouldQueue
 
     public function handle(): void
     {
+        if (! in_array($this->type, ['backend', 'frontend'], true)) {
+            Log::warning('GenerateProjectFeaturesJob: tipo de funcionalidade inválido', [
+                'project' => $this->project->name,
+                'type' => $this->type,
+            ]);
+
+            return;
+        }
+
         Log::info("GenerateProjectFeaturesJob: Gerando funcionalidades {$this->type} para '{$this->project->name}'");
 
         $prompt = $this->buildPrompt();
@@ -46,7 +56,8 @@ class GenerateProjectFeaturesJob implements ShouldQueue
                 );
 
             $raw = (string) $response;
-            $features = $this->parseFeatures($raw);
+            $features = app(ProjectPlanningScopeService::class)
+                ->sanitizeFeatures($this->project->fresh(['features']), $this->type, $this->parseFeatures($raw));
 
             Log::info('GenerateProjectFeaturesJob: IA gerou '.count($features)." funcionalidades {$this->type}");
         } catch (\Throwable $e) {
@@ -111,8 +122,9 @@ class GenerateProjectFeaturesJob implements ShouldQueue
         }
         $typeLabel = $this->type === 'backend' ? 'BACKEND' : 'FRONTEND';
         $typeInstruction = $this->type === 'backend'
-            ? 'Gere funcionalidades de BACKEND: regras de negócio, APIs, processamentos, jobs, validações, integrações, notificações, relatórios, segurança, auditoria, caches, filas.'
-            : 'Gere funcionalidades de FRONTEND: telas, componentes visuais, fluxos do usuário, interações, formulários, dashboards, listagens, filtros, animações, responsividade, acessibilidade.';
+            ? 'Gere somente funcionalidades de BACKEND que sejam indispensáveis para suportar o escopo descrito. Se o projeto for uma landing page/site estático, retorne poucas funcionalidades ou nenhuma. Não crie CRM, motor de cotação, agentes, webhooks, importações, dashboards ou gestão interna a menos que estejam explicitamente pedidos como produto operacional.'
+            : 'Gere somente funcionalidades de FRONTEND visíveis ao usuário final ou administrador solicitado. Para landing page/site público, foque nas seções, navegação, formulário, responsividade, acessibilidade e estados visuais. Não crie dashboards, CRUDs ou rotinas administrativas se isso não estiver explicitamente pedido.';
+        $scopeGuidance = app(ProjectPlanningScopeService::class)->promptGuidance($this->project->fresh(['features']), "geracao de funcionalidades {$this->type}");
 
         $prdContext = '';
         if (! empty($this->project->prd_payload)) {
@@ -138,6 +150,8 @@ DESCRIÇÃO DO SISTEMA:
 {$description}
 {$prdContext}
 
+{$scopeGuidance}
+
 ---
 INSTRUÇÃO: Gere funcionalidades de {$typeLabel} para este projeto.
 {$typeInstruction}
@@ -146,6 +160,8 @@ IMPORTANTE:
 - Cada funcionalidade deve ter título curto e descrição clara.
 - Descreva O QUE a funcionalidade faz, não COMO fazer.
 - NÃO cite frameworks, versões ou tecnologias específicas.
+- Não liste ideias, oportunidades futuras ou módulos internos não solicitados.
+- Não gere mais itens do que o necessário para cumprir a descrição.
 - Texto em Português do Brasil.
 PROMPT;
     }

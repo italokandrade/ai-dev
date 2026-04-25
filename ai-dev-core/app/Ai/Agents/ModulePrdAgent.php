@@ -64,6 +64,9 @@ REGRAS DE CONTEÚDO:
 14. Em módulos raiz, evite excesso de campos; detalhe campos principalmente quando o módulo for folha ou quando o campo for essencial ao domínio.
 15. Sempre que houver `database_schema.tables`, considere obrigatório um checkpoint físico de arquitetura antes de Filament, Livewire, Controllers, APIs ou Views.
 16. O checkpoint deve validar migrations, Models, relacionamentos Eloquent e ERD/Mermaid primeiro em SQLite temporário; Postgres de desenvolvimento/staging só entra depois da aprovação do orçamento e do scaffold físico do Projeto Alvo.
+17. Respeite a responsabilidade desta ação: PRD de módulo não pode criar novos módulos raiz nem ampliar o produto fora do PRD Master.
+18. Se for um módulo raiz grande e `needs_submodules=true`, descreva apenas o limite do módulo e seus submódulos. Não detalhe migrations, endpoints, componentes finais ou tasks; isso pertence aos PRDs dos submódulos.
+19. Se for submódulo, force `needs_submodules=false` e detalhe apenas a sua responsabilidade única.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.

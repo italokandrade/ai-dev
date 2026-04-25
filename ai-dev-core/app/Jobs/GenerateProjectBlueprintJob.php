@@ -6,6 +6,7 @@ use App\Ai\Agents\ProjectBlueprintAgent;
 use App\Models\Project;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ProjectBlueprintService;
+use App\Services\ProjectPlanningScopeService;
 use App\Support\AiJson;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -108,6 +109,7 @@ class GenerateProjectBlueprintJob implements ShouldBeUnique, ShouldQueue
         if (strlen((string) $prd) > 12000) {
             $prd = substr((string) $prd, 0, 12000)."\n\n[...PRD truncado para otimização...]";
         }
+        $scopeGuidance = app(ProjectPlanningScopeService::class)->promptGuidance($this->project->fresh(['features']), 'geracao do Blueprint Tecnico Global');
 
         return <<<PROMPT
 PROJETO: {$projectName}
@@ -123,6 +125,8 @@ FUNCIONALIDADES FRONTEND:
 
 PRD MASTER APROVADO:
 {$prd}
+
+{$scopeGuidance}
 
 ---
 INSTRUÇÃO: Gere o Blueprint Técnico Global deste projeto.

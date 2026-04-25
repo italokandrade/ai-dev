@@ -584,14 +584,20 @@ class ProjectRepositoryService
                 'architecture/domain-model.md',
                 'architecture/domain-model.json',
                 'architecture/checkpoint-protocol.md',
-                'architecture/erd-physical.txt',
-                'architecture/erd-physical.svg',
                 'modules/*.md',
                 'modules/*.json',
                 'tasks/*.md',
                 'tasks/*.json',
                 'subtasks/*.md',
                 'subtasks/*.json',
+            ],
+            'optional_artifacts' => [
+                'architecture/erd-physical.txt',
+                'architecture/erd-physical.svg',
+            ],
+            'artifact_status' => [
+                'architecture/erd-physical.txt' => $this->artifactExists($project, 'architecture/erd-physical.txt') ? 'present' : 'pending_after_scaffold',
+                'architecture/erd-physical.svg' => $this->artifactExists($project, 'architecture/erd-physical.svg') ? 'present' : 'pending_after_scaffold',
             ],
         ];
     }
@@ -652,6 +658,11 @@ class ProjectRepositoryService
                     'domain_markdown' => 'architecture/domain-model.md',
                     'domain_json' => 'architecture/domain-model.json',
                     'checkpoint_protocol' => 'architecture/checkpoint-protocol.md',
+                    'physical_erd_text' => $this->artifactExists($project, 'architecture/erd-physical.txt') ? 'architecture/erd-physical.txt' : null,
+                    'physical_erd_svg' => $this->artifactExists($project, 'architecture/erd-physical.svg') ? 'architecture/erd-physical.svg' : null,
+                    'physical_erd_status' => ($this->artifactExists($project, 'architecture/erd-physical.txt') || $this->artifactExists($project, 'architecture/erd-physical.svg'))
+                        ? 'present'
+                        : 'pending_after_scaffold',
                 ],
             ],
             'features' => $project->features
@@ -1008,6 +1019,22 @@ class ProjectRepositoryService
         $path = trim((string) $project->local_path);
 
         return $path !== '' ? rtrim($path, '/') : null;
+    }
+
+    private function artifactsPath(Project $project, string $relativePath): ?string
+    {
+        $workDir = $this->workDir($project);
+
+        return $workDir === null
+            ? null
+            : $workDir.'/'.self::ARTIFACTS_DIR.'/'.ltrim($relativePath, '/');
+    }
+
+    private function artifactExists(Project $project, string $relativePath): bool
+    {
+        $path = $this->artifactsPath($project, $relativePath);
+
+        return $path !== null && is_file($path);
     }
 
     private function currentHash(string $workDir): ?string
