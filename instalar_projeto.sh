@@ -96,6 +96,7 @@ php artisan dusk:install --no-interaction
 echo "🤖 Instalando Ecossistema AI..."
 COMPOSER_MEMORY_LIMIT=-1 composer require laravel/ai laravel/mcp --no-interaction
 COMPOSER_MEMORY_LIMIT=-1 composer require laravel/boost --dev --no-interaction
+COMPOSER_MEMORY_LIMIT=-1 composer require beyondcode/laravel-er-diagram-generator --dev --no-interaction
 php artisan vendor:publish --tag=ai-config --tag=ai-migrations --no-interaction
 php artisan vendor:publish --tag=mcp-config --no-interaction
 cat <<'MCPJSON' > .mcp.json
@@ -114,6 +115,7 @@ MCPJSON
 echo "" >> .env
 echo "OPENAI_API_KEY=\"sua_chave_openai_aqui\"" >> .env
 echo "OPENAI_MODEL=\"gpt-5-nano\"" >> .env
+grep -qxF "/database/ai_dev_architecture.sqlite" .gitignore || echo "/database/ai_dev_architecture.sqlite" >> .gitignore
 
 # 8. Core padrão obrigatório (Chatbox + Segurança)
 echo "🔐 Instalando Core padrão: Chatbox e Segurança..."

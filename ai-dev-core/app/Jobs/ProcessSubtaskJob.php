@@ -104,8 +104,9 @@ class ProcessSubtaskJob implements ShouldQueue
         $objective = $subPrd['objective'] ?? 'Não definido';
         $criteria = $this->listItems($subPrd['acceptance_criteria'] ?? []);
         $constraints = $this->listItems($subPrd['constraints'] ?? []);
-        $context = $subPrd['context'] ?? 'Nenhum contexto adicional';
+        $context = $this->stringValue($subPrd['context'] ?? 'Nenhum contexto adicional');
         $files = $this->listItems($subPrd['files'] ?? []);
+        $fullSubPrd = $this->jsonContext($subPrd);
 
         return <<<PROMPT
 ## Sub-PRD a implementar
@@ -130,6 +131,9 @@ class ProcessSubtaskJob implements ShouldQueue
 **Arquivos envolvidos:**
 {$files}
 
+**Sub-PRD completo:**
+{$fullSubPrd}
+
 ---
 
 Implemente o Sub-PRD acima seguindo o fluxo de trabalho das suas instruções.
@@ -143,6 +147,26 @@ PROMPT;
         }
 
         return implode("\n", array_map(fn ($item) => "- {$item}", $items));
+    }
+
+    private function jsonContext(array $payload): string
+    {
+        $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if (strlen((string) $json) > 12000) {
+            return substr((string) $json, 0, 12000)."\n\n[...Sub-PRD truncado...]";
+        }
+
+        return (string) $json;
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+
+        return trim((string) $value);
     }
 
     private function failSubtask(string $reason): void

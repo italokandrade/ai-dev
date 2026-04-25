@@ -284,14 +284,15 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_paylo
 5. `Project::approveBlueprint()` + `createModulesFromPrd()` cria módulos raiz de negócio e vincula dependências ao core padrão
 6. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo, usando o Blueprint como trilho
 7. `ProjectBlueprintService` incorpora `blueprint_contribution` do módulo ao Blueprint Global
-8. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
+8. `ProjectRepositoryService` exporta `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json` a partir do Blueprint progressivo
+9. O PRD do módulo decide `needs_submodules` → submódulos ou tasks; folhas com schema criam primeiro uma task de checkpoint de arquitetura de dados
 
 **Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
 1. Acionado pelo botão "Auto Aprovar Blueprint — Cascata Completa" em `ViewProject`
 2. Aprova o Blueprint, cria módulos raiz e despacha `CascadeModulePrdJob` para cada um
 3. Cada job gera o PRD técnico via `ModulePrdAgent`, incorpora a contribuição ao Blueprint, auto-aprova e:
    - Se `needs_submodules: true` → cria submódulos e despacha o job para cada filho
-   - Se `needs_submodules: false` → cria tasks (`status: pending`) — **nunca executadas automaticamente**
+   - Se `needs_submodules: false` → cria tasks (`status: pending`) — **nunca executadas automaticamente**; quando há `database_schema`, a primeira task valida a arquitetura de dados
 4. O ciclo repete recursivamente até todas as folhas terem tasks
 5. Resiliência: pula geração se PRD válido já existe; não duplica submódulos/tasks; `failed()` preserva PRD válido já salvo
 
@@ -453,6 +454,17 @@ O mesmo scaffold provisiona o runtime individual do alvo para os agentes: Larave
 Antes de aprovar Blueprint, criar módulos ou iniciar cascata, o ai-dev-core valida se o alvo possui `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`. Falhas marcam o projeto como `scaffold_failed` e interrompem a geração de módulos/tasks até o scaffold ser corrigido.
 
 Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` prepara o Git do Projeto Alvo: inicializa `.git` se necessário, configura `origin` com o repositório cadastrado, define identidade local do agente e mantém `.ai-dev/` sincronizado na raiz do repositório daquele alvo (`PROJECT.md`, PRD Master, Blueprint Técnico, módulos, tasks e subtasks). Essa sincronização faz commit e push no repositório do alvo; commits de implementação aprovados pelo `QAAuditJob` também são enviados ao mesmo `origin`. Os comandos Git são executados com `safe.directory` específico do alvo para permitir repositórios com ownership diferente do processo do ai-dev-core.
+
+### 1.B. Checkpoint Físico de Arquitetura de Dados
+
+O MER não fica apenas virtual. O Blueprint progressivo continua sendo a intenção do domínio, mas o sistema exporta artefatos oficiais para cada Projeto Alvo em `.ai-dev/architecture/`:
+
+- `domain-model.mmd` — ERD em Mermaid, versionável e legível por IA.
+- `domain-model.md` — Markdown com o diagrama Mermaid e tabelas de entidades/relacionamentos.
+- `domain-model.json` — payload normalizado do domínio.
+- `checkpoint-protocol.md` — rotina obrigatória antes de interfaces, APIs ou fluxos.
+
+Quando um módulo folha possui `database_schema.tables` ou `blueprint_contribution.domain_model`, o `ModuleTaskPlannerService` cria uma task `architecture` antes das tasks de componente/API/teste. Essa task deve criar ou ajustar migrations, Models e relacionamentos Eloquent, validar as migrations em SQLite temporário (`database/ai_dev_architecture.sqlite`), gerar/conferir ERD físico quando `beyondcode/laravel-er-diagram-generator` estiver instalado e validar o resultado no Postgres de desenvolvimento/staging. Tarefas de Filament, Livewire, Controllers, APIs ou Views recebem no PRD a obrigação de confirmar esse checkpoint antes de implementar.
 
 No PRD, esses blocos ficam em `projects.prd_payload.standard_modules`; `projects.prd_payload.modules` continua reservado para módulos de negócio gerados pela IA.
 

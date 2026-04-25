@@ -91,6 +91,7 @@ O scaffold tambem instala e configura a base que os agentes de desenvolvimento u
 - `laravel/ai`;
 - `laravel/mcp`;
 - `laravel/boost`;
+- `beyondcode/laravel-er-diagram-generator` como dependencia dev para checkpoint fisico de arquitetura;
 - `config/ai.php`;
 - `config/mcp.php`;
 - `.mcp.json` individual do Projeto Alvo apontando para `php artisan boost:mcp`;

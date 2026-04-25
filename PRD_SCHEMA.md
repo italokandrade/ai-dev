@@ -90,7 +90,7 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
 
 ## 0.1. JSON Schema do Blueprint Técnico Global
 
-Este é o formato que preenche `projects.blueprint_payload`. Gerado pelo `ProjectBlueprintAgent` depois do PRD Master e antes dos módulos. O MER/ERD global identifica entidades e relacionamentos, mas **não define campos** neste nível; campos são adicionados progressivamente por `project_modules.blueprint_payload`.
+Este é o formato que preenche `projects.blueprint_payload`. Gerado pelo `ProjectBlueprintAgent` depois do PRD Master e antes dos módulos. O MER/ERD global identifica entidades e relacionamentos, mas **não define campos** neste nível; campos são adicionados progressivamente por `project_modules.blueprint_payload`. A cada sincronização do repositório do Projeto Alvo, o domínio também é exportado para `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json`.
 
 ```json
 {
@@ -200,6 +200,18 @@ Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pel
               }
             }
           }
+        }
+      }
+    },
+    "architecture_checkpoint": {
+      "type": "object",
+      "description": "Obrigatório quando o módulo cria ou altera estrutura de dados. Define a validação física antes de interfaces/API.",
+      "properties": {
+        "requires_physical_validation": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "expected_artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     },
@@ -356,6 +368,23 @@ Este é o formato que preenche o campo `tasks.prd_payload`:
         "enum": ["backend", "frontend", "database", "filament", "devops", "testing", "design"]
       },
       "minItems": 1
+    },
+    "architecture_checkpoint": {
+      "type": "object",
+      "description": "Contexto gerado pelo AI-Dev para indicar se a task precisa validar ou respeitar o checkpoint físico de arquitetura de dados antes de UI/API.",
+      "properties": {
+        "required": { "type": "boolean" },
+        "is_checkpoint_task": { "type": "boolean" },
+        "sqlite_database": { "type": "string" },
+        "artifacts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "recommended_commands": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
     },
     "context": {
       "type": "object",

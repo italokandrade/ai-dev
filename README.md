@@ -97,7 +97,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 - `SpecialistAgent`, `QAAuditorAgent` e `DocsAgent` recebem o `project.local_path` ao serem instanciados. Todas as ferramentas de filesystem/shell/git (`FileReadTool`, `FileWriteTool`, `ShellExecuteTool`, `GitOperationTool`) já são escopadas ao path do Projeto Alvo via constructor.
 - O `BoostTool` é instanciado com o mesmo `local_path` e roteia para `php artisan boost:execute-tool` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core.
 - `DocsAgent` (`BoostTool.search-docs`) pesquisa a documentação instalada no **Boost do Projeto Alvo**, refletindo as versões exatas de Laravel/Filament/Livewire que aquele projeto tem instaladas.
-- Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` configura o `origin` do Projeto Alvo, exporta `PROJECT.md`, PRD Master, Blueprint, módulos, tasks e subtasks para `.ai-dev/` na raiz do repo desse projeto, commita essa sincronização e faz push. Commits de código aprovados pelo `QAAuditJob` também são enviados ao mesmo remoto.
+- Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` configura o `origin` do Projeto Alvo, exporta `PROJECT.md`, PRD Master, Blueprint, arquitetura de dados (`.ai-dev/architecture`), módulos, tasks e subtasks para `.ai-dev/` na raiz do repo desse projeto, commita essa sincronização e faz push. Commits de código aprovados pelo `QAAuditJob` também são enviados ao mesmo remoto.
 
 ---
 
@@ -127,7 +127,7 @@ O sistema adota **granularidade progressiva**:
 2. **Blueprint Técnico Global** → gera o desenho inicial do domínio antes dos módulos: MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações e superfície de API em alto nível
 3. **Módulo** → gera PRD Técnico próprio, usando o Blueprint como trilho e evoluindo entidades, campos, relacionamentos, workflows e componentes
 4. **Submódulo** (se necessário) → repete o processo recursivamente, enriquecendo o Blueprint no seu domínio
-5. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico
+5. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico; se houver schema de dados, a primeira task é o checkpoint de arquitetura
 6. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
 
 > **Regra:** tasks são criadas apenas nos nós folha. PRD e Blueprint podem ser gerados antes do scaffold físico, mas aprovar o Blueprint, criar módulos e iniciar a cascata exigem que o Projeto Alvo tenha scaffold completo: `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`.
@@ -237,6 +237,8 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 - Core padrão por projeto: `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos e o `instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o Projeto Alvo
 - Scaffold dos alvos já provisiona Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, `.mcp.json` individual e migrations do SDK; os agentes consultam o Boost do alvo via `projects.local_path`
 - Blueprint Técnico Progressivo entre PRD Master e módulos: MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface; PRDs de módulo enriquecem esse desenho com campos e relacionamentos
+- MER versionável em `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json`; esses artefatos são gerados a partir do Blueprint e servem de mapa físico/visual para agentes e humanos
+- Checkpoint de arquitetura de dados antes de UI/API: migrations, Models e relacionamentos são validados primeiro em SQLite temporário de arquivo local e depois no Postgres de desenvolvimento/staging do Projeto Alvo
 
 ### Fase 2: Qualidade, Segurança e UI — prioridades atualizadas
 - **[Alta — segurança]** Conexão `readonly` por Projeto Alvo para `BoostTool.database-query` em produção — o wrapper já valida tabela/coluna/operador contra o schema real do alvo e redige campos sensíveis; falta provisionar credenciais read-only em cada alvo

@@ -62,6 +62,8 @@ REGRAS DE CONTEÚDO:
 12. Use o Blueprint Técnico Global recebido como trilho: reutilize entidades, relacionamentos, casos de uso e workflows já definidos.
 13. Se precisar de nova entidade, explique no `blueprint_contribution` por que ela pertence a este módulo.
 14. Em módulos raiz, evite excesso de campos; detalhe campos principalmente quando o módulo for folha ou quando o campo for essencial ao domínio.
+15. Sempre que houver `database_schema.tables`, considere obrigatório um checkpoint físico de arquitetura antes de Filament, Livewire, Controllers, APIs ou Views.
+16. O checkpoint deve validar migrations, Models, relacionamentos Eloquent, SQLite temporário, ERD/Mermaid e Postgres de desenvolvimento/staging.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.
@@ -86,6 +88,15 @@ SAÍDA:
           {"table": "outra_tabela", "type": "belongsTo", "foreign_key": "outra_tabela_id"}
         ]
       }
+    ]
+  },
+  "architecture_checkpoint": {
+    "requires_physical_validation": true,
+    "reason": "Este módulo altera ou cria estrutura de dados usada por interfaces e APIs",
+    "expected_artifacts": [
+      ".ai-dev/architecture/domain-model.mmd",
+      ".ai-dev/architecture/domain-model.md",
+      ".ai-dev/architecture/erd-physical.txt"
     ]
   },
   "blueprint_contribution": {

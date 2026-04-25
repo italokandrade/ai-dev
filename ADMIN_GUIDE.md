@@ -54,7 +54,7 @@ Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança`
 2. **Descrever o Projeto** — na aba "Descrição do Projeto", escreva livremente o que o sistema deve fazer. Use "Refinar com IA" se quiser melhorar o texto.
 3. **Gerar PRD do Projeto** — na página de visualização do projeto, clique no botão **"Gerar PRD do Projeto"** (header da página). O `ProjectPrdAgent` analisa a descrição + funcionalidades e gera o PRD Master com os módulos de alto nível. O PRD também pode ser gerado via a aba "PRD do Projeto" no formulário de edição. **Isso pode levar alguns minutos.**
 4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"Aprovar PRD — Gerar Blueprint"**. O sistema aprova o PRD e dispara a geração do Blueprint em background.
-5. **Revisar Blueprint** — confira entidades conceituais, relacionamentos, casos de uso, workflows, arquitetura e integrações. Neste nível, as entidades ainda não precisam ter campos.
+5. **Revisar Blueprint** — confira entidades conceituais, relacionamentos, casos de uso, workflows, arquitetura e integrações. Neste nível, as entidades ainda não precisam ter campos. O sistema também sincroniza o MER em `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json` no repositório do Projeto Alvo.
 6. **Aprovar Blueprint** — clique em **"Aprovar Blueprint — Criar Módulos"**. Só aqui os módulos raiz são criados no banco do ai-dev-core.
 7. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
 
@@ -83,8 +83,18 @@ Após aprovar o Blueprint e criar os módulos raiz, cada módulo precisa passar 
    - Se o PRD indicar `needs_submodules = true` → aparece o botão **"✅ Aprovar PRD — Criar Submódulos"**
    - Se o PRD indicar `needs_submodules = false` → aparece o botão **"✅ Aprovar PRD — Criar Tasks"**
 4. **Se criar submódulos:** cada submódulo segue o mesmo processo (entra → gera PRD → decide)
-5. **Se criar tasks:** o sistema gera tasks automaticamente a partir do PRD técnico (componentes, APIs, migrations, testes)
+5. **Se criar tasks:** o sistema gera tasks automaticamente a partir do PRD técnico (componentes, APIs, testes). Quando o módulo possui schema de banco, a primeira task é sempre o **Checkpoint de Arquitetura de Dados**.
 6. **Evolução do Blueprint:** a cada PRD de módulo/submódulo, campos, relacionamentos, workflows, componentes e APIs são incorporados ao Blueprint global.
+
+### 2.1 Checkpoint de Arquitetura de Dados
+
+Antes de interfaces Filament, Livewire, Controllers, APIs ou Views, o Projeto Alvo deve validar o modelo de dados fisicamente:
+
+- migrations, Models e relacionamentos Eloquent primeiro;
+- SQLite temporário em `database/ai_dev_architecture.sqlite` para prototipagem rápida;
+- ERD/Mermaid em `.ai-dev/architecture/`;
+- validação final no Postgres de desenvolvimento/staging do alvo;
+- nenhuma execução de `migrate:fresh` em banco com dados reais de produção.
 
 ### 2.3 Dependências Estritamente Consolidadas
 - Um módulo pode depender de outros módulos do mesmo projeto.

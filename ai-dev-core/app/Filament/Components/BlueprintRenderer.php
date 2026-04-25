@@ -2,6 +2,7 @@
 
 namespace App\Filament\Components;
 
+use App\Services\ProjectArchitectureArtifactService;
 use Illuminate\Support\HtmlString;
 
 class BlueprintRenderer
@@ -50,6 +51,49 @@ class BlueprintRenderer
                 <tbody>'.$rows.'</tbody>
             </table></div>';
             $html .= self::section('Modelo de Domínio — '.count($entities).' entidades', $table);
+        }
+
+        $relationships = [];
+        if (isset($domainModel['relationships']) && is_array($domainModel['relationships'])) {
+            $relationships = $domainModel['relationships'];
+        }
+
+        if ($relationships) {
+            $rows = '';
+            foreach ($relationships as $r) {
+                $source = e($r['source'] ?? '');
+                $type = e($r['type'] ?? '');
+                $target = e($r['target'] ?? '');
+                $foreignKey = e($r['foreign_key'] ?? '');
+                $description = e($r['description'] ?? '');
+                $rows .= '<tr class="border-t border-gray-200 dark:border-gray-700">
+                    <td class="py-2 pr-3 font-mono align-top text-purple-700 dark:text-purple-300">'.$source.'</td>
+                    <td class="py-2 pr-3 font-mono text-xs align-top text-gray-500 dark:text-gray-400">'.$type.'</td>
+                    <td class="py-2 pr-3 font-mono align-top text-purple-700 dark:text-purple-300">'.$target.'</td>
+                    <td class="py-2 pr-3 font-mono text-xs align-top text-gray-500 dark:text-gray-400">'.$foreignKey.'</td>
+                    <td class="py-2 text-gray-600 dark:text-gray-400 align-top">'.$description.'</td>
+                </tr>';
+            }
+
+            $table = '<div class="overflow-x-auto"><table class="w-full text-left text-sm">
+                <thead><tr class="text-xs uppercase text-gray-500 dark:text-gray-400">
+                    <th class="pb-2 pr-3">Origem</th>
+                    <th class="pb-2 pr-3">Tipo</th>
+                    <th class="pb-2 pr-3">Destino</th>
+                    <th class="pb-2 pr-3">FK</th>
+                    <th class="pb-2">Descrição</th>
+                </tr></thead>
+                <tbody>'.$rows.'</tbody>
+            </table></div>';
+            $html .= self::section('Relacionamentos — '.count($relationships), $table);
+        }
+
+        if ($entities || $relationships) {
+            $mermaid = app(ProjectArchitectureArtifactService::class)->mermaidFromBlueprint($bp);
+            $html .= self::section(
+                'Mermaid ERD',
+                '<pre class="overflow-x-auto rounded-md bg-gray-950 p-3 text-xs leading-relaxed text-gray-100"><code>'.e($mermaid).'</code></pre>',
+            );
         }
 
         // Use cases

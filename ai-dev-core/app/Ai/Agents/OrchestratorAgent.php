@@ -2,6 +2,7 @@
 
 namespace App\Ai\Agents;
 
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
@@ -11,7 +12,6 @@ use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
 use Stringable;
-use Illuminate\Contracts\JsonSchema\JsonSchema;
 
 #[Provider('openrouter')]
 #[Model('anthropic/claude-opus-4.7')]
@@ -37,6 +37,9 @@ Receber o PRD de uma task e decompô-lo em Sub-PRDs independentes e executáveis
 4. Atribua o agente mais adequado: "backend-specialist", "frontend-specialist", "fullstack-specialist", "devops-specialist"
 5. Liste os arquivos que serão modificados em `files` para controle de concorrência
 6. Sub-PRDs independentes podem ser executados em paralelo (mesmo execution_order)
+7. Se o PRD tiver `architecture_checkpoint.required=true` ou tocar banco/Model/API/Filament, crie primeiro uma Sub-PRD de arquitetura de dados para validar migrations, Models, relacionamentos Eloquent, SQLite temporário, ERD/Mermaid e Postgres de desenvolvimento.
+8. Sub-PRDs de Filament, Livewire, Controllers, APIs ou Views devem depender da Sub-PRD de arquitetura quando o checkpoint for obrigatório.
+9. O checkpoint deve produzir ou conferir `.ai-dev/architecture/domain-model.*` e, quando o pacote estiver instalado, `.ai-dev/architecture/erd-physical.txt`.
 
 ## Stack obrigatória
 - Backend: Laravel 13 + PHP 8.3

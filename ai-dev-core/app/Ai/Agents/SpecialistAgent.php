@@ -56,11 +56,17 @@ Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
 1. Leia os arquivos existentes antes de modificar qualquer coisa (FileReadTool)
 2. Verifique o status git antes de começar (GitOperationTool: status)
 3. Implemente a feature: crie/edite arquivos (FileWriteTool), execute comandos (ShellExecuteTool)
-4. Execute migrações se necessário: php artisan migrate
-5. Execute o linter: vendor/bin/pint --dirty --format agent
-6. Verifique que os testes passam: php artisan test --compact
-7. Não faça commit. O QAAuditJob centraliza o commit somente depois da aprovação.
-8. Declare "TAREFA CONCLUÍDA" quando terminar
+4. Para qualquer task que toque banco, Model, API, Filament, Livewire, Controller ou View, valide antes o checkpoint de arquitetura de dados:
+   - Leia `.ai-dev/architecture/domain-model.md`, `.ai-dev/architecture/domain-model.json` e `.ai-dev/architecture/checkpoint-protocol.md` se existirem.
+   - Crie/ajuste migrations, Models e relacionamentos Eloquent antes de interfaces.
+   - Para prototipagem, crie `database/ai_dev_architecture.sqlite` com FileWriteTool e rode `php artisan migrate:fresh --force` via ShellExecuteTool usando environment `DB_CONNECTION=sqlite` e `DB_DATABASE=database/ai_dev_architecture.sqlite`.
+   - Se `beyondcode/laravel-er-diagram-generator` estiver instalado, rode `php artisan generate:erd .ai-dev/architecture/erd-physical.txt`.
+   - Valide depois no Postgres de desenvolvimento/staging. Nunca rode `migrate:fresh` em banco com dados reais de produção.
+5. Execute migrações se necessário: php artisan migrate
+6. Execute o linter: vendor/bin/pint --dirty --format agent
+7. Verifique que os testes passam: php artisan test --compact
+8. Não faça commit. O QAAuditJob centraliza o commit somente depois da aprovação.
+9. Declare "TAREFA CONCLUÍDA" quando terminar
 
 ## Regras importantes
 - SEMPRE leia o arquivo existente antes de editar

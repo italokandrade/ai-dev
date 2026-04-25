@@ -49,8 +49,17 @@ test('project repository service writes prd documentation, commits, and pushes',
             'domain_model' => [
                 'entities' => [
                     ['name' => 'clientes', 'description' => 'Clientes atendidos'],
+                    ['name' => 'processos', 'description' => 'Processos vinculados'],
                 ],
-                'relationships' => [],
+                'relationships' => [
+                    [
+                        'source' => 'clientes',
+                        'target' => 'processos',
+                        'type' => 'one_to_many',
+                        'foreign_key' => 'cliente_id',
+                        'description' => 'Cliente possui processos',
+                    ],
+                ],
             ],
         ],
     ]);
@@ -78,6 +87,8 @@ test('project repository service writes prd documentation, commits, and pushes',
             ->and(trim($origin->output()))->toBe($remoteDir)
             ->and(File::exists("{$workDir}/.ai-dev/prd-master.json"))->toBeTrue()
             ->and(File::get("{$workDir}/.ai-dev/prd-master.md"))->toContain('Salvar PRDs no repositorio do projeto')
+            ->and(File::exists("{$workDir}/.ai-dev/architecture/domain-model.mmd"))->toBeTrue()
+            ->and(File::get("{$workDir}/.ai-dev/architecture/domain-model.mmd"))->toContain('CLIENTES ||--o{ PROCESSOS')
             ->and(File::get("{$workDir}/.ai-dev/PROJECT.md"))->toContain('repository-sync-project')
             ->and($remoteHead->successful())->toBeTrue();
     } finally {

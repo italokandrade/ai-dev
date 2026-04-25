@@ -342,8 +342,10 @@ class ProjectRepositoryService
         }
 
         $artifactsDir = "{$workDir}/".self::ARTIFACTS_DIR;
+        $preservedArchitectureArtifacts = $this->preservedArchitectureArtifacts($artifactsDir);
         File::ensureDirectoryExists($artifactsDir);
         File::cleanDirectory($artifactsDir);
+        File::ensureDirectoryExists("{$artifactsDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR);
         File::ensureDirectoryExists("{$artifactsDir}/modules");
         File::ensureDirectoryExists("{$artifactsDir}/tasks");
         File::ensureDirectoryExists("{$artifactsDir}/subtasks");
@@ -372,7 +374,14 @@ class ProjectRepositoryService
                 'Project Blueprint',
             );
             $documents['blueprint-global.json'] = $this->json($project->blueprint_payload);
+
+            $documents = array_merge(
+                $documents,
+                app(ProjectArchitectureArtifactService::class)->documents($project),
+            );
         }
+
+        $documents = array_merge($documents, $preservedArchitectureArtifacts);
 
         foreach ($documents as $relativePath => $contents) {
             File::put("{$artifactsDir}/{$relativePath}", $contents);
@@ -404,6 +413,23 @@ class ProjectRepositoryService
         }
 
         return $written;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function preservedArchitectureArtifacts(string $artifactsDir): array
+    {
+        $preserved = [];
+
+        foreach (['erd-physical.txt', 'erd-physical.svg'] as $file) {
+            $path = "{$artifactsDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR."/{$file}";
+            if (is_file($path)) {
+                $preserved[ProjectArchitectureArtifactService::ARCHITECTURE_DIR."/{$file}"] = (string) File::get($path);
+            }
+        }
+
+        return $preserved;
     }
 
     private function reloadProject(Project $project): Project
@@ -438,6 +464,13 @@ class ProjectRepositoryService
                 'prd-master.json',
                 'blueprint-global.md',
                 'blueprint-global.json',
+                'architecture/README.md',
+                'architecture/domain-model.mmd',
+                'architecture/domain-model.md',
+                'architecture/domain-model.json',
+                'architecture/checkpoint-protocol.md',
+                'architecture/erd-physical.txt',
+                'architecture/erd-physical.svg',
                 'modules/*.md',
                 'modules/*.json',
                 'tasks/*.md',
@@ -566,6 +599,7 @@ class ProjectRepositoryService
             '- `project.json`: estado estruturado completo exportado do ai-dev-core.',
             '- `prd-master.*`: PRD Master do projeto.',
             '- `blueprint-global.*`: Blueprint Tecnico Global.',
+            '- `architecture/`: MER em Mermaid, dominio normalizado e protocolo de checkpoint fisico.',
             '- `modules/`: PRDs e blueprints por modulo/submodulo.',
             '- `tasks/` e `subtasks/`: PRDs operacionais usados pelos agentes.',
             '',

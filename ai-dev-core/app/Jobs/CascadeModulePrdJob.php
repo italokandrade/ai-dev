@@ -6,11 +6,11 @@ use App\Ai\Agents\ModulePrdAgent;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
 use App\Enums\ProjectStatus;
-use App\Enums\TaskSource;
 use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
 use App\Models\Task;
 use App\Services\AiRuntimeConfigService;
+use App\Services\ModuleTaskPlannerService;
 use App\Services\ProjectBlueprintService;
 use App\Services\StandardProjectModuleService;
 use Illuminate\Bus\Queueable;
@@ -231,93 +231,8 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $tasks = [];
-
-        foreach ($prd['components'] ?? [] as $component) {
-            if (! is_array($component)) {
-                continue;
-            }
-
-            $componentType = $this->stringValue($component['type'] ?? 'Componente');
-            $componentName = $this->stringValue($component['name'] ?? '');
-
-            $this->pushTask($tasks, [
-                'title' => "Implementar {$componentType}: {$componentName}",
-                'description' => $component['description'] ?? '',
-                'priority' => Priority::High,
-            ]);
-        }
-
-        foreach ($prd['workflows'] ?? [] as $workflow) {
-            if (! is_array($workflow)) {
-                continue;
-            }
-
-            $steps = collect($workflow['steps'] ?? [])
-                ->map(fn ($s) => is_array($s) ? ($s['name'] ?? json_encode($s)) : $s)
-                ->implode(' → ');
-            $workflowName = $this->stringValue($workflow['name'] ?? 'Fluxo');
-            $this->pushTask($tasks, [
-                'title' => "Fluxo: {$workflowName}",
-                'description' => 'Steps: '.$steps,
-                'priority' => Priority::High,
-            ]);
-        }
-
-        foreach ($prd['api_endpoints'] ?? [] as $api) {
-            if (! is_array($api)) {
-                continue;
-            }
-
-            $method = $this->stringValue($api['method'] ?? 'GET');
-            $uri = $this->stringValue($api['uri'] ?? '/');
-            $this->pushTask($tasks, [
-                'title' => "API {$method} {$uri}",
-                'description' => $api['description'] ?? '',
-                'priority' => Priority::Medium,
-            ]);
-        }
-
-        foreach ($prd['database_schema']['tables'] ?? [] as $table) {
-            if (! is_array($table)) {
-                continue;
-            }
-
-            $tableName = $this->stringValue($table['name'] ?? '');
-            $this->pushTask($tasks, [
-                'title' => "Migration: {$tableName}",
-                'description' => $table['description'] ?? '',
-                'priority' => Priority::High,
-            ]);
-        }
-
-        foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
-            $criteriaText = is_array($criteria) ? json_encode($criteria, JSON_UNESCAPED_UNICODE) : (string) $criteria;
-            $this->pushTask($tasks, [
-                'title' => 'Teste: '.(is_array($criteria) ? json_encode($criteria) : $criteria),
-                'description' => $criteriaText,
-                'priority' => Priority::Medium,
-            ]);
-        }
-
-        if ($tasks === [] && ! empty($prd['submodules'])) {
-            foreach ($prd['submodules'] as $submodule) {
-                if (! is_array($submodule)) {
-                    continue;
-                }
-
-                $name = $this->stringValue($submodule['name'] ?? '');
-                if ($name === '') {
-                    continue;
-                }
-
-                $this->pushTask($tasks, [
-                    'title' => "Implementar submódulo: {$name}",
-                    'description' => $this->stringValue($submodule['description'] ?? ''),
-                    'priority' => Priority::High,
-                ]);
-            }
-        }
+        $planner = app(ModuleTaskPlannerService::class);
+        $tasks = $planner->taskDefinitions($this->module, $prd, self::MAX_TASKS_PER_MODULE);
 
         foreach ($tasks as $taskData) {
             Task::create([
@@ -326,62 +241,13 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
                 'title' => $taskData['title'],
                 'status' => TaskStatus::Pending,
                 'priority' => $taskData['priority'],
-                'source' => TaskSource::Prd,
-                'prd_payload' => $this->taskPrdPayload($taskData, $prd),
+                'source' => $taskData['source'],
+                'prd_payload' => $planner->taskPrdPayload($this->module->fresh(['project']), $taskData, $prd),
                 'max_retries' => 3,
             ]);
         }
 
         Log::info('CascadeModulePrdJob: '.count($tasks)." tasks criadas para '{$this->module->name}'");
-    }
-
-    /**
-     * @param  array<int, array{title: string, description: mixed, priority: Priority}>  $tasks
-     * @param  array{title: string, description: mixed, priority: Priority}  $task
-     */
-    private function pushTask(array &$tasks, array $task): void
-    {
-        if (count($tasks) >= self::MAX_TASKS_PER_MODULE) {
-            return;
-        }
-
-        $title = $this->stringValue($task['title']);
-        $normalizedTitle = $this->normalizeName($title);
-
-        if ($title === '' || collect($tasks)->contains(fn (array $existing): bool => $this->normalizeName($existing['title']) === $normalizedTitle)) {
-            return;
-        }
-
-        $tasks[] = [
-            'title' => $title,
-            'description' => $this->stringValue($task['description'] ?? ''),
-            'priority' => $task['priority'],
-        ];
-    }
-
-    /**
-     * @param  array{title: string, description: string, priority: Priority}  $taskData
-     * @return array<string, mixed>
-     */
-    private function taskPrdPayload(array $taskData, array $modulePrd): array
-    {
-        return [
-            'objective' => $taskData['description'] !== '' ? $taskData['description'] : $taskData['title'],
-            'acceptance_criteria' => $modulePrd['acceptance_criteria'] ?? [],
-            'constraints' => [
-                'Usar a stack TALL + Filament v5 definida pelo projeto alvo.',
-                'Consultar Boost do projeto alvo antes de implementar.',
-            ],
-            'knowledge_areas' => ['laravel', 'filament', 'livewire', 'tailwind'],
-            'module_context' => [
-                'module_id' => $this->module->id,
-                'module_name' => $this->module->name,
-                'module_prd_title' => $modulePrd['title'] ?? null,
-            ],
-            'blueprint_context' => [
-                'module_blueprint' => $this->module->blueprint_payload,
-            ],
-        ];
     }
 
     private function buildPrompt(): string

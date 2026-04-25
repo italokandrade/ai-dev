@@ -37,6 +37,19 @@ class ShellExecuteTool implements Tool
         'run',
     ];
 
+    private const array ALLOWED_ENV_VARS = [
+        'APP_ENV',
+        'CACHE_STORE',
+        'DB_CONNECTION',
+        'DB_DATABASE',
+        'DB_HOST',
+        'DB_PASSWORD',
+        'DB_PORT',
+        'DB_USERNAME',
+        'QUEUE_CONNECTION',
+        'SESSION_DRIVER',
+    ];
+
     private const BLOCKED_PATTERNS = [
         'rm -rf /',
         'shutdown',
@@ -75,6 +88,11 @@ class ShellExecuteTool implements Tool
     {
         $command = $request['command'];
         $timeout = max(1, min(600, (int) ($request['timeout'] ?? 120)));
+        $environment = $this->validatedEnvironment($request['environment'] ?? []);
+
+        if (isset($environment['success']) && $environment['success'] === false) {
+            return json_encode($environment);
+        }
 
         foreach (self::BLOCKED_PATTERNS as $pattern) {
             if (str_contains(strtolower($command), strtolower($pattern))) {
@@ -99,6 +117,7 @@ class ShellExecuteTool implements Tool
         $start = microtime(true);
 
         $result = Process::path($this->workingDirectory)
+            ->env($environment)
             ->timeout($timeout)
             ->run($tokens);
 
@@ -123,6 +142,8 @@ class ShellExecuteTool implements Tool
                 ->description('Timeout in seconds (default: 120, max: 600)')
                 ->min(1)
                 ->max(600),
+            'environment' => $schema->object()
+                ->description('Optional environment overrides for a single command. Only safe development variables are allowed, such as DB_CONNECTION and DB_DATABASE.'),
         ];
     }
 
@@ -169,5 +190,40 @@ class ShellExecuteTool implements Tool
         }
 
         return in_array($binary, ['enlightn', 'nikto', 'pest', 'phpstan', 'phpunit', 'pint', 'sqlmap'], true);
+    }
+
+    /**
+     * @return array<string, string>|array{success: false, error: string}
+     */
+    private function validatedEnvironment(mixed $environment): array
+    {
+        if ($environment === null || $environment === []) {
+            return [];
+        }
+
+        if (! is_array($environment)) {
+            return ['success' => false, 'error' => 'Environment must be an object of string key/value pairs.'];
+        }
+
+        $validated = [];
+
+        foreach ($environment as $key => $value) {
+            if (! is_string($key) || ! in_array($key, self::ALLOWED_ENV_VARS, true)) {
+                return ['success' => false, 'error' => "Environment variable '{$key}' is not allowlisted."];
+            }
+
+            if (! is_scalar($value) && $value !== null) {
+                return ['success' => false, 'error' => "Environment variable '{$key}' must be scalar."];
+            }
+
+            $stringValue = (string) $value;
+            if (strlen($stringValue) > 500 || str_contains($stringValue, "\n") || str_contains($stringValue, "\r")) {
+                return ['success' => false, 'error' => "Environment variable '{$key}' has an invalid value."];
+            }
+
+            $validated[$key] = $stringValue;
+        }
+
+        return $validated;
     }
 }

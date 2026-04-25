@@ -8,6 +8,7 @@ enum TaskSource: string implements HasLabel
 {
     case Manual = 'manual';
     case Prd = 'prd';
+    case Architecture = 'architecture';
     case Specification = 'specification';
     case Webhook = 'webhook';
     case Sentinel = 'sentinel';
@@ -18,6 +19,7 @@ enum TaskSource: string implements HasLabel
         return match ($this) {
             self::Manual => 'Manual (UI)',
             self::Prd => 'PRD',
+            self::Architecture => 'Arquitetura',
             self::Specification => 'Especificação IA',
             self::Webhook => 'Webhook',
             self::Sentinel => 'Sentinela',

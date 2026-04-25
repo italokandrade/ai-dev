@@ -116,6 +116,7 @@ class OrchestratorJob implements ShouldQueue
         $criteria = $this->listItems($prd['acceptance_criteria'] ?? []);
         $constraints = $this->listItems($prd['constraints'] ?? []);
         $knowledge = $this->listItems($prd['knowledge_areas'] ?? []);
+        $structuredContext = $this->structuredContext($prd);
 
         return <<<PROMPT
 ## Task PRD
@@ -133,10 +134,36 @@ class OrchestratorJob implements ShouldQueue
 **Áreas de Conhecimento:**
 {$knowledge}
 
+**Contexto Estruturado:**
+{$structuredContext}
+
 ---
 
 Decompona este PRD em Sub-PRDs atômicos conforme as instruções do sistema.
 PROMPT;
+    }
+
+    private function structuredContext(array $prd): string
+    {
+        $context = array_filter([
+            'architecture_checkpoint' => $prd['architecture_checkpoint'] ?? null,
+            'database_schema' => $prd['database_schema'] ?? null,
+            'module_context' => $prd['module_context'] ?? null,
+            'blueprint_context' => $prd['blueprint_context'] ?? null,
+            'context' => $prd['context'] ?? null,
+        ], fn (mixed $value): bool => $value !== null && $value !== []);
+
+        if ($context === []) {
+            return '{}';
+        }
+
+        $json = json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if (strlen((string) $json) > 12000) {
+            return substr((string) $json, 0, 12000)."\n\n[...contexto truncado...]";
+        }
+
+        return (string) $json;
     }
 
     private function listItems(array $items): string
