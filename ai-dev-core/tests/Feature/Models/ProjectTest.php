@@ -1,10 +1,14 @@
 <?php
 
+use App\Jobs\CascadeModulePrdJob;
+use App\Jobs\ReconcileProjectCascadeJob;
 use App\Jobs\ScaffoldProjectJob;
+use App\Jobs\SyncProjectRepositoryJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectQuotation;
 use App\Models\ProjectSpecification;
+use App\Services\StandardProjectModuleService;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -313,4 +317,68 @@ test('quotation approval dispatches target scaffold installation', function () {
         ScaffoldProjectJob::class,
         fn (ScaffoldProjectJob $job): bool => $job->project->id === $project->id && $job->dbPassword !== ''
     );
+});
+
+test('cascade reconciler requeues modules with missing or failed planning', function () {
+    Queue::fake([
+        CascadeModulePrdJob::class,
+        ReconcileProjectCascadeJob::class,
+        SyncProjectRepositoryJob::class,
+    ]);
+
+    $project = Project::create([
+        'name' => 'test-cascade-reconcile',
+        'status' => 'active',
+        'prd_approved_at' => now(),
+        'blueprint_approved_at' => now(),
+        'blueprint_payload' => [
+            'domain_model' => [
+                'entities' => [
+                    ['name' => 'leads'],
+                ],
+            ],
+        ],
+    ]);
+
+    $missing = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Módulo sem PRD',
+        'description' => 'Precisa ser reprocessado',
+        'status' => 'planned',
+    ]);
+
+    $failed = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Módulo com PRD falho',
+        'description' => 'Precisa tentar novamente',
+        'status' => 'planned',
+        'prd_payload' => [
+            '_status' => 'ai_generation_failed',
+            '_error' => 'JSON inválido',
+        ],
+    ]);
+
+    ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Chatbox',
+        'description' => 'Módulo padrão',
+        'status' => 'completed',
+        'prd_payload' => [
+            'source' => StandardProjectModuleService::SOURCE,
+            'standard_module' => true,
+        ],
+    ]);
+
+    (new ReconcileProjectCascadeJob($project))->handle();
+
+    Queue::assertPushed(CascadeModulePrdJob::class, 2);
+    Queue::assertPushed(
+        CascadeModulePrdJob::class,
+        fn (CascadeModulePrdJob $job): bool => $job->module->id === $missing->id
+    );
+    Queue::assertPushed(
+        CascadeModulePrdJob::class,
+        fn (CascadeModulePrdJob $job): bool => $job->module->id === $failed->id
+    );
+    Queue::assertPushed(SyncProjectRepositoryJob::class);
 });

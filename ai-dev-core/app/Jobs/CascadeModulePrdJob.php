@@ -49,6 +49,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         if ($this->isStandardModule()) {
             Log::info("CascadeModulePrdJob: '{$this->module->name}' é módulo padrão do AI-Dev. Tasks e submódulos não serão gerados.");
             SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+            $this->scheduleReconciliation();
 
             return;
         }
@@ -61,6 +62,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             $this->module->refresh();
             $this->autoApprove($existingPrd);
             SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+            $this->scheduleReconciliation();
 
             return;
         }
@@ -74,6 +76,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         if (! empty($prdPayload['_status'])) {
             Log::error("CascadeModulePrdJob: PRD falhou para '{$this->module->name}', cascata interrompida neste ramo.");
             SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+            $this->scheduleReconciliation();
 
             return;
         }
@@ -82,6 +85,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $this->module->refresh();
         $this->autoApprove($prdPayload);
         SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+        $this->scheduleReconciliation();
     }
 
     private function generatePrd(): array
@@ -109,7 +113,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->fallbackPrd($e->getMessage());
+            throw $e;
         }
     }
 
@@ -352,6 +356,12 @@ PROMPT;
         return trim((string) $value);
     }
 
+    private function scheduleReconciliation(): void
+    {
+        ReconcileProjectCascadeJob::dispatch($this->module->project->fresh())
+            ->delay(now()->addMinutes(5));
+    }
+
     public function failed(\Throwable $exception): void
     {
         Log::error('CascadeModulePrdJob: Job falhou por completo', [
@@ -369,5 +379,6 @@ PROMPT;
         }
 
         SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+        $this->scheduleReconciliation();
     }
 }

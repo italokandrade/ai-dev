@@ -54,6 +54,9 @@ class ApproveProjectBlueprintJob implements ShouldQueue
                 CascadeModulePrdJob::dispatch($module);
             }
 
+            ReconcileProjectCascadeJob::dispatch($project)
+                ->delay(now()->addMinutes(10));
+
             Log::info("ApproveProjectBlueprintJob: Cascata iniciada para '{$project->name}'", [
                 'modules' => $modules->count(),
             ]);

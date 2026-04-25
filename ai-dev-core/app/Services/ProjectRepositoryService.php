@@ -165,7 +165,24 @@ class ProjectRepositoryService
             return $ensure + ['committed' => false, 'pushed' => false];
         }
 
-        $files = $this->writeDocumentation($project);
+        try {
+            $files = $this->writeDocumentation($project);
+        } catch (\Throwable $e) {
+            Log::warning('ProjectRepositoryService: falha ao escrever artefatos do projeto', [
+                'project' => $project->name,
+                'work_dir' => $ensure['work_dir'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'committed' => false,
+                'pushed' => false,
+                'reason' => 'artifact_write_failed',
+                'error' => $e->getMessage(),
+                'repository' => $ensure,
+            ];
+        }
 
         $commit = $this->commitPaths(
             $project,
@@ -381,77 +398,110 @@ class ProjectRepositoryService
         }
 
         $artifactsDir = "{$workDir}/".self::ARTIFACTS_DIR;
+        $stagingDir = "{$workDir}/.".self::ARTIFACTS_DIR.'-tmp-'.Str::uuid();
         $preservedArchitectureArtifacts = $this->preservedArchitectureArtifacts($artifactsDir);
-        File::ensureDirectoryExists($artifactsDir);
-        File::cleanDirectory($artifactsDir);
-        File::ensureDirectoryExists("{$artifactsDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR);
-        File::ensureDirectoryExists("{$artifactsDir}/modules");
-        File::ensureDirectoryExists("{$artifactsDir}/tasks");
-        File::ensureDirectoryExists("{$artifactsDir}/subtasks");
+        File::ensureDirectoryExists($stagingDir);
+        File::ensureDirectoryExists("{$stagingDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR);
+        File::ensureDirectoryExists("{$stagingDir}/modules");
+        File::ensureDirectoryExists("{$stagingDir}/tasks");
+        File::ensureDirectoryExists("{$stagingDir}/subtasks");
 
         $written = [];
-        $documents = [
-            'README.md' => $this->readmeMarkdown($project),
-            'PROJECT.md' => $this->projectMarkdown($project),
-            'project.json' => $this->json($this->projectPayload($project)),
-            'manifest.json' => $this->json($this->manifestPayload($project)),
-        ];
 
-        if (is_array($project->prd_payload) && $project->prd_payload !== []) {
-            $documents['prd-master.md'] = $this->payloadMarkdown(
-                $project->prd_payload,
-                "{$project->name} - PRD Master",
-                'Project PRD',
-            );
-            $documents['prd-master.json'] = $this->json($project->prd_payload);
-        }
+        try {
+            $documents = [
+                'README.md' => $this->readmeMarkdown($project),
+                'PROJECT.md' => $this->projectMarkdown($project),
+                'project.json' => $this->json($this->projectPayload($project)),
+                'manifest.json' => $this->json($this->manifestPayload($project)),
+            ];
 
-        if (is_array($project->blueprint_payload) && $project->blueprint_payload !== []) {
-            $documents['blueprint-global.md'] = $this->payloadMarkdown(
-                $project->blueprint_payload,
-                "{$project->name} - Blueprint Tecnico Global",
-                'Project Blueprint',
-            );
-            $documents['blueprint-global.json'] = $this->json($project->blueprint_payload);
-
-            $documents = array_merge(
-                $documents,
-                app(ProjectArchitectureArtifactService::class)->documents($project),
-            );
-        }
-
-        $documents = array_merge($documents, $preservedArchitectureArtifacts);
-
-        foreach ($documents as $relativePath => $contents) {
-            File::put("{$artifactsDir}/{$relativePath}", $contents);
-            $written[] = self::ARTIFACTS_DIR.'/'.$relativePath;
-        }
-
-        foreach ($project->modules->sortBy(fn (ProjectModule $module): string => $this->modulePath($module)) as $module) {
-            $base = 'modules/'.$this->artifactSlug($this->modulePath($module), $module->id);
-            File::put("{$artifactsDir}/{$base}.md", $this->moduleMarkdown($module));
-            File::put("{$artifactsDir}/{$base}.json", $this->json($this->modulePayload($module)));
-            $written[] = self::ARTIFACTS_DIR."/{$base}.md";
-            $written[] = self::ARTIFACTS_DIR."/{$base}.json";
-        }
-
-        foreach ($project->tasks->sortBy('created_at') as $task) {
-            $base = 'tasks/'.$this->artifactSlug($task->title, $task->id);
-            File::put("{$artifactsDir}/{$base}.md", $this->taskMarkdown($task));
-            File::put("{$artifactsDir}/{$base}.json", $this->json($this->taskPayload($task)));
-            $written[] = self::ARTIFACTS_DIR."/{$base}.md";
-            $written[] = self::ARTIFACTS_DIR."/{$base}.json";
-
-            foreach ($task->subtasks->sortBy('execution_order') as $subtask) {
-                $subtaskBase = 'subtasks/'.$this->artifactSlug($subtask->title, $subtask->id);
-                File::put("{$artifactsDir}/{$subtaskBase}.md", $this->subtaskMarkdown($subtask));
-                File::put("{$artifactsDir}/{$subtaskBase}.json", $this->json($this->subtaskPayload($subtask)));
-                $written[] = self::ARTIFACTS_DIR."/{$subtaskBase}.md";
-                $written[] = self::ARTIFACTS_DIR."/{$subtaskBase}.json";
+            if (is_array($project->prd_payload) && $project->prd_payload !== []) {
+                $documents['prd-master.md'] = $this->payloadMarkdown(
+                    $project->prd_payload,
+                    "{$project->name} - PRD Master",
+                    'Project PRD',
+                );
+                $documents['prd-master.json'] = $this->json($project->prd_payload);
             }
+
+            if (is_array($project->blueprint_payload) && $project->blueprint_payload !== []) {
+                $documents['blueprint-global.md'] = $this->payloadMarkdown(
+                    $project->blueprint_payload,
+                    "{$project->name} - Blueprint Tecnico Global",
+                    'Project Blueprint',
+                );
+                $documents['blueprint-global.json'] = $this->json($project->blueprint_payload);
+
+                $documents = array_merge(
+                    $documents,
+                    app(ProjectArchitectureArtifactService::class)->documents($project),
+                );
+            }
+
+            $documents = array_merge($documents, $preservedArchitectureArtifacts);
+
+            foreach ($documents as $relativePath => $contents) {
+                $this->putArtifact($stagingDir, $relativePath, $contents, $written);
+            }
+
+            foreach ($project->modules->sortBy(fn (ProjectModule $module): string => $this->modulePath($module)) as $module) {
+                $base = 'modules/'.$this->artifactSlug($this->modulePath($module), $module->id);
+                $this->putArtifact($stagingDir, "{$base}.md", $this->moduleMarkdown($module), $written);
+                $this->putArtifact($stagingDir, "{$base}.json", $this->json($this->modulePayload($module)), $written);
+            }
+
+            foreach ($project->tasks->sortBy('created_at') as $task) {
+                $base = 'tasks/'.$this->artifactSlug($task->title, $task->id);
+                $this->putArtifact($stagingDir, "{$base}.md", $this->taskMarkdown($task), $written);
+                $this->putArtifact($stagingDir, "{$base}.json", $this->json($this->taskPayload($task)), $written);
+
+                foreach ($task->subtasks->sortBy('execution_order') as $subtask) {
+                    $subtaskBase = 'subtasks/'.$this->artifactSlug($subtask->title, $subtask->id);
+                    $this->putArtifact($stagingDir, "{$subtaskBase}.md", $this->subtaskMarkdown($subtask), $written);
+                    $this->putArtifact($stagingDir, "{$subtaskBase}.json", $this->json($this->subtaskPayload($subtask)), $written);
+                }
+            }
+
+            $this->replaceArtifactsDirectory($workDir, $artifactsDir, $stagingDir);
+        } catch (\Throwable $e) {
+            File::deleteDirectory($stagingDir);
+
+            throw $e;
         }
 
         return $written;
+    }
+
+    /**
+     * @param  array<int, string>  $written
+     */
+    private function putArtifact(string $baseDir, string $relativePath, string $contents, array &$written): void
+    {
+        $path = "{$baseDir}/{$relativePath}";
+
+        File::ensureDirectoryExists(dirname($path));
+        File::put($path, $contents);
+
+        $written[] = self::ARTIFACTS_DIR.'/'.$relativePath;
+    }
+
+    private function replaceArtifactsDirectory(string $workDir, string $artifactsDir, string $stagingDir): void
+    {
+        if (File::exists($artifactsDir)) {
+            $quarantineRoot = "{$workDir}/.git/ai-dev-quarantine";
+            File::ensureDirectoryExists($quarantineRoot);
+
+            $quarantinePath = "{$quarantineRoot}/".self::ARTIFACTS_DIR.'-'.Str::uuid();
+
+            if (! @rename($artifactsDir, $quarantinePath)) {
+                File::deleteDirectory($artifactsDir);
+            }
+        }
+
+        if (! @rename($stagingDir, $artifactsDir)) {
+            File::moveDirectory($stagingDir, $artifactsDir, true);
+        }
     }
 
     /**
@@ -464,7 +514,11 @@ class ProjectRepositoryService
         foreach (['erd-physical.txt', 'erd-physical.svg'] as $file) {
             $path = "{$artifactsDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR."/{$file}";
             if (is_file($path)) {
-                $preserved[ProjectArchitectureArtifactService::ARCHITECTURE_DIR."/{$file}"] = (string) File::get($path);
+                try {
+                    $preserved[ProjectArchitectureArtifactService::ARCHITECTURE_DIR."/{$file}"] = (string) File::get($path);
+                } catch (\Throwable) {
+                    // Artefatos fisicos opcionais podem estar com permissao externa; a sincronizacao principal deve continuar.
+                }
             }
         }
 
