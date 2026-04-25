@@ -58,7 +58,7 @@ Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança`
 6. **Aprovar Blueprint** — clique em **"Aprovar Blueprint — Criar Módulos"**. Só aqui os módulos raiz são criados no banco do ai-dev-core.
 7. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
 
-> Durante PRD e Blueprint, o Projeto Alvo pode existir apenas como registro no banco do ai-dev-core. O diretório físico, scaffold TALL + Filament v5 + Anime.js e Boost do alvo passam a ser obrigatórios somente quando a implementação começar.
+> PRD e Blueprint podem ser gerados antes do scaffold físico. A aprovação do Blueprint, a criação de módulos e a cascata de PRDs exigem scaffold completo do Projeto Alvo (`artisan`, `composer.json`, `.mcp.json`, `config/ai.php`, `config/mcp.php`). Se a validação falhar, o projeto fica com status `scaffold_failed`.
 
 > No scaffold, o instalador copia do `ai-dev-core` os arquivos de Chatbox, usuários, perfis, permissões e logs, roda as migrations desses blocos no banco do Projeto Alvo e atribui o usuário inicial ao perfil `super_admin`. Ele também instala Laravel AI SDK, Laravel MCP e Laravel Boost, publica `config/ai.php`/`config/mcp.php`, cria a `.mcp.json` individual do alvo e deixa o Boost daquele projeto pronto para os agentes do ai-dev-core.
 

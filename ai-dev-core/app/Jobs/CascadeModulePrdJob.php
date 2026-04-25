@@ -5,12 +5,14 @@ namespace App\Jobs;
 use App\Ai\Agents\ModulePrdAgent;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
+use App\Enums\ProjectStatus;
 use App\Enums\TaskSource;
 use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
 use App\Models\Task;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ProjectBlueprintService;
+use App\Services\StandardProjectModuleService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,11 +27,11 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
     private const int MAX_SUBMODULE_DEPTH = 1;
 
-    private const int MAX_SUBMODULES_PER_MODULE = 8;
+    private const int MAX_SUBMODULES_PER_MODULE = 5;
 
-    private const int MAX_MODULES_PER_PROJECT = 120;
+    private const int MAX_MODULES_PER_PROJECT = 60;
 
-    private const int MAX_TASKS_PER_MODULE = 30;
+    private const int MAX_TASKS_PER_MODULE = 12;
 
     public int $tries = 3;
 
@@ -50,7 +52,30 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
     public function handle(ProjectBlueprintService $blueprintService): void
     {
-        $this->module->refresh();
+        $this->module->refresh()->loadMissing(['project', 'parent']);
+
+        if ($this->isStandardModule()) {
+            Log::info("CascadeModulePrdJob: '{$this->module->name}' é módulo padrão do AI-Dev. Tasks e submódulos não serão gerados.");
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+
+            return;
+        }
+
+        $missingScaffold = $this->module->project->targetScaffoldMissingReasons();
+        if ($missingScaffold !== []) {
+            $this->module->project->forceFill([
+                'status' => ProjectStatus::ScaffoldFailed,
+            ])->save();
+
+            Log::warning("CascadeModulePrdJob: scaffold incompleto para '{$this->module->project->name}'. Cascata pausada.", [
+                'module' => $this->module->name,
+                'missing' => $missingScaffold,
+            ]);
+
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+
+            return;
+        }
 
         // Se já tem PRD válido, pula geração e vai direto para auto-aprovação
         $existingPrd = $this->module->prd_payload;
@@ -59,6 +84,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
             $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $existingPrd);
             $this->module->refresh();
             $this->autoApprove($existingPrd);
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
 
             return;
         }
@@ -71,6 +97,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
         if (! empty($prdPayload['_status'])) {
             Log::error("CascadeModulePrdJob: PRD falhou para '{$this->module->name}', cascata interrompida neste ramo.");
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
 
             return;
         }
@@ -78,6 +105,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $prdPayload);
         $this->module->refresh();
         $this->autoApprove($prdPayload);
+        SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
     }
 
     private function generatePrd(): array
@@ -159,7 +187,8 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
                 continue;
             }
 
-            $priorityEnum = match ($submoduleData['priority'] ?? 'normal') {
+            $priority = $this->stringValue($submoduleData['priority'] ?? 'normal');
+            $priorityEnum = match ($priority) {
                 'high' => Priority::High,
                 'medium' => Priority::Medium,
                 default => Priority::Normal,
@@ -297,7 +326,7 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
                 'title' => $taskData['title'],
                 'status' => TaskStatus::Pending,
                 'priority' => $taskData['priority'],
-                'source' => TaskSource::Specification,
+                'source' => TaskSource::Prd,
                 'prd_payload' => $this->taskPrdPayload($taskData, $prd),
                 'max_retries' => 3,
             ]);
@@ -450,6 +479,17 @@ PROMPT;
         return $depth;
     }
 
+    private function isStandardModule(): bool
+    {
+        $prd = $this->module->prd_payload;
+
+        return is_array($prd)
+            && (
+                ($prd['standard_module'] ?? false) === true
+                || ($prd['source'] ?? null) === StandardProjectModuleService::SOURCE
+            );
+    }
+
     private function normalizeName(string $name): string
     {
         return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? ''));
@@ -479,5 +519,7 @@ PROMPT;
                 'prd_payload' => $this->fallbackPrd($exception->getMessage()),
             ]);
         }
+
+        SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
     }
 }

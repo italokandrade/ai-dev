@@ -114,7 +114,7 @@ Cada projeto é um site/app Laravel distinto (ex: `italoandrade.com`, `meuapp.co
 | `prd_approved_at` | Timestamp / Nullable | Quando o PRD Master foi aprovado — libera geração do Blueprint Técnico |
 | `blueprint_payload` | JSON / Nullable | Blueprint Técnico Global — MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface |
 | `blueprint_approved_at` | Timestamp / Nullable | Quando o Blueprint Técnico foi aprovado — libera `createModulesFromPrd()` |
-| `status` | Enum: `active`, `paused`, `archived` | Status operacional. `paused` = aceita tasks mas não processa |
+| `status` | Enum: `active`, `paused`, `scaffold_failed`, `archived` | Status operacional. `paused` = aceita tasks mas não processa; `scaffold_failed` = alvo sem scaffold Laravel/AI/MCP completo |
 | `created_at` | Timestamp | Data de criação |
 | `updated_at` | Timestamp | Última modificação |
 
@@ -139,7 +139,7 @@ Uma task é sempre acompanhada de um PRD completo e está sempre vinculada a um 
 | `retry_count` | Int (default: 0) | Quantas vezes esta task já foi re-executada após falha |
 | `max_retries` | Int (default: 3) | Limite de retentativas antes de escalar para Human-in-the-Loop |
 | `error_log` | Text / Nullable | Último erro registrado (stack trace, mensagem de falha) |
-| `source` | Enum: `manual`, `webhook`, `sentinel`, `ci_cd` | De onde esta task veio (UI? Sentinela? GitHub webhook?) |
+| `source` | Enum: `manual`, `prd`, `specification`, `webhook`, `sentinel`, `ci_cd` | De onde esta task veio (PRD, spec legada, UI, Sentinela, GitHub webhook etc.) |
 | `is_redo` | Boolean (default: false) | Se esta task é uma re-execução (redo) de uma task anterior em vez de uma task nova |
 | `original_task_id` | FK → `tasks.id` / Nullable | ID da task original quando é um redo — permite rastrear a cadeia de tentativas |
 | `created_at` | Timestamp | Data de criação |
@@ -450,7 +450,9 @@ De acordo com o `STANDARD_MODULES.md`, todo Projeto Alvo nasce com `Chatbox` e `
 
 O mesmo scaffold provisiona o runtime individual do alvo para os agentes: Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, migrations do SDK e `.mcp.json` apontando para `php artisan boost:mcp`. O `BoostTool` sempre executa `boost:execute-tool` dentro de `projects.local_path`, portanto cada projeto fornece seu proprio MCP e contexto, assim como fornece seu proprio `github_repo`.
 
-Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` prepara o Git do Projeto Alvo: inicializa `.git` se necessário, configura `origin` com o repositório cadastrado, define identidade local do agente e mantém `.ai-dev/` sincronizado na raiz do repositório daquele alvo (`PROJECT.md`, PRD Master, Blueprint Técnico, módulos, tasks e subtasks). Essa sincronização faz commit e push no repositório do alvo; commits de implementação aprovados pelo `QAAuditJob` também são enviados ao mesmo `origin`.
+Antes de aprovar Blueprint, criar módulos ou iniciar cascata, o ai-dev-core valida se o alvo possui `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`. Falhas marcam o projeto como `scaffold_failed` e interrompem a geração de módulos/tasks até o scaffold ser corrigido.
+
+Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` prepara o Git do Projeto Alvo: inicializa `.git` se necessário, configura `origin` com o repositório cadastrado, define identidade local do agente e mantém `.ai-dev/` sincronizado na raiz do repositório daquele alvo (`PROJECT.md`, PRD Master, Blueprint Técnico, módulos, tasks e subtasks). Essa sincronização faz commit e push no repositório do alvo; commits de implementação aprovados pelo `QAAuditJob` também são enviados ao mesmo `origin`. Os comandos Git são executados com `safe.directory` específico do alvo para permitir repositórios com ownership diferente do processo do ai-dev-core.
 
 No PRD, esses blocos ficam em `projects.prd_payload.standard_modules`; `projects.prd_payload.modules` continua reservado para módulos de negócio gerados pela IA.
 

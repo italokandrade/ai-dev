@@ -130,7 +130,7 @@ O sistema adota **granularidade progressiva**:
 5. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico
 6. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
 
-> **Regra:** tasks são criadas apenas nos nós folha. O Projeto Alvo pode ainda não ter diretório físico durante PRD e Blueprint; diretório, scaffold TALL + Filament v5 + Anime.js e Boost do alvo são necessários apenas na fase de implementação.
+> **Regra:** tasks são criadas apenas nos nós folha. PRD e Blueprint podem ser gerados antes do scaffold físico, mas aprovar o Blueprint, criar módulos e iniciar a cascata exigem que o Projeto Alvo tenha scaffold completo: `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`.
 
 > **Core padrão obrigatório:** todo projeto novo recebe automaticamente `Chatbox` e o bloco `Segurança` com `Usuários`, `Perfis de Usuários` e `Logs de Atividades`. Esses módulos são anexados em `projects.prd_payload.standard_modules`, criados em `project_modules` como concluídos e copiados pelo `instalar_projeto.sh`; não entram em `projects.prd_payload.modules`, que fica reservado aos módulos de negócio.
 
@@ -233,7 +233,7 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 - Provider strategy: openrouter único — Opus 4.7 (planejamento) | Sonnet 4.6 (código/QA) | Haiku 4.5 (docs)
 - PostgreSQL 16 + Redis 7 + Laravel Horizon v5
 - BoostTool project-path-aware via `boost:execute-tool` no path do alvo, com `database-query` estruturado por schema real, redação de campos sensíveis e cap de saída
-- Cascata de PRDs protegida contra explosão: até 40 módulos raiz por projeto, até 8 submódulos por módulo, até 120 módulos totais por projeto e até 30 tasks por módulo
+- Cascata de PRDs protegida contra explosão: até 40 módulos raiz por projeto, até 5 submódulos por módulo, até 60 módulos totais por projeto e até 12 tasks por módulo
 - Core padrão por projeto: `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos e o `instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o Projeto Alvo
 - Scaffold dos alvos já provisiona Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, `.mcp.json` individual e migrations do SDK; os agentes consultam o Boost do alvo via `projects.local_path`
 - Blueprint Técnico Progressivo entre PRD Master e módulos: MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface; PRDs de módulo enriquecem esse desenho com campos e relacionamentos

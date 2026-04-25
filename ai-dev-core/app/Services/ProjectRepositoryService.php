@@ -756,6 +756,10 @@ class ProjectRepositoryService
      */
     private function git(string $workDir, array $command, int $timeout)
     {
+        if (($command[0] ?? null) === 'git') {
+            array_splice($command, 1, 0, ['-c', "safe.directory={$workDir}"]);
+        }
+
         return Process::path($workDir)->timeout($timeout)->run($command);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\ProjectStatus;
 use App\Models\Project;
 use App\Services\StandardProjectModuleService;
 use Illuminate\Bus\Queueable;
@@ -31,6 +32,7 @@ class ScaffoldProjectJob implements ShouldQueue
     {
         $script = '/var/www/html/projetos/ai-dev/instalar_projeto.sh';
         $name = $this->project->name;
+        $projectPath = "/var/www/html/projetos/{$name}";
 
         Log::info("ScaffoldProjectJob: Iniciando scaffold do projeto '{$name}'");
 
@@ -41,14 +43,37 @@ class ScaffoldProjectJob implements ShouldQueue
         );
 
         if ($result->successful()) {
+            $missing = Project::targetScaffoldMissingReasonsForPath($projectPath);
+
+            if ($missing !== []) {
+                $this->project->forceFill([
+                    'local_path' => $projectPath,
+                    'status' => ProjectStatus::ScaffoldFailed,
+                ])->save();
+
+                Log::error("ScaffoldProjectJob: Scaffold incompleto para '{$name}'", [
+                    'missing' => $missing,
+                    'stdout' => $result->output(),
+                    'stderr' => $result->errorOutput(),
+                ]);
+
+                throw new \RuntimeException('Scaffold incompleto: '.implode('; ', $missing));
+            }
+
             $this->project->update([
-                'local_path' => "/var/www/html/projetos/{$name}",
+                'local_path' => $projectPath,
+                'status' => ProjectStatus::Active,
             ]);
 
             SyncProjectRepositoryJob::dispatch($this->project->fresh());
 
             Log::info("ScaffoldProjectJob: Projeto '{$name}' criado com sucesso");
         } else {
+            $this->project->forceFill([
+                'local_path' => $projectPath,
+                'status' => ProjectStatus::ScaffoldFailed,
+            ])->save();
+
             Log::error("ScaffoldProjectJob: Falha ao criar projeto '{$name}'", [
                 'exit_code' => $result->exitCode(),
                 'stderr' => $result->errorOutput(),

@@ -21,6 +21,14 @@ class Project extends Model implements Conversational
 
     public const int MAX_ROOT_MODULES = 40;
 
+    public const array TARGET_SCAFFOLD_REQUIRED_FILES = [
+        'artisan',
+        'composer.json',
+        '.mcp.json',
+        'config/ai.php',
+        'config/mcp.php',
+    ];
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -159,6 +167,60 @@ class Project extends Model implements Conversational
         return $this->status === ProjectStatus::Active;
     }
 
+    public function isTargetScaffoldReady(): bool
+    {
+        return $this->targetScaffoldMissingReasons() === [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function targetScaffoldMissingReasons(): array
+    {
+        return self::targetScaffoldMissingReasonsForPath($this->local_path);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function targetScaffoldMissingReasonsForPath(?string $path): array
+    {
+        $path = trim((string) $path);
+
+        if ($path === '') {
+            return ['Caminho local do projeto não configurado.'];
+        }
+
+        if (! is_dir($path)) {
+            return ["Diretório local não encontrado: {$path}"];
+        }
+
+        $missing = [];
+
+        foreach (self::TARGET_SCAFFOLD_REQUIRED_FILES as $requiredFile) {
+            $fullPath = $path.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $requiredFile);
+
+            if (! is_file($fullPath)) {
+                $missing[] = "Arquivo obrigatório ausente: {$requiredFile}";
+            }
+        }
+
+        return $missing;
+    }
+
+    public function assertTargetScaffoldReady(string $action = 'continuar'): void
+    {
+        $missing = $this->targetScaffoldMissingReasons();
+
+        if ($missing === []) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            "Não é possível {$action}: scaffold do projeto alvo incompleto. ".implode('; ', $missing)
+        );
+    }
+
     public function isPrdApproved(): bool
     {
         return $this->prd_approved_at !== null;
@@ -194,6 +256,8 @@ class Project extends Model implements Conversational
             throw new \RuntimeException('O Blueprint Técnico precisa estar pronto antes da criação dos módulos.');
         }
 
+        $this->assertTargetScaffoldReady('aprovar o Blueprint');
+
         $this->update(['blueprint_approved_at' => now()]);
     }
 
@@ -203,6 +267,8 @@ class Project extends Model implements Conversational
      */
     public function createModulesFromPrd(): void
     {
+        $this->assertTargetScaffoldReady('criar módulos do projeto');
+
         $standardModules = app(StandardProjectModuleService::class);
         $standardModules->syncProject($this);
 
@@ -238,7 +304,7 @@ class Project extends Model implements Conversational
                     'name' => $name,
                     'normalized_name' => $this->normalizeModuleName($name),
                     'description' => $this->stringValue($moduleData['description'] ?? ''),
-                    'priority' => $moduleData['priority'] ?? 'normal',
+                    'priority' => $this->stringValue($moduleData['priority'] ?? 'normal'),
                     'dependencies' => $moduleData['dependencies'] ?? [],
                 ];
             })

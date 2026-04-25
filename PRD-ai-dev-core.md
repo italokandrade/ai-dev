@@ -368,7 +368,7 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 **Fluxo de ativação (UI Filament):**
 1. Usuário clica "Gerar PRD do Projeto" → `GenerateProjectPrdJob`
 2. Usuário aprova PRD → `approvePrd()` + `GenerateProjectBlueprintJob`
-3. Usuário aprova Blueprint → `approveBlueprint()` + `createModulesFromPrd()` (módulos raiz de negócio; Chatbox/Segurança já existem como concluídos)
+3. Usuário aprova Blueprint → `approveBlueprint()` valida scaffold do alvo + `createModulesFromPrd()` (módulos raiz de negócio; Chatbox/Segurança já existem como concluídos)
 4. Usuário entra em um módulo → clica "Gerar PRD do Módulo" → `GenerateModulePrdJob`
 5. Se PRD retorna `needs_submodules = true` → clica "Criar Submódulos" → `GenerateModuleSubmodulesJob`
 6. Se PRD retorna `needs_submodules = false` → clica "Criar Tasks" → `GenerateModuleTasksJob`
@@ -380,7 +380,7 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 | `GenerateProjectSpecificationJob` | `orchestrator` | Gera spec técnica via `SpecificationAgent` (legado) |
 | `GenerateProjectQuotationJob` | `orchestrator` | Gera orçamento via `QuotationAgent` |
 | `GenerateTasksFromSpecJob` | `orchestrator` | Cria tasks a partir de spec aprovada (legado) |
-| `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo via `instalar_projeto.sh`, incluindo cópia do core padrão Chatbox/Segurança e provisionamento individual de AI SDK/MCP/Boost |
+| `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo via `instalar_projeto.sh`, incluindo cópia do core padrão Chatbox/Segurança e provisionamento individual de AI SDK/MCP/Boost. Se arquivos obrigatórios não existirem, marca o projeto como `scaffold_failed` |
 
 **Status:** Existem e funcionam. `SpecificationAgent` e `GenerateTasksFromSpecJob` são legados — o fluxo ativo usa `ProjectPrdAgent` + `ModulePrdAgent`.
 
