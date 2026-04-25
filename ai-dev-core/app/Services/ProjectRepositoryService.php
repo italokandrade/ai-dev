@@ -52,7 +52,7 @@ class ProjectRepositoryService
         $workDir = $this->workDir($project);
         $remoteUrl = $this->normalizeRemoteUrl($project->github_repo);
 
-        if ($workDir === null || ! is_dir($workDir)) {
+        if ($workDir === null) {
             return [
                 'success' => false,
                 'ready' => false,
@@ -60,6 +60,10 @@ class ProjectRepositoryService
                 'reason' => 'local_path_missing',
                 'remote_url' => $remoteUrl,
             ];
+        }
+
+        if (! is_dir($workDir)) {
+            File::makeDirectory($workDir, 0755, true);
         }
 
         if ($requireRemote && $remoteUrl === null) {
