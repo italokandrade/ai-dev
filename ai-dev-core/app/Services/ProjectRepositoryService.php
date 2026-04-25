@@ -907,10 +907,11 @@ class ProjectRepositoryService
         }
 
         return $this->gitPathContainsPermissionDrift("{$gitDir}/objects")
-            || $this->gitPathContainsPermissionDrift("{$gitDir}/refs");
+            || $this->gitPathContainsPermissionDrift("{$gitDir}/refs", filesMatter: true)
+            || $this->gitPathContainsPermissionDrift("{$gitDir}/logs", filesMatter: true);
     }
 
-    private function gitPathContainsPermissionDrift(string $path): bool
+    private function gitPathContainsPermissionDrift(string $path, bool $filesMatter = false): bool
     {
         if (! is_dir($path)) {
             return false;
@@ -922,7 +923,7 @@ class ProjectRepositoryService
         );
 
         foreach ($iterator as $item) {
-            if (! is_writable($item->getPathname())) {
+            if (($item->isDir() || $filesMatter) && ! is_writable($item->getPathname())) {
                 return true;
             }
         }
