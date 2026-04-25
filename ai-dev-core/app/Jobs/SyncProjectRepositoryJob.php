@@ -5,13 +5,14 @@ namespace App\Jobs;
 use App\Models\Project;
 use App\Services\ProjectRepositoryService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class SyncProjectRepositoryJob implements ShouldQueue
+class SyncProjectRepositoryJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -19,11 +20,18 @@ class SyncProjectRepositoryJob implements ShouldQueue
 
     public int $timeout = 300;
 
+    public int $uniqueFor = 600;
+
     public function __construct(
         public Project $project,
         public bool $push = true,
     ) {
         $this->onQueue('default');
+    }
+
+    public function uniqueId(): string
+    {
+        return (string) $this->project->id;
     }
 
     public function handle(ProjectRepositoryService $repository): void
