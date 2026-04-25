@@ -40,6 +40,18 @@ cd "$DIRETORIO_PAI" || exit
 
 # 1. Limpeza Radical e Banco de Dados (PostgreSQL)
 echo "🗑️ Removendo vestígios anteriores..."
+PRESERVE_DIR="$(mktemp -d "/tmp/ai-dev-install-${NOME}.XXXXXX")"
+
+if [ -d "$NOME" ]; then
+    if [ -d "$NOME/.git" ]; then
+        mv "$NOME/.git" "$PRESERVE_DIR/.git"
+    fi
+
+    if [ -d "$NOME/.ai-dev" ]; then
+        mv "$NOME/.ai-dev" "$PRESERVE_DIR/.ai-dev"
+    fi
+fi
+
 rm -rf "$NOME"
 export PGPASSWORD="$DB_ADMIN_PASS"
 psql -h "$DB_HOST" -U "$DB_ADMIN" -c "DROP DATABASE IF EXISTS \"$NOME\";"
@@ -55,6 +67,18 @@ psql -h "$DB_HOST" -U "$DB_ADMIN" -d "$NOME" -c "CREATE EXTENSION IF NOT EXISTS 
 echo "📦 Baixando Laravel 13..."
 composer create-project laravel/laravel:^13.0 "$NOME" --no-interaction
 cd "$NOME" || exit
+
+if [ -d "$PRESERVE_DIR/.git" ]; then
+    rm -rf .git
+    mv "$PRESERVE_DIR/.git" .git
+fi
+
+if [ -d "$PRESERVE_DIR/.ai-dev" ]; then
+    rm -rf .ai-dev
+    mv "$PRESERVE_DIR/.ai-dev" .ai-dev
+fi
+
+rm -rf "$PRESERVE_DIR"
 
 # 3. Configuração de Roteamento e .Env
 echo "⚙️ Configurando .env..."

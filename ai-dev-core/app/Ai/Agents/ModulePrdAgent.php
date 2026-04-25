@@ -63,7 +63,7 @@ REGRAS DE CONTEÚDO:
 13. Se precisar de nova entidade, explique no `blueprint_contribution` por que ela pertence a este módulo.
 14. Em módulos raiz, evite excesso de campos; detalhe campos principalmente quando o módulo for folha ou quando o campo for essencial ao domínio.
 15. Sempre que houver `database_schema.tables`, considere obrigatório um checkpoint físico de arquitetura antes de Filament, Livewire, Controllers, APIs ou Views.
-16. O checkpoint deve validar migrations, Models, relacionamentos Eloquent, SQLite temporário, ERD/Mermaid e Postgres de desenvolvimento/staging.
+16. O checkpoint deve validar migrations, Models, relacionamentos Eloquent e ERD/Mermaid primeiro em SQLite temporário; Postgres de desenvolvimento/staging só entra depois da aprovação do orçamento e do scaffold físico do Projeto Alvo.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.

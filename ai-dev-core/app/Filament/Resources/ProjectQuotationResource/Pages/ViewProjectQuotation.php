@@ -45,15 +45,15 @@ class ViewProjectQuotation extends ViewRecord
                         $hours = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
 
                         $record->fill([
-                            'backend_hours'  => $hours['backend_hours']  ?? $record->backend_hours,
+                            'backend_hours' => $hours['backend_hours'] ?? $record->backend_hours,
                             'frontend_hours' => $hours['frontend_hours'] ?? $record->frontend_hours,
-                            'mobile_hours'   => $hours['mobile_hours']   ?? $record->mobile_hours,
+                            'mobile_hours' => $hours['mobile_hours'] ?? $record->mobile_hours,
                             'database_hours' => $hours['database_hours'] ?? $record->database_hours,
-                            'devops_hours'   => $hours['devops_hours']   ?? $record->devops_hours,
-                            'design_hours'   => $hours['design_hours']   ?? $record->design_hours,
-                            'testing_hours'  => $hours['testing_hours']  ?? $record->testing_hours,
+                            'devops_hours' => $hours['devops_hours'] ?? $record->devops_hours,
+                            'design_hours' => $hours['design_hours'] ?? $record->design_hours,
+                            'testing_hours' => $hours['testing_hours'] ?? $record->testing_hours,
                             'security_hours' => $hours['security_hours'] ?? $record->security_hours,
-                            'pm_hours'       => $hours['pm_hours']       ?? $record->pm_hours,
+                            'pm_hours' => $hours['pm_hours'] ?? $record->pm_hours,
                         ]);
 
                         $record->recalculate();
@@ -62,9 +62,9 @@ class ViewProjectQuotation extends ViewRecord
                         Notification::make()
                             ->title('Estimativa gerada pela IA')
                             ->body(
-                                "Total: {$record->total_human_hours}h | " .
-                                "Custo humano: R$ " . number_format($record->total_human_cost, 2, ',', '.') . " | " .
-                                "AI-Dev: R$ " . number_format($record->ai_dev_price, 2, ',', '.')
+                                "Total: {$record->total_human_hours}h | ".
+                                'Custo humano: R$ '.number_format($record->total_human_cost, 2, ',', '.').' | '.
+                                'AI-Dev: R$ '.number_format($record->ai_dev_price, 2, ',', '.')
                             )
                             ->success()
                             ->send();
@@ -89,9 +89,9 @@ class ViewProjectQuotation extends ViewRecord
                     Notification::make()
                         ->title('Orçamento recalculado com sucesso')
                         ->body(
-                            "Custo humano: R$ " . number_format($record->total_human_cost, 2, ',', '.') .
-                            " | AI-Dev: R$ " . number_format($record->ai_dev_price, 2, ',', '.') .
-                            " | Economia: " . number_format($record->savings_percentage, 1, ',', '.') . "%"
+                            'Custo humano: R$ '.number_format($record->total_human_cost, 2, ',', '.').
+                            ' | AI-Dev: R$ '.number_format($record->ai_dev_price, 2, ',', '.').
+                            ' | Economia: '.number_format($record->savings_percentage, 1, ',', '.').'%'
                         )
                         ->success()
                         ->send();
@@ -108,13 +108,18 @@ class ViewProjectQuotation extends ViewRecord
                 }),
 
             Actions\Action::make('mark_approved')
-                ->label('Aprovado')
+                ->label('Aprovar Orçamento e Instalar')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->visible(fn () => in_array($this->getRecord()->status, ['draft', 'sent']))
                 ->action(function () {
-                    $this->getRecord()->update(['status' => 'approved', 'approved_at' => now()]);
-                    Notification::make()->title('Orçamento aprovado!')->success()->send();
+                    $this->getRecord()->approveAndStartScaffold();
+
+                    Notification::make()
+                        ->title('Orçamento aprovado')
+                        ->body('A instalação TALL completa será iniciada em background se o Projeto Alvo ainda não tiver scaffold.')
+                        ->success()
+                        ->send();
                 }),
         ];
     }
@@ -122,7 +127,7 @@ class ViewProjectQuotation extends ViewRecord
     private function buildEstimationPrompt(ProjectQuotation $record): string
     {
         $complexity = ProjectQuotation::COMPLEXITY_LABELS[$record->complexity_level] ?? 'Médio';
-        $urgency    = ProjectQuotation::URGENCY_LABELS[$record->urgency_level] ?? 'Normal';
+        $urgency = ProjectQuotation::URGENCY_LABELS[$record->urgency_level] ?? 'Normal';
 
         return <<<PROMPT
 Estime as horas de trabalho por área para o seguinte projeto de software:

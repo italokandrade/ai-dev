@@ -6,10 +6,10 @@ use App\Ai\Agents\RefineDescriptionAgent;
 use App\Ai\Agents\RefineFeatureAgent;
 use App\Enums\ProjectStatus;
 use App\Filament\Resources\ProjectResource\Pages;
+use App\Jobs\ApproveProjectBlueprintJob;
 use App\Jobs\GenerateProjectBlueprintJob;
 use App\Jobs\GenerateProjectFeaturesJob;
 use App\Jobs\GenerateProjectPrdJob;
-use App\Jobs\SyncProjectRepositoryJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectQuotation;
@@ -33,7 +33,6 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
-use Illuminate\Support\Str;
 
 class ProjectResource extends Resource
 {
@@ -87,15 +86,6 @@ class ProjectResource extends Resource
                                     ->default('active')
                                     ->required(),
 
-                                Forms\Components\TextInput::make('db_password')
-                                    ->label('Senha do Banco de Dados')
-                                    ->helperText('Senha para o usuário PostgreSQL que será criado para este projeto.')
-                                    ->password()
-                                    ->revealable()
-                                    ->required()
-                                    ->minLength(6)
-                                    ->default(fn () => Str::random(16))
-                                    ->visibleOn('create'),
                             ])
                             ->columns(1),
 
@@ -549,7 +539,7 @@ class ProjectResource extends Resource
                                         })
                                         ->requiresConfirmation()
                                         ->modalHeading('Aprovar Blueprint e Criar Módulos')
-                                        ->modalDescription('Os módulos raiz serão criados a partir do PRD aprovado. A partir daqui, cada PRD de módulo evolui o Blueprint com campos, relacionamentos, workflows e componentes.')
+                                        ->modalDescription('Esta etapa aprova o desenho técnico, cria os módulos no ai-dev-core e sincroniza apenas documentação em .ai-dev no repositório do Projeto Alvo. A instalação TALL completa só acontece após a aprovação do orçamento.')
                                         ->modalSubmitActionLabel('Aprovar e Criar Módulos')
                                         ->action(function ($livewire) {
                                             $project = $livewire->record;
@@ -563,23 +553,13 @@ class ProjectResource extends Resource
                                                 return;
                                             }
 
-                                            try {
-                                                $project->approveBlueprint();
-                                                $project->createModulesFromPrd();
-                                                SyncProjectRepositoryJob::dispatch($project->fresh());
+                                            ApproveProjectBlueprintJob::dispatch($project->fresh());
 
-                                                Notification::make()
-                                                    ->title('Blueprint aprovado — Módulos criados!')
-                                                    ->body('Os PRDs de módulo agora usarão o Blueprint como trilho técnico.')
-                                                    ->success()
-                                                    ->send();
-                                            } catch (\Exception $e) {
-                                                Notification::make()
-                                                    ->title('Erro ao aprovar Blueprint')
-                                                    ->body($e->getMessage())
-                                                    ->danger()
-                                                    ->send();
-                                            }
+                                            Notification::make()
+                                                ->title('Aprovação do Blueprint iniciada')
+                                                ->body('O sistema criará os módulos de planejamento e sincronizará a documentação do projeto.')
+                                                ->success()
+                                                ->send();
                                         }),
 
                                     Action::make('regenerateProjectPrd')

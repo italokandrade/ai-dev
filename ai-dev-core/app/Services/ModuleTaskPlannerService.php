@@ -26,7 +26,7 @@ class ModuleTaskPlannerService
             $this->pushTask($tasks, [
                 'type' => self::ARCHITECTURE_CHECKPOINT_TYPE,
                 'title' => "Checkpoint de Arquitetura de Dados: {$module->name}",
-                'description' => 'Validar migrations, Models, relacionamentos Eloquent, SQLite temporario, ERD/Mermaid e Postgres de desenvolvimento antes de liberar interfaces ou APIs.',
+                'description' => 'Validar migrations, Models, relacionamentos Eloquent, SQLite temporario e ERD/Mermaid antes de liberar interfaces ou APIs. Postgres entra somente apos aprovacao do orcamento e scaffold fisico.',
                 'priority' => Priority::High,
                 'source' => TaskSource::Architecture,
             ], $limit);
@@ -253,7 +253,8 @@ class ModuleTaskPlannerService
             'Migrations e Models do modulo refletem `database_schema.tables` e `blueprint_context.project_domain_model`.',
             'Relacionamentos Eloquent representam as cardinalidades esperadas no Blueprint/MER.',
             'As migrations executam com sucesso em SQLite temporario de arquivo local.',
-            'O schema validado executa com sucesso no Postgres de desenvolvimento/staging do Projeto Alvo.',
+            'Antes da aprovacao do orcamento, a validacao permanece no SQLite temporario e nos artefatos `.ai-dev/architecture`.',
+            'Depois da aprovacao do orcamento e do scaffold fisico, o schema validado executa com sucesso no Postgres de desenvolvimento/staging do Projeto Alvo.',
             '`.ai-dev/architecture/domain-model.*` e ERD fisico/textual foram conferidos ou atualizados.',
             'Nao existem tabelas isoladas sem justificativa explicita no PRD.',
         ];

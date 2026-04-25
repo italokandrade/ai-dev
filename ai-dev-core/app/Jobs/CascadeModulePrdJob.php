@@ -5,7 +5,6 @@ namespace App\Jobs;
 use App\Ai\Agents\ModulePrdAgent;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
-use App\Enums\ProjectStatus;
 use App\Enums\TaskStatus;
 use App\Models\ProjectModule;
 use App\Models\Task;
@@ -49,22 +48,6 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
         if ($this->isStandardModule()) {
             Log::info("CascadeModulePrdJob: '{$this->module->name}' é módulo padrão do AI-Dev. Tasks e submódulos não serão gerados.");
-            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
-
-            return;
-        }
-
-        $missingScaffold = $this->module->project->targetScaffoldMissingReasons();
-        if ($missingScaffold !== []) {
-            $this->module->project->forceFill([
-                'status' => ProjectStatus::ScaffoldFailed,
-            ])->save();
-
-            Log::warning("CascadeModulePrdJob: scaffold incompleto para '{$this->module->project->name}'. Cascata pausada.", [
-                'module' => $this->module->name,
-                'missing' => $missingScaffold,
-            ]);
-
             SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
 
             return;

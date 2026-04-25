@@ -36,6 +36,11 @@ class ScaffoldProjectJob implements ShouldQueue
 
         Log::info("ScaffoldProjectJob: Iniciando scaffold do projeto '{$name}'");
 
+        $this->project->forceFill([
+            'local_path' => $projectPath,
+            'status' => ProjectStatus::Scaffolding,
+        ])->save();
+
         $standardModules->syncProject($this->project);
 
         $result = Process::timeout(600)->run(
@@ -65,7 +70,9 @@ class ScaffoldProjectJob implements ShouldQueue
                 'status' => ProjectStatus::Active,
             ]);
 
-            SyncProjectRepositoryJob::dispatch($this->project->fresh());
+            $project = $this->project->fresh();
+
+            SyncProjectRepositoryJob::dispatch($project);
 
             Log::info("ScaffoldProjectJob: Projeto '{$name}' criado com sucesso");
         } else {

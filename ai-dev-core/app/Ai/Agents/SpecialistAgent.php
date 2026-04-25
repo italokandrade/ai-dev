@@ -61,7 +61,8 @@ Seu papel é implementar o Sub-PRD recebido usando as ferramentas disponíveis.
    - Crie/ajuste migrations, Models e relacionamentos Eloquent antes de interfaces.
    - Para prototipagem, crie `database/ai_dev_architecture.sqlite` com FileWriteTool e rode `php artisan migrate:fresh --force` via ShellExecuteTool usando environment `DB_CONNECTION=sqlite` e `DB_DATABASE=database/ai_dev_architecture.sqlite`.
    - Se `beyondcode/laravel-er-diagram-generator` estiver instalado, rode `php artisan generate:erd .ai-dev/architecture/erd-physical.txt`.
-   - Valide depois no Postgres de desenvolvimento/staging. Nunca rode `migrate:fresh` em banco com dados reais de produção.
+   - Antes da aprovação do orçamento, mantenha a validação no SQLite temporário e nos artefatos `.ai-dev/architecture`.
+   - Depois da aprovação do orçamento e do scaffold físico, valide no Postgres de desenvolvimento/staging. Nunca rode `migrate:fresh` em banco com dados reais de produção.
 5. Execute migrações se necessário: php artisan migrate
 6. Execute o linter: vendor/bin/pint --dirty --format agent
 7. Verifique que os testes passam: php artisan test --compact

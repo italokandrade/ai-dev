@@ -99,6 +99,6 @@ O scaffold tambem instala e configura a base que os agentes de desenvolvimento u
 
 Cada Projeto Alvo tem seu proprio Boost MCP. Os agentes do `ai-dev-core` sempre consultam o Boost do projeto correto via `projects.local_path`, da mesma forma que cada projeto possui seu proprio repositorio GitHub registrado em `projects.github_repo`.
 
-Antes de aprovar Blueprint, criar modulos ou iniciar a cascata, o ai-dev-core valida se o scaffold do alvo existe e contem `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`. Se faltar algum arquivo, o projeto fica como `scaffold_failed` e nao gera modulos/tasks ate o scaffold ser corrigido.
+Antes da aprovacao do orcamento, Chatbox e Seguranca existem apenas como modulos padrao de planejamento no ai-dev-core e como documentacao em `.ai-dev`; o Projeto Alvo ainda nao recebe arquivos fisicos desses blocos. A aprovacao do orcamento dispara o `ScaffoldProjectJob`, que executa o instalador, copia os arquivos padrao, provisiona AI SDK/MCP/Boost e valida `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`. Se faltar algum arquivo apos o scaffold, o projeto fica como `scaffold_failed`.
 
 Os agentes de desenvolvimento devem tratar esses blocos como base preexistente do Projeto Alvo. Alteracoes estruturais nesses blocos devem ser feitas primeiro no `ai-dev-core` e depois replicadas pelo scaffold padrao.

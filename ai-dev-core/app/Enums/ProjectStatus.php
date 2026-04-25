@@ -10,6 +10,7 @@ enum ProjectStatus: string implements HasColor, HasIcon, HasLabel
 {
     case Active = 'active';
     case Paused = 'paused';
+    case Scaffolding = 'scaffolding';
     case ScaffoldFailed = 'scaffold_failed';
     case Archived = 'archived';
 
@@ -18,6 +19,7 @@ enum ProjectStatus: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::Active => 'Ativo',
             self::Paused => 'Pausado',
+            self::Scaffolding => 'Instalando scaffold',
             self::ScaffoldFailed => 'Scaffold incompleto',
             self::Archived => 'Arquivado',
         };
@@ -28,6 +30,7 @@ enum ProjectStatus: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::Active => 'primary',
             self::Paused => 'gray',
+            self::Scaffolding => 'warning',
             self::ScaffoldFailed => 'danger',
             self::Archived => 'gray',
         };
@@ -38,6 +41,7 @@ enum ProjectStatus: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::Active => 'heroicon-o-bolt',
             self::Paused => 'heroicon-o-pause-circle',
+            self::Scaffolding => 'heroicon-o-wrench-screwdriver',
             self::ScaffoldFailed => 'heroicon-o-exclamation-triangle',
             self::Archived => 'heroicon-o-archive-box',
         };

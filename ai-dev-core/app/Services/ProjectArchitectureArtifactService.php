@@ -201,8 +201,8 @@ Antes de implementar Filament Resources, Livewire, Controllers, APIs ou Views, v
 3. Para prototipagem, use SQLite em arquivo local `database/ai_dev_architecture.sqlite` com `DB_CONNECTION=sqlite` e `DB_DATABASE=database/ai_dev_architecture.sqlite`.
 4. Execute as migrations nesse SQLite temporario e corrija falhas de FK, nomes, nulabilidade e ordem de criacao.
 5. Gere ou atualize o ERD fisico com `php artisan generate:erd .ai-dev/architecture/erd-physical.txt` quando o pacote estiver instalado. Se GraphViz estiver disponivel, gere tambem `.svg`.
-6. Compare o ERD fisico, o schema real via Boost `database-schema` e o Mermaid oficial. Tabelas isoladas so sao permitidas quando explicitamente justificadas no PRD.
-7. Valide no Postgres de desenvolvimento/staging do Projeto Alvo antes de liberar tarefas de UI. Nao rode `migrate:fresh` em banco com dados reais de producao.
+6. Antes da aprovacao do orcamento, compare o ERD fisico gerado a partir do SQLite temporario com o Mermaid oficial. Tabelas isoladas so sao permitidas quando explicitamente justificadas no PRD.
+7. Depois da aprovacao do orcamento e do scaffold fisico, confira o schema real via Boost `database-schema` e valide no Postgres de desenvolvimento/staging do Projeto Alvo antes de liberar tarefas de UI. Nao rode `migrate:fresh` em banco com dados reais de producao.
 8. Atualize `.ai-dev/architecture/domain-model.*` quando houver mudanca de dominio aprovada.
 
 ## Criterio de saida

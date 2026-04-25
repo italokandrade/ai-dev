@@ -50,7 +50,7 @@ Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança`
 
 **Passo a passo:**
 
-1. **Criar Projeto** — preencha `name`, `github_repo`, `local_path`, `db_password`. Ao salvar, o sistema registra os módulos padrão Chatbox/Segurança e inicia o scaffold pelo `instalar_projeto.sh`. Se `github_repo` estiver preenchido, o sistema configura o `origin` do Projeto Alvo, exporta os PRDs/artefatos para `.ai-dev/` na raiz do repositório desse projeto e faz commit/push dessa sincronização.
+1. **Criar Projeto** — preencha `name`, `github_repo` e `local_path`. Ao salvar, o sistema registra os módulos padrão Chatbox/Segurança no planejamento e sincroniza somente documentação inicial em `.ai-dev/`. Se `github_repo` estiver preenchido, o sistema configura o `origin` do Projeto Alvo, exporta os PRDs/artefatos para `.ai-dev/` na raiz do repositório desse projeto e faz commit/push dessa sincronização. O scaffold Laravel/TALL ainda não é executado.
 2. **Descrever o Projeto** — na aba "Descrição do Projeto", escreva livremente o que o sistema deve fazer. Use "Refinar com IA" se quiser melhorar o texto.
 3. **Gerar PRD do Projeto** — na página de visualização do projeto, clique no botão **"Gerar PRD do Projeto"** (header da página). O `ProjectPrdAgent` analisa a descrição + funcionalidades e gera o PRD Master com os módulos de alto nível. O PRD também pode ser gerado via a aba "PRD do Projeto" no formulário de edição. **Isso pode levar alguns minutos.**
 4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"Aprovar PRD — Gerar Blueprint"**. O sistema aprova o PRD e dispara a geração do Blueprint em background.
@@ -58,9 +58,9 @@ Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança`
 6. **Aprovar Blueprint** — clique em **"Aprovar Blueprint — Criar Módulos"**. Só aqui os módulos raiz são criados no banco do ai-dev-core.
 7. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
 
-> PRD e Blueprint podem ser gerados antes do scaffold físico. A aprovação do Blueprint, a criação de módulos e a cascata de PRDs exigem scaffold completo do Projeto Alvo (`artisan`, `composer.json`, `.mcp.json`, `config/ai.php`, `config/mcp.php`). Se a validação falhar, o projeto fica com status `scaffold_failed`.
+> PRD, Blueprint, módulos, cascata de PRDs e tasks são etapas de planejamento e podem ser gerados antes do scaffold físico. Antes do orçamento aprovado, o repositório do alvo recebe apenas documentação `.ai-dev` e a validação de arquitetura de dados conversa com SQLite temporário.
 
-> No scaffold, o instalador copia do `ai-dev-core` os arquivos de Chatbox, usuários, perfis, permissões e logs, roda as migrations desses blocos no banco do Projeto Alvo e atribui o usuário inicial ao perfil `super_admin`. Ele também instala Laravel AI SDK, Laravel MCP e Laravel Boost, publica `config/ai.php`/`config/mcp.php`, cria a `.mcp.json` individual do alvo e deixa o Boost daquele projeto pronto para os agentes do ai-dev-core.
+> A aprovação do orçamento é o gatilho do scaffold. Nesse ponto, o instalador copia do `ai-dev-core` os arquivos de Chatbox, usuários, perfis, permissões e logs, roda as migrations desses blocos no banco do Projeto Alvo e atribui o usuário inicial ao perfil `super_admin`. Ele também instala Laravel AI SDK, Laravel MCP e Laravel Boost, publica `config/ai.php`/`config/mcp.php`, cria a `.mcp.json` individual do alvo e deixa o Boost daquele projeto pronto para os agentes do ai-dev-core.
 
 - **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama.
 - **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
@@ -93,7 +93,7 @@ Antes de interfaces Filament, Livewire, Controllers, APIs ou Views, o Projeto Al
 - migrations, Models e relacionamentos Eloquent primeiro;
 - SQLite temporário em `database/ai_dev_architecture.sqlite` para prototipagem rápida;
 - ERD/Mermaid em `.ai-dev/architecture/`;
-- validação final no Postgres de desenvolvimento/staging do alvo;
+- validação final no Postgres de desenvolvimento/staging do alvo somente depois da aprovação do orçamento e do scaffold físico;
 - nenhuma execução de `migrate:fresh` em banco com dados reais de produção.
 
 ### 2.3 Dependências Estritamente Consolidadas

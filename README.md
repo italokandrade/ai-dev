@@ -130,9 +130,9 @@ O sistema adota **granularidade progressiva**:
 5. **Folha** (módulo ou submódulo sem filhos) → recebe **tasks** geradas a partir do PRD técnico; se houver schema de dados, a primeira task é o checkpoint de arquitetura
 6. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
 
-> **Regra:** tasks são criadas apenas nos nós folha. PRD e Blueprint podem ser gerados antes do scaffold físico, mas aprovar o Blueprint, criar módulos e iniciar a cascata exigem que o Projeto Alvo tenha scaffold completo: `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`.
+> **Regra:** tasks são criadas apenas nos nós folha. PRD, Blueprint, módulos, cascata e tasks são planejamento/documentação e podem existir antes do scaffold físico. Até o orçamento ser aprovado, o sistema sincroniza somente artefatos `.ai-dev` no repositório do Projeto Alvo e checkpoints de dados usam SQLite temporário. A instalação Laravel/TALL completa começa somente após aprovação do orçamento.
 
-> **Core padrão obrigatório:** todo projeto novo recebe automaticamente `Chatbox` e o bloco `Segurança` com `Usuários`, `Perfis de Usuários` e `Logs de Atividades`. Esses módulos são anexados em `projects.prd_payload.standard_modules`, criados em `project_modules` como concluídos e copiados pelo `instalar_projeto.sh`; não entram em `projects.prd_payload.modules`, que fica reservado aos módulos de negócio.
+> **Core padrão obrigatório:** todo projeto novo recebe automaticamente `Chatbox` e o bloco `Segurança` com `Usuários`, `Perfis de Usuários` e `Logs de Atividades` no planejamento do ai-dev-core. Esses módulos são anexados em `projects.prd_payload.standard_modules` e criados em `project_modules` como concluídos; os arquivos físicos são copiados pelo `instalar_projeto.sh` somente quando o orçamento aprovado dispara o scaffold.
 
 **Tabelas implementadas (Fase 1 — operacionais):**
 
@@ -234,11 +234,11 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 - PostgreSQL 16 + Redis 7 + Laravel Horizon v5
 - BoostTool project-path-aware via `boost:execute-tool` no path do alvo, com `database-query` estruturado por schema real, redação de campos sensíveis e cap de saída
 - Cascata de PRDs protegida por guardrails configuráveis em `config/ai_dev.php`: por padrão suporta projetos grandes (200 módulos raiz, 1000 módulos totais, 3 níveis de submódulos, 30 submódulos por módulo e 30 tasks por folha), e cada teto pode ser removido com valor `0` quando a operação exigir planejamento sem cap rígido
-- Core padrão por projeto: `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos e o `instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o Projeto Alvo
-- Scaffold dos alvos já provisiona Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, `.mcp.json` individual e migrations do SDK; os agentes consultam o Boost do alvo via `projects.local_path`
+- Core padrão por projeto: `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos no planejamento, e o `instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o Projeto Alvo somente após aprovação do orçamento
+- Scaffold dos alvos, disparado após orçamento aprovado, provisiona Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, `.mcp.json` individual e migrations do SDK; os agentes consultam o Boost do alvo via `projects.local_path`
 - Blueprint Técnico Progressivo entre PRD Master e módulos: MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface; PRDs de módulo enriquecem esse desenho com campos e relacionamentos
 - MER versionável em `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json`; esses artefatos são gerados a partir do Blueprint e servem de mapa físico/visual para agentes e humanos
-- Checkpoint de arquitetura de dados antes de UI/API: migrations, Models e relacionamentos são validados primeiro em SQLite temporário de arquivo local e depois no Postgres de desenvolvimento/staging do Projeto Alvo
+- Checkpoint de arquitetura de dados antes de UI/API: migrations, Models e relacionamentos são validados primeiro em SQLite temporário de arquivo local; Postgres de desenvolvimento/staging entra só depois da aprovação do orçamento e do scaffold físico do Projeto Alvo
 
 ### Fase 2: Qualidade, Segurança e UI — prioridades atualizadas
 - **[Alta — segurança]** Conexão `readonly` por Projeto Alvo para `BoostTool.database-query` em produção — o wrapper já valida tabela/coluna/operador contra o schema real do alvo e redige campos sensíveis; falta provisionar credenciais read-only em cada alvo

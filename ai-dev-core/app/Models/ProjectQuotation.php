@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\ProjectStatus;
+use App\Jobs\ScaffoldProjectJob;
+use App\Jobs\SyncProjectRepositoryJob;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
-use Spatie\Activitylog\Traits\LogsActivity;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class ProjectQuotation extends Model
 {
@@ -66,41 +69,41 @@ class ProjectQuotation extends Model
     ];
 
     protected $casts = [
-        'required_areas'       => 'array',
-        'complexity_level'     => 'integer',
-        'urgency_level'        => 'integer',
-        'delivery_days'        => 'integer',
-        'backend_hours'        => 'integer',
-        'frontend_hours'       => 'integer',
-        'mobile_hours'         => 'integer',
-        'database_hours'       => 'integer',
-        'devops_hours'         => 'integer',
-        'design_hours'         => 'integer',
-        'testing_hours'        => 'integer',
-        'security_hours'       => 'integer',
-        'pm_hours'             => 'integer',
-        'team_size'            => 'integer',
-        'hourly_rate_backend'  => 'decimal:2',
+        'required_areas' => 'array',
+        'complexity_level' => 'integer',
+        'urgency_level' => 'integer',
+        'delivery_days' => 'integer',
+        'backend_hours' => 'integer',
+        'frontend_hours' => 'integer',
+        'mobile_hours' => 'integer',
+        'database_hours' => 'integer',
+        'devops_hours' => 'integer',
+        'design_hours' => 'integer',
+        'testing_hours' => 'integer',
+        'security_hours' => 'integer',
+        'pm_hours' => 'integer',
+        'team_size' => 'integer',
+        'hourly_rate_backend' => 'decimal:2',
         'hourly_rate_frontend' => 'decimal:2',
-        'hourly_rate_mobile'   => 'decimal:2',
+        'hourly_rate_mobile' => 'decimal:2',
         'hourly_rate_database' => 'decimal:2',
-        'hourly_rate_devops'   => 'decimal:2',
-        'hourly_rate_design'   => 'decimal:2',
-        'hourly_rate_testing'  => 'decimal:2',
+        'hourly_rate_devops' => 'decimal:2',
+        'hourly_rate_design' => 'decimal:2',
+        'hourly_rate_testing' => 'decimal:2',
         'hourly_rate_security' => 'decimal:2',
-        'hourly_rate_pm'       => 'decimal:2',
-        'urgency_multiplier'   => 'decimal:2',
-        'complexity_multiplier'=> 'decimal:2',
-        'total_human_hours'    => 'decimal:2',
-        'total_human_cost'     => 'decimal:2',
-        'ai_dev_cost'          => 'decimal:2',
-        'savings_amount'       => 'decimal:2',
-        'savings_percentage'   => 'decimal:2',
-        'ai_dev_price'         => 'decimal:2',
-        'actual_token_cost_usd'=> 'decimal:6',
-        'actual_infra_cost'    => 'decimal:2',
-        'sent_at'              => 'datetime',
-        'approved_at'          => 'datetime',
+        'hourly_rate_pm' => 'decimal:2',
+        'urgency_multiplier' => 'decimal:2',
+        'complexity_multiplier' => 'decimal:2',
+        'total_human_hours' => 'decimal:2',
+        'total_human_cost' => 'decimal:2',
+        'ai_dev_cost' => 'decimal:2',
+        'savings_amount' => 'decimal:2',
+        'savings_percentage' => 'decimal:2',
+        'ai_dev_price' => 'decimal:2',
+        'actual_token_cost_usd' => 'decimal:6',
+        'actual_infra_cost' => 'decimal:2',
+        'sent_at' => 'datetime',
+        'approved_at' => 'datetime',
     ];
 
     // Multiplicadores de urgência
@@ -143,12 +146,12 @@ class ProjectQuotation extends Model
     ];
 
     public const STATUS_LABELS = [
-        'draft'       => 'Rascunho',
-        'sent'        => 'Enviado',
-        'approved'    => 'Aprovado',
-        'rejected'    => 'Rejeitado',
+        'draft' => 'Rascunho',
+        'sent' => 'Enviado',
+        'approved' => 'Aprovado',
+        'rejected' => 'Rejeitado',
         'in_progress' => 'Em Execução',
-        'completed'   => 'Concluído',
+        'completed' => 'Concluído',
     ];
 
     public function project(): BelongsTo
@@ -156,51 +159,77 @@ class ProjectQuotation extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function approveAndStartScaffold(): void
+    {
+        $this->update([
+            'status' => 'approved',
+            'approved_at' => now(),
+        ]);
+
+        $project = $this->project?->fresh();
+
+        if (! $project) {
+            return;
+        }
+
+        if ($project->isTargetScaffoldReady()) {
+            SyncProjectRepositoryJob::dispatch($project);
+
+            return;
+        }
+
+        if ($project->status === ProjectStatus::Scaffolding) {
+            return;
+        }
+
+        ScaffoldProjectJob::dispatch($project, Str::random(32));
+    }
+
     /**
      * Recalcula todos os valores do orçamento.
      */
     public function recalculate(): void
     {
-        $urgency     = (int) $this->urgency_level;
-        $complexity  = (int) $this->complexity_level;
+        $urgency = (int) $this->urgency_level;
+        $complexity = (int) $this->complexity_level;
 
-        $this->urgency_multiplier    = self::URGENCY_MULTIPLIERS[$urgency] ?? 1.00;
+        $this->urgency_multiplier = self::URGENCY_MULTIPLIERS[$urgency] ?? 1.00;
         $this->complexity_multiplier = self::COMPLEXITY_MULTIPLIERS[$complexity] ?? 1.00;
-        $this->team_size             = self::URGENCY_TEAM_SIZES[$urgency] ?? 1;
+        $this->team_size = self::URGENCY_TEAM_SIZES[$urgency] ?? 1;
 
         $areas = [
-            'backend'  => [$this->backend_hours,  $this->hourly_rate_backend],
+            'backend' => [$this->backend_hours,  $this->hourly_rate_backend],
             'frontend' => [$this->frontend_hours, $this->hourly_rate_frontend],
-            'mobile'   => [$this->mobile_hours,   $this->hourly_rate_mobile],
+            'mobile' => [$this->mobile_hours,   $this->hourly_rate_mobile],
             'database' => [$this->database_hours, $this->hourly_rate_database],
-            'devops'   => [$this->devops_hours,   $this->hourly_rate_devops],
-            'design'   => [$this->design_hours,   $this->hourly_rate_design],
-            'testing'  => [$this->testing_hours,  $this->hourly_rate_testing],
+            'devops' => [$this->devops_hours,   $this->hourly_rate_devops],
+            'design' => [$this->design_hours,   $this->hourly_rate_design],
+            'testing' => [$this->testing_hours,  $this->hourly_rate_testing],
             'security' => [$this->security_hours, $this->hourly_rate_security],
-            'pm'       => [$this->pm_hours,       $this->hourly_rate_pm],
+            'pm' => [$this->pm_hours,       $this->hourly_rate_pm],
         ];
 
         $totalHours = 0;
-        $totalCost  = 0;
+        $totalCost = 0;
 
         foreach ($areas as [$hours, $rate]) {
             $totalHours += $hours;
-            $totalCost  += $hours * $rate;
+            $totalCost += $hours * $rate;
         }
 
         // Aplica multiplicadores
         $totalCost *= $this->urgency_multiplier * $this->complexity_multiplier;
 
         $this->total_human_hours = $totalHours;
-        $this->total_human_cost  = round($totalCost, 2);
+        $this->total_human_cost = round($totalCost, 2);
 
         // Custo AI-Dev: token cost em BRL (USD * 5.8) + infra
         $usdToBrl = 5.80;
         $this->ai_dev_cost = round(($this->actual_token_cost_usd * $usdToBrl) + $this->actual_infra_cost, 2);
 
         // Preço sugerido AI-Dev: 15% do custo humano (mínimo R$500)
-        $this->ai_dev_price     = max(500.00, round($this->total_human_cost * 0.15, 2));
-        $this->savings_amount   = round($this->total_human_cost - $this->ai_dev_price, 2);
+        $this->ai_dev_price = max(500.00, round($this->total_human_cost * 0.15, 2));
+        $this->savings_amount = round($this->total_human_cost - $this->ai_dev_price, 2);
         $this->savings_percentage = $this->total_human_cost > 0
             ? round(($this->savings_amount / $this->total_human_cost) * 100, 2)
             : 0;
@@ -222,6 +251,7 @@ class ProjectQuotation extends Model
     public function professionalCount(): int
     {
         $activeAreas = collect($this->required_areas ?? [])->filter()->count();
+
         return max(1, $activeAreas) * ($this->team_size ?? 1);
     }
 

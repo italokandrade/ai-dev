@@ -289,7 +289,7 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_paylo
 
 **Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
 1. Acionado pelo botão "Auto Aprovar Blueprint — Cascata Completa" em `ViewProject`
-2. Aprova o Blueprint, cria módulos raiz e despacha `CascadeModulePrdJob` para cada um
+2. Aprova o Blueprint, cria módulos raiz de planejamento e despacha `CascadeModulePrdJob` para cada um, sem instalar o Projeto Alvo
 3. Cada job gera o PRD técnico via `ModulePrdAgent`, incorpora a contribuição ao Blueprint, auto-aprova e:
    - Se `needs_submodules: true` → cria submódulos e despacha o job para cada filho
    - Se `needs_submodules: false` → cria tasks (`status: pending`) — **nunca executadas automaticamente**; quando há `database_schema`, a primeira task valida a arquitetura de dados
@@ -449,11 +449,11 @@ Cada registro é um exemplo de código perfeito que os agentes DEVEM seguir ao g
 
 ### 2.2. Core Padrao dos Projetos Alvo
 
-De acordo com o `STANDARD_MODULES.md`, todo Projeto Alvo nasce com `Chatbox` e `Segurança`. O `StandardProjectModuleService` registra esses módulos no banco do ai-dev-core como concluídos, e o `/var/www/html/projetos/ai-dev/instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o projeto criado e roda as migrations no banco do alvo.
+De acordo com o `STANDARD_MODULES.md`, todo Projeto Alvo nasce no planejamento com `Chatbox` e `Segurança`. O `StandardProjectModuleService` registra esses módulos no banco do ai-dev-core como concluídos. O `/var/www/html/projetos/ai-dev/instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o projeto criado e roda as migrations no banco do alvo somente depois que o orçamento é aprovado.
 
 O mesmo scaffold provisiona o runtime individual do alvo para os agentes: Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, migrations do SDK e `.mcp.json` apontando para `php artisan boost:mcp`. O `BoostTool` sempre executa `boost:execute-tool` dentro de `projects.local_path`, portanto cada projeto fornece seu proprio MCP e contexto, assim como fornece seu proprio `github_repo`.
 
-Antes de aprovar Blueprint, criar módulos ou iniciar cascata, o ai-dev-core valida se o alvo possui `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`. Falhas marcam o projeto como `scaffold_failed` e interrompem a geração de módulos/tasks até o scaffold ser corrigido.
+Antes do orçamento aprovado, o ai-dev-core não exige scaffold físico para aprovar Blueprint, criar módulos, iniciar cascata ou gerar tasks. O repositório do alvo recebe apenas `.ai-dev/` e o checkpoint de arquitetura usa SQLite temporário. Depois da aprovação do orçamento, o `ScaffoldProjectJob` valida se o alvo possui `artisan`, `composer.json`, `.mcp.json`, `config/ai.php` e `config/mcp.php`; falhas marcam o projeto como `scaffold_failed` e impedem execução de implementação até o scaffold ser corrigido.
 
 Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` prepara o Git do Projeto Alvo: inicializa `.git` se necessário, configura `origin` com o repositório cadastrado, define identidade local do agente e mantém `.ai-dev/` sincronizado na raiz do repositório daquele alvo (`PROJECT.md`, PRD Master, Blueprint Técnico, módulos, tasks e subtasks). Essa sincronização faz commit e push no repositório do alvo; commits de implementação aprovados pelo `QAAuditJob` também são enviados ao mesmo `origin`. Os comandos Git são executados com `safe.directory` específico do alvo para permitir repositórios com ownership diferente do processo do ai-dev-core.
 
@@ -466,7 +466,7 @@ O MER não fica apenas virtual. O Blueprint progressivo continua sendo a intenç
 - `domain-model.json` — payload normalizado do domínio.
 - `checkpoint-protocol.md` — rotina obrigatória antes de interfaces, APIs ou fluxos.
 
-Quando um módulo folha possui `database_schema.tables` ou `blueprint_contribution.domain_model`, o `ModuleTaskPlannerService` cria uma task `architecture` antes das tasks de componente/API/teste. Essa task deve criar ou ajustar migrations, Models e relacionamentos Eloquent, validar as migrations em SQLite temporário (`database/ai_dev_architecture.sqlite`), gerar/conferir ERD físico quando `beyondcode/laravel-er-diagram-generator` estiver instalado e validar o resultado no Postgres de desenvolvimento/staging. Tarefas de Filament, Livewire, Controllers, APIs ou Views recebem no PRD a obrigação de confirmar esse checkpoint antes de implementar.
+Quando um módulo folha possui `database_schema.tables` ou `blueprint_contribution.domain_model`, o `ModuleTaskPlannerService` cria uma task `architecture` antes das tasks de componente/API/teste. Essa task deve criar ou ajustar migrations, Models e relacionamentos Eloquent, validar as migrations em SQLite temporário (`database/ai_dev_architecture.sqlite`) e gerar/conferir ERD físico quando `beyondcode/laravel-er-diagram-generator` estiver instalado. A validação em Postgres de desenvolvimento/staging ocorre somente depois da aprovação do orçamento e do scaffold físico. Tarefas de Filament, Livewire, Controllers, APIs ou Views recebem no PRD a obrigação de confirmar esse checkpoint antes de implementar.
 
 No PRD, esses blocos ficam em `projects.prd_payload.standard_modules`; `projects.prd_payload.modules` continua reservado para módulos de negócio gerados pela IA.
 

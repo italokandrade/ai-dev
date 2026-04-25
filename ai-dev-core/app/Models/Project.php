@@ -296,8 +296,6 @@ class Project extends Model implements Conversational
             throw new \RuntimeException('O Blueprint Técnico precisa estar pronto antes da criação dos módulos.');
         }
 
-        $this->assertTargetScaffoldReady('aprovar o Blueprint');
-
         $this->update(['blueprint_approved_at' => now()]);
     }
 
@@ -307,8 +305,6 @@ class Project extends Model implements Conversational
      */
     public function createModulesFromPrd(): void
     {
-        $this->assertTargetScaffoldReady('criar módulos do projeto');
-
         $standardModules = app(StandardProjectModuleService::class);
         $standardModules->syncProject($this);
 

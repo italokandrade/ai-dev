@@ -1,9 +1,12 @@
 <?php
 
+use App\Jobs\ScaffoldProjectJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
+use App\Models\ProjectQuotation;
 use App\Models\ProjectSpecification;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 function projectTestCreateReadyScaffold(): string
@@ -244,7 +247,7 @@ test('project marks blueprint generation as active without changing approved prd
         ->and($project->prd_approved_at->toISOString())->toBe($approvedAt->toISOString());
 });
 
-test('project requires complete target scaffold before blueprint approval', function () {
+test('project can approve planning blueprint before target scaffold is installed', function () {
     $path = storage_path('framework/testing/incomplete-target-scaffold-'.Str::uuid());
     File::ensureDirectoryExists($path);
 
@@ -252,6 +255,11 @@ test('project requires complete target scaffold before blueprint approval', func
         'name' => 'test-incomplete-scaffold',
         'status' => 'active',
         'local_path' => $path,
+        'prd_payload' => [
+            'modules' => [
+                ['name' => 'Landing Page', 'description' => 'Página inicial'],
+            ],
+        ],
         'blueprint_payload' => [
             'domain_model' => [
                 'entities' => [
@@ -263,10 +271,46 @@ test('project requires complete target scaffold before blueprint approval', func
 
     try {
         expect($project->isTargetScaffoldReady())->toBeFalse()
-            ->and($project->targetScaffoldMissingReasons())->not->toBeEmpty()
-            ->and(fn () => $project->approveBlueprint())
-            ->toThrow(RuntimeException::class, 'scaffold do projeto alvo incompleto');
+            ->and($project->targetScaffoldMissingReasons())->not->toBeEmpty();
+
+        $project->approveBlueprint();
+        $project->createModulesFromPrd();
+
+        expect($project->fresh()->blueprint_approved_at)->not->toBeNull()
+            ->and($project->modules()->where('name', 'Landing Page')->exists())->toBeTrue()
+            ->and($project->modules()->where('name', 'Chatbox')->exists())->toBeTrue()
+            ->and($project->modules()->where('name', 'Segurança')->exists())->toBeTrue();
     } finally {
         File::deleteDirectory($path);
     }
+});
+
+test('quotation approval dispatches target scaffold installation', function () {
+    Queue::fake([
+        ScaffoldProjectJob::class,
+    ]);
+
+    $project = Project::create([
+        'name' => 'test-quotation-scaffold',
+        'status' => 'active',
+        'local_path' => storage_path('framework/testing/missing-target-scaffold-'.Str::uuid()),
+    ]);
+
+    $quotation = ProjectQuotation::create([
+        'project_id' => $project->id,
+        'client_name' => 'Cliente Teste',
+        'project_name' => $project->name,
+        'project_description' => 'Projeto em planejamento',
+        'status' => 'sent',
+    ]);
+
+    $quotation->approveAndStartScaffold();
+
+    expect($quotation->fresh()->status)->toBe('approved')
+        ->and($quotation->fresh()->approved_at)->not->toBeNull();
+
+    Queue::assertPushed(
+        ScaffoldProjectJob::class,
+        fn (ScaffoldProjectJob $job): bool => $job->project->id === $project->id && $job->dbPassword !== ''
+    );
 });

@@ -4,7 +4,7 @@ namespace App\Filament\Resources\ProjectResource\Pages;
 
 use App\Filament\Resources\ProjectResource;
 use App\Jobs\GenerateProjectSpecificationJob;
-use App\Jobs\ScaffoldProjectJob;
+use App\Jobs\SyncProjectRepositoryJob;
 use App\Models\ProjectSpecification;
 use App\Services\StandardProjectModuleService;
 use Filament\Notifications\Notification;
@@ -16,11 +16,6 @@ class CreateProject extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // Guardar a senha e remover do data (a descrição agora fica no Projeto)
-        $this->dbPassword = $data['db_password'] ?? '';
-
-        unset($data['db_password']);
-
         $data['local_path'] = '/var/www/html/projetos/'.$data['name'];
 
         return $data;
@@ -42,16 +37,14 @@ class CreateProject extends CreateRecord
         // 2. Disparar geração da especificação técnica pela IA
         GenerateProjectSpecificationJob::dispatch($specification);
 
-        // 3. Disparar scaffold do projeto (instalar_projeto.sh)
-        ScaffoldProjectJob::dispatch($project, $this->dbPassword);
+        // 3. Sincronizar somente documentação inicial no repositório do alvo.
+        SyncProjectRepositoryJob::dispatch($project->fresh());
 
         Notification::make()
             ->title('Projeto criado com sucesso!')
-            ->body("O scaffold do projeto '{$project->name}' foi iniciado em background. A IA está gerando a especificação técnica e os módulos.")
+            ->body("A documentação inicial do projeto '{$project->name}' será sincronizada. A instalação TALL completa só começa após aprovação do orçamento.")
             ->success()
             ->persistent()
             ->send();
     }
-
-    private string $dbPassword = '';
 }

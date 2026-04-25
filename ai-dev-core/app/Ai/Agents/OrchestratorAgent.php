@@ -37,7 +37,7 @@ Receber o PRD de uma task e decompô-lo em Sub-PRDs independentes e executáveis
 4. Atribua o agente mais adequado: "backend-specialist", "frontend-specialist", "fullstack-specialist", "devops-specialist"
 5. Liste os arquivos que serão modificados em `files` para controle de concorrência
 6. Sub-PRDs independentes podem ser executados em paralelo (mesmo execution_order)
-7. Se o PRD tiver `architecture_checkpoint.required=true` ou tocar banco/Model/API/Filament, crie primeiro uma Sub-PRD de arquitetura de dados para validar migrations, Models, relacionamentos Eloquent, SQLite temporário, ERD/Mermaid e Postgres de desenvolvimento.
+7. Se o PRD tiver `architecture_checkpoint.required=true` ou tocar banco/Model/API/Filament, crie primeiro uma Sub-PRD de arquitetura de dados para validar migrations, Models, relacionamentos Eloquent, SQLite temporário e ERD/Mermaid; Postgres só deve ser usado depois da aprovação do orçamento e do scaffold físico do Projeto Alvo.
 8. Sub-PRDs de Filament, Livewire, Controllers, APIs ou Views devem depender da Sub-PRD de arquitetura quando o checkpoint for obrigatório.
 9. O checkpoint deve produzir ou conferir `.ai-dev/architecture/domain-model.*` e, quando o pacote estiver instalado, `.ai-dev/architecture/erd-physical.txt`.
 

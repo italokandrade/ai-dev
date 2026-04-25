@@ -109,7 +109,7 @@ class StandardProjectModuleService
 MÓDULOS PADRÃO JÁ EXISTENTES:
 {$modules}
 
-Regra: não inclua Chatbox nem Segurança nos módulos de negócio do PRD. Eles serão anexados automaticamente ao PRD em `standard_modules`, criados no banco como módulos concluídos e copiados fisicamente para o projeto alvo durante o scaffold.
+Regra: não inclua Chatbox nem Segurança nos módulos de negócio do PRD. Eles serão anexados automaticamente ao PRD em `standard_modules`, criados no banco como módulos concluídos e copiados fisicamente para o projeto alvo durante o scaffold disparado após a aprovação do orçamento.
 TEXT;
     }
 
@@ -276,7 +276,7 @@ TEXT;
         return [
             'title' => $definition['name'].' — PRD Técnico Padrão',
             'objective' => $definition['description'],
-            'scope' => 'Módulo padrão herdado do ai-dev-core. Não deve gerar tasks de implementação em projetos novos, pois seus arquivos são copiados durante o scaffold.',
+            'scope' => 'Módulo padrão herdado do ai-dev-core. Não deve gerar tasks de implementação em projetos novos, pois seus arquivos são copiados durante o scaffold disparado após a aprovação do orçamento.',
             'source' => self::SOURCE,
             'standard_module' => true,
             'needs_submodules' => (bool) ($definition['needs_submodules'] ?? false),

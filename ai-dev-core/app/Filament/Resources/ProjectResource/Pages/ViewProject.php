@@ -7,10 +7,9 @@ use App\Filament\Components\NavigationTree;
 use App\Filament\Components\PrdRenderer;
 use App\Filament\Resources\ProjectModuleResource;
 use App\Filament\Resources\ProjectResource;
-use App\Jobs\CascadeModulePrdJob;
+use App\Jobs\ApproveProjectBlueprintJob;
 use App\Jobs\GenerateProjectBlueprintJob;
 use App\Jobs\GenerateProjectPrdJob;
-use App\Jobs\SyncProjectRepositoryJob;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -153,21 +152,18 @@ class ViewProject extends ViewRecord
                 ->color('success')
                 ->requiresConfirmation()
                 ->modalHeading('Aprovar Blueprint e Criar Módulos')
-                ->modalDescription('Os módulos raiz serão criados a partir do PRD aprovado. A partir daqui, cada PRD de módulo evolui o Blueprint com campos, relacionamentos, workflows e componentes.')
+                ->modalDescription('Esta etapa aprova o desenho técnico, cria os módulos no ai-dev-core e sincroniza apenas documentação em .ai-dev no repositório do Projeto Alvo. A instalação TALL completa só acontece após a aprovação do orçamento.')
                 ->modalSubmitActionLabel('Aprovar e Criar')
                 ->action(function () {
-                    try {
-                        $this->record->approveBlueprint();
-                        $this->record->createModulesFromPrd();
-                        SyncProjectRepositoryJob::dispatch($this->record->fresh());
-                        Notification::make()
-                            ->title('Blueprint aprovado — Módulos criados!')
-                            ->success()
-                            ->send();
-                        $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
-                    } catch (\Exception $e) {
-                        Notification::make()->title('Erro')->body($e->getMessage())->danger()->send();
-                    }
+                    ApproveProjectBlueprintJob::dispatch($this->record->fresh());
+
+                    Notification::make()
+                        ->title('Aprovação do Blueprint iniciada')
+                        ->body('O sistema criará os módulos de planejamento e sincronizará a documentação do projeto.')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
                 })
                 ->visible(fn () => $this->record->isPrdApproved()
                     && ! $this->record->isBlueprintApproved()
@@ -180,33 +176,18 @@ class ViewProject extends ViewRecord
                 ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Auto Aprovação em Cascata')
-                ->modalDescription('O sistema irá criar os módulos e automaticamente gerar/aprovar os PRDs de todos os módulos e submódulos, evoluindo o Blueprint e criando tasks ao final de cada ramo. Nenhuma task será executada automaticamente. Este processo pode levar vários minutos.')
+                ->modalDescription('O sistema irá criar os módulos de planejamento e automaticamente gerar/aprovar os PRDs de todos os módulos e submódulos, evoluindo o Blueprint e criando tasks ao final de cada ramo. Nenhuma task será executada automaticamente e a instalação TALL completa só acontece após a aprovação do orçamento.')
                 ->modalSubmitActionLabel('Iniciar Cascata')
                 ->action(function () {
-                    try {
-                        if (! $this->record->isBlueprintApproved()) {
-                            $this->record->approveBlueprint();
-                        }
+                    ApproveProjectBlueprintJob::dispatch($this->record->fresh(), cascade: true);
 
-                        $this->record->createModulesFromPrd();
-                        SyncProjectRepositoryJob::dispatch($this->record->fresh());
+                    Notification::make()
+                        ->title('Cascata iniciada')
+                        ->body('A cascata continuará no planejamento e sincronizará somente documentação no repositório do alvo.')
+                        ->success()
+                        ->send();
 
-                        $modules = $this->record->modules()->whereNull('parent_id')->get();
-
-                        foreach ($modules as $module) {
-                            CascadeModulePrdJob::dispatch($module);
-                        }
-
-                        Notification::make()
-                            ->title('Cascata iniciada!')
-                            ->body("PRD aprovado. Gerando PRDs para {$modules->count()} módulo(s) em background.")
-                            ->success()
-                            ->send();
-
-                        $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
-                    } catch (\Exception $e) {
-                        Notification::make()->title('Erro')->body($e->getMessage())->danger()->send();
-                    }
+                    $this->redirect(ProjectResource::getUrl('view', ['record' => $this->record]));
                 })
                 ->visible(fn () => ! empty($this->record->prd_payload)
                     && empty($this->record->prd_payload['_status'] ?? '')
