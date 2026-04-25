@@ -160,7 +160,7 @@ class ProjectResource extends Resource
                                                                         ->title('Descrição refinada com sucesso')
                                                                         ->success()
                                                                         ->send();
-                                                                } catch (\Exception $e) {
+                                                                } catch (\Throwable $e) {
                                                                     Notification::make()
                                                                         ->title('Erro ao refinar com IA')
                                                                         ->body($e->getMessage())
@@ -728,7 +728,7 @@ class ProjectResource extends Resource
                                         ->title('Descrição refinada com sucesso')
                                         ->success()
                                         ->send();
-                                } catch (\Exception $e) {
+                                } catch (\Throwable $e) {
                                     Notification::make()
                                         ->title('Erro ao refinar com IA')
                                         ->body($e->getMessage())

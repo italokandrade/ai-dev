@@ -244,7 +244,7 @@ class BoostTool implements Tool
 
         $process = Process::path($this->workingDirectory)
             ->timeout($timeout)
-            ->run([PHP_BINARY, 'artisan', 'boost:execute-tool', $toolClass, $encodedArguments]);
+            ->run([$this->phpCliBinary(), 'artisan', 'boost:execute-tool', $toolClass, $encodedArguments]);
 
         if ($process->failed()) {
             return json_encode([
@@ -269,6 +269,33 @@ class BoostTool implements Tool
         }
 
         return is_string($content) ? $content : json_encode($content, JSON_UNESCAPED_UNICODE);
+    }
+
+    private function phpCliBinary(): string
+    {
+        $candidates = [
+            config('services.php_cli_binary'),
+            PHP_SAPI === 'cli' ? PHP_BINARY : null,
+            PHP_BINARY,
+            '/usr/bin/php8.3',
+            '/usr/bin/php',
+            '/usr/local/bin/php',
+            'php',
+        ];
+
+        foreach ($candidates as $candidate) {
+            $binary = trim((string) $candidate);
+
+            if ($binary === '' || str_contains(basename($binary), 'php-fpm')) {
+                continue;
+            }
+
+            if ($binary === 'php' || is_executable($binary)) {
+                return $binary;
+            }
+        }
+
+        return 'php';
     }
 
     private function normalizeArguments(string $tool, array $args): array

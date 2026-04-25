@@ -41,6 +41,32 @@ test('boost tool executes the real boost execute-tool command in the target proj
         && $process->command[3] === 'Laravel\\Boost\\Mcp\\Tools\\SearchDocs');
 });
 
+test('boost tool uses configured php cli binary when executing boost', function () {
+    $target = makeBoostToolTargetDirectory();
+    $phpBinary = sys_get_temp_dir().'/php-cli-'.Str::uuid();
+    file_put_contents($phpBinary, "#!/bin/sh\n");
+    chmod($phpBinary, 0755);
+
+    config(['services.php_cli_binary' => $phpBinary]);
+    Process::fake(fn () => Process::result(boostToolResponse('Configured PHP binary used')));
+
+    try {
+        $result = (new BoostTool($target))->handle(new Request([
+            'tool' => 'application-info',
+            'arguments' => [],
+        ]));
+
+        expect($result)->toBe('Configured PHP binary used');
+
+        Process::assertRan(fn ($process) => is_array($process->command)
+            && $process->command[0] === $phpBinary
+            && $process->command[1] === 'artisan'
+            && $process->command[2] === 'boost:execute-tool');
+    } finally {
+        @unlink($phpBinary);
+    }
+});
+
 test('database query uses target schema allowlist and redacts sensitive result fields', function () {
     $target = makeBoostToolTargetDirectory();
     $commands = [];
