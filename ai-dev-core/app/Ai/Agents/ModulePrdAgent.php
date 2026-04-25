@@ -67,6 +67,10 @@ REGRAS DE CONTEÚDO:
 17. Respeite a responsabilidade desta ação: PRD de módulo não pode criar novos módulos raiz nem ampliar o produto fora do PRD Master.
 18. Se for um módulo raiz grande e `needs_submodules=true`, descreva apenas o limite do módulo e seus submódulos. Não detalhe migrations, endpoints, componentes finais ou tasks; isso pertence aos PRDs dos submódulos.
 19. Se for submódulo, force `needs_submodules=false` e detalhe apenas a sua responsabilidade única.
+20. Para módulos folha (`needs_submodules=false`), gere uma lista explícita `implementation_items` com entregas implementáveis. Essa lista é a fonte principal das tasks; `acceptance_criteria` e `qa_scenarios` servem para validação, não para substituir planejamento técnico.
+21. Um item implementável deve ter responsabilidade única e produto verificável: schema/Model, serviço, ação, componente, API, integração, workflow, cache, validação, observabilidade ou QA quando for uma entrega própria.
+22. Não use `acceptance_criteria` para listar tudo o que deve ser feito. Critérios de aceite devem provar comportamento; implementação vai em `implementation_items`.
+23. Para módulos folha, inclua bordas e falhas: estados, validações, permissões, edge cases, eventos, cache/invalidacao, logs e observabilidade quando fizer sentido.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.
@@ -150,12 +154,32 @@ SAÍDA:
   "business_rules": [
     "Regra 1: descrição detalhada da regra de negócio"
   ],
+  "validation_rules": [
+    {"field": "campo", "rule": "Regra de validação", "message": "Mensagem ou comportamento esperado"}
+  ],
+  "permissions": [
+    {"ability": "viewAny", "actor": "Perfil ou usuário", "scope": "Condição de autorização"}
+  ],
+  "state_model": [
+    {"entity": "entidade", "states": ["rascunho", "publicado"], "transitions": ["rascunho -> publicado"]}
+  ],
   "components": [
     {
       "type": "LivewireComponent|FilamentPage|FilamentTable|Form|Widget|Job|Event|Listener|Middleware|Service|Action",
       "name": "NomeDoComponente",
       "description": "O que faz e como se integra",
       "responsibilities": ["Responsabilidade 1", "Responsabilidade 2"]
+    }
+  ],
+  "implementation_items": [
+    {
+      "type": "schema|model|service|action|component|api|workflow|cache|validation|authorization|observability|qa",
+      "title": "Entrega implementável",
+      "description": "O que deve ser feito e por que isso existe",
+      "priority": "high",
+      "deliverables": ["Arquivo, classe, recurso ou artefato esperado"],
+      "depends_on": ["Título de outro item implementável, se houver"],
+      "acceptance_refs": ["Critério ou cenário que valida esta entrega"]
     }
   ],
   "workflows": [
@@ -166,6 +190,12 @@ SAÍDA:
   ],
   "acceptance_criteria": [
     "Critério 1: deve ser testável e mensurável"
+  ],
+  "qa_scenarios": [
+    {"name": "Cenário de QA", "given": "Estado inicial", "when": "Ação", "then": "Resultado esperado"}
+  ],
+  "edge_cases": [
+    "Caso limite que a implementação deve tratar"
   ],
   "needs_submodules": true,
   "submodules": [

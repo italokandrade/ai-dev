@@ -31,6 +31,28 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
       "type": "string",
       "description": "Descrição clara do objetivo do sistema."
     },
+    "business_goals": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Resultados de negócio que o sistema deve entregar."
+    },
+    "success_metrics": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Sinais mensuráveis ou verificáveis de sucesso."
+    },
+    "personas": {
+      "type": "array",
+      "description": "Perfis de usuários/visitantes e seus objetivos."
+    },
+    "primary_user_journeys": {
+      "type": "array",
+      "description": "Jornadas principais em nível de produto, sem detalhar implementação."
+    },
+    "scope_boundaries": {
+      "type": "object",
+      "description": "O que entra e o que fica fora da versão planejada."
+    },
     "modules": {
       "type": "array",
       "description": "Lista de módulos de ALTO NÍVEL de negócio. NÃO incluir submódulos, Chatbox ou Segurança aqui.",
@@ -56,6 +78,36 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
             "items": { "type": "string" },
             "description": "Nomes de outros módulos que devem ser concluídos antes deste",
             "default": []
+          },
+          "source_features": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Funcionalidades cadastradas que originaram este módulo."
+          },
+          "business_outcomes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Resultados esperados deste módulo."
+          },
+          "primary_user_journeys": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Jornadas que o módulo sustenta."
+          },
+          "content_or_data_requirements": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Conteúdos ou dados que o módulo precisa governar."
+          },
+          "acceptance_signals": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Sinais de aceite em nível de planejamento."
+          },
+          "scope_boundaries": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Fronteiras do módulo para evitar expansão indevida."
           }
         }
       },
@@ -145,6 +197,22 @@ Este é o formato que preenche `projects.blueprint_payload`. Gerado pelo `Projec
       }
     },
     "api_surface": { "type": "array" },
+    "module_coverage": {
+      "type": "array",
+      "description": "Mapa entre módulos do PRD e entidades/workflows que eles devem aprofundar."
+    },
+    "data_lifecycle": {
+      "type": "array",
+      "description": "Ciclo de vida de dados ou conteúdo relevante, incluindo estados, retenção, cache ou expiração."
+    },
+    "state_models": {
+      "type": "array",
+      "description": "Estados conceituais de entidades/fluxos, sem fechar campos prematuramente."
+    },
+    "risk_register": {
+      "type": "array",
+      "description": "Riscos técnicos ou de produto, impacto e mitigação esperada."
+    },
     "non_functional_decisions": { "type": "array", "items": { "type": "string" } },
     "open_questions": { "type": "array", "items": { "type": "string" } }
   }
@@ -253,6 +321,18 @@ Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pel
       "type": "object",
       "description": "Regras de negócio como pares chave-valor"
     },
+    "validation_rules": {
+      "type": "array",
+      "description": "Regras de validação por campo, formulário ou payload."
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Abilities/atores/escopos de autorização esperados."
+    },
+    "state_model": {
+      "type": "array",
+      "description": "Estados e transições de entidades ou fluxos do módulo."
+    },
     "components": {
       "type": "array",
       "items": {
@@ -274,9 +354,35 @@ Este é o formato que preenche o campo `project_modules.prd_payload`. Gerado pel
         }
       }
     },
+    "implementation_items": {
+      "type": "array",
+      "description": "Lista explícita de entregas implementáveis. É a fonte preferencial de tasks para módulos folha; critérios de aceite e cenários de QA validam essas entregas, mas não substituem esta lista.",
+      "items": {
+        "type": "object",
+        "required": ["type", "title", "description", "priority"],
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "priority": { "type": "string" },
+          "deliverables": { "type": "array", "items": { "type": "string" } },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "acceptance_refs": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
     "acceptance_criteria": {
       "type": "object",
       "description": "Critérios de aceitação como pares chave-valor"
+    },
+    "qa_scenarios": {
+      "type": "array",
+      "description": "Cenários Given/When/Then para validação posterior."
+    },
+    "edge_cases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Casos limite que a implementação deve tratar."
     },
     "estimated_complexity": {
       "type": "string",

@@ -61,16 +61,20 @@ ARTEFATOS OBRIGATÓRIOS:
    - Liste contratos previstos em alto nível, sem rotas finais detalhadas.
 6. Decisões não funcionais:
    - Segurança, auditoria, LGPD, performance, filas, observabilidade e integrações relevantes.
+7. Cobertura e lacunas:
+   - Relacione módulos do PRD aos artefatos técnicos que eles precisam aprofundar.
+   - Liste lifecycle de dados/conteúdo, estados relevantes, riscos e perguntas abertas.
 
 REGRAS:
 1. Use o PRD Master e as funcionalidades backend/frontend como fonte de verdade.
 2. Não crie módulos novos; use os módulos já listados no PRD.
 3. Não implemente, não gere migrations, não gere código, não assuma diretório físico do Projeto Alvo.
-4. Prefira poucos artefatos claros a listas enormes.
+4. Prefira artefatos claros e profundos a listas enormes: cada entidade, workflow, caso de uso e decisão deve explicar sua razão de existir.
 5. O Blueprint deve ser útil para que PRDs de módulo herdem entidades, workflows e componentes já descobertos.
 6. Responda em Português do Brasil.
 7. O Blueprint global não deve corrigir ou expandir escopo do PRD. Se uma capacidade não está no PRD ou nas funcionalidades cadastradas, registre em open_questions em vez de criar entidade, workflow ou integração.
 8. Neste nível, use entidades conceituais e relacionamentos macro. Campos detalhados, endpoints finais e componentes específicos pertencem aos PRDs dos módulos.
+9. Para sites públicos/landing pages, modele também conteúdo publicável, lead/contato, SEO/performance, cache ou publicação apenas se essas capacidades aparecerem no PRD ou nas funcionalidades.
 
 SAÍDA:
 Retorne APENAS um JSON válido, sem markdown, sem texto fora do JSON:
@@ -135,6 +139,28 @@ Retorne APENAS um JSON válido, sem markdown, sem texto fora do JSON:
       "consumers": ["Sistema externo autorizado"],
       "modules": ["Demandas Jurídicas"]
     }
+  ],
+  "module_coverage": [
+    {
+      "module": "Nome do módulo",
+      "domain_entities": ["entidade"],
+      "primary_workflows": ["Fluxo"],
+      "blueprint_notes": ["O que este módulo precisa aprofundar no PRD técnico"]
+    }
+  ],
+  "data_lifecycle": [
+    {
+      "name": "Ciclo de vida do lead",
+      "entity": "leads",
+      "states": ["recebido", "validado", "respondido"],
+      "retention_or_cache_notes": "Observações de retenção, cache ou expiração"
+    }
+  ],
+  "state_models": [
+    {"name": "Estado de publicação", "entity": "conteudo_publico", "states": ["rascunho", "publicado", "arquivado"]}
+  ],
+  "risk_register": [
+    {"risk": "Risco técnico ou de produto", "impact": "Impacto", "mitigation": "Mitigação prevista"}
   ],
   "non_functional_decisions": ["Auditar operações sensíveis"],
   "open_questions": []

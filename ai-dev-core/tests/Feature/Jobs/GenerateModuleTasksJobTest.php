@@ -75,11 +75,65 @@ test('generate module tasks creates data architecture checkpoint before implemen
 
     $tasks = $module->tasks()->orderBy('created_at')->get();
 
-    expect($tasks)->toHaveCount(3)
+    expect($tasks)->toHaveCount(2)
         ->and($tasks->first()->title)->toBe('Checkpoint de Arquitetura de Dados: Processos')
         ->and($tasks->first()->source)->toBe('architecture')
         ->and($tasks->first()->prd_payload['architecture_checkpoint']['is_checkpoint_task'])->toBeTrue()
         ->and($tasks->pluck('title')->all())->not->toContain('Migration: processos');
+});
+
+test('generate module tasks prefers explicit implementation items over acceptance criteria task expansion', function () {
+    $project = Project::create([
+        'name' => 'implementation-items-project',
+        'status' => 'active',
+    ]);
+
+    $module = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Landing Page',
+        'description' => 'Pagina publica principal.',
+        'status' => 'planned',
+        'prd_payload' => [
+            'title' => 'Landing Page - PRD Tecnico',
+            'objective' => 'Publicar a experiencia principal da marca.',
+            'needs_submodules' => false,
+            'implementation_items' => [
+                [
+                    'type' => 'component',
+                    'title' => 'Implementar composicao da landing page',
+                    'description' => 'Montar secoes publicas e chamadas para acao.',
+                    'priority' => 'high',
+                    'deliverables' => ['Livewire landing page'],
+                ],
+                [
+                    'type' => 'cache',
+                    'title' => 'Implementar cache de conteudo publico',
+                    'description' => 'Cachear conteudo publicado e invalidar em mutacoes.',
+                    'priority' => 'medium',
+                ],
+            ],
+            'acceptance_criteria' => [
+                'A landing page renderiza sem erro.',
+                'O cache e invalidado apos atualizacao.',
+            ],
+            'qa_scenarios' => [
+                ['name' => 'Renderizacao publica', 'given' => 'Conteudo publicado', 'when' => 'Visitante acessa a pagina', 'then' => 'As secoes aparecem'],
+            ],
+        ],
+    ]);
+
+    (new GenerateModuleTasksJob($module))->handle();
+
+    $tasks = $module->tasks()->orderBy('created_at')->get();
+
+    expect($tasks)->toHaveCount(2)
+        ->and($tasks->pluck('title')->all())->toBe([
+            'Implementar composicao da landing page',
+            'Implementar cache de conteudo publico',
+        ])
+        ->and($tasks->pluck('title')->filter(fn (string $title): bool => str_starts_with($title, 'Teste:'))->count())->toBe(0)
+        ->and($tasks->first()->prd_payload['implementation_item']['type'])->toBe('component')
+        ->and($tasks->first()->prd_payload['qa_scenarios'])->toHaveCount(1);
 });
 
 test('generate module tasks uses configurable planning guardrail instead of old hard cap', function () {

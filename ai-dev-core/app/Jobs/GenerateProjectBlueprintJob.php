@@ -132,6 +132,8 @@ PRD MASTER APROVADO:
 INSTRUÇÃO: Gere o Blueprint Técnico Global deste projeto.
 Ele deve vir depois do PRD Master e antes dos módulos.
 Ele deve conter MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, contratos de API em alto nível e decisões não funcionais.
+Inclua também cobertura por módulo, lifecycle de dados/conteúdo, estados relevantes, riscos e perguntas abertas.
+O objetivo é dar profundidade para os PRDs dos módulos, sem criar migrations, campos finais, endpoints finais ou código.
 PROMPT;
     }
 

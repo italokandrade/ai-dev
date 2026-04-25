@@ -99,7 +99,7 @@ pending → blocked → pending
 
 **O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o PRD Master do projeto contendo **apenas módulos de alto nível de negócio** (zero submódulos).
 
-**Instruções:** Explicitamente proíbe a geração de submódulos no nível do projeto e também proíbe incluir `Chatbox` e `Segurança` em `modules`. Retorna JSON com `title`, `objective`, `modules[]` (name, description, priority, dependencies). O `StandardProjectModuleService` anexa `standard_modules` com Chatbox/Segurança depois da resposta.
+**Instruções:** Explicitamente proíbe a geração de submódulos no nível do projeto e também proíbe incluir `Chatbox` e `Segurança` em `modules`. Retorna JSON com `title`, `objective`, metas, métricas, personas/jornadas, fronteiras de escopo e `modules[]` enriquecido (`source_features`, resultados, jornadas, requisitos de conteúdo/dados e sinais de aceite). O `StandardProjectModuleService` anexa `standard_modules` com Chatbox/Segurança depois da resposta.
 
 **Job associado:** `GenerateProjectPrdJob` — fila `orchestrator`, timeout 600s.
 
@@ -111,7 +111,7 @@ pending → blocked → pending
 
 **O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o Blueprint Técnico Global depois do PRD Master e antes dos módulos.
 
-**Instruções:** Retorna JSON com MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações, API surface, decisões não funcionais e perguntas abertas. Não cria código, migrations ou scaffold físico.
+**Instruções:** Retorna JSON com MER/ERD conceitual sem campos, casos de uso, workflows, arquitetura C4 simplificada, integrações, API surface, cobertura por módulo, lifecycle de dados/conteúdo, estados conceituais, riscos, decisões não funcionais e perguntas abertas. Não cria código, migrations ou scaffold físico.
 
 **Job associado:** `GenerateProjectBlueprintJob` — fila `orchestrator`, timeout 600s.
 
@@ -123,7 +123,7 @@ pending → blocked → pending
 
 **O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera PRD Técnico detalhado para **um módulo específico**.
 
-**Instruções:** Recebe contexto do projeto + nome/descrição do módulo + Blueprint Técnico Global atual. Retorna JSON com: `title`, `objective`, `scope`, `database_schema`, `blueprint_contribution`, `api_endpoints`, `business_rules`, `components`, `workflows`, `acceptance_criteria`, `estimated_complexity`, `estimated_hours`, `needs_submodules` (boolean), `submodules[]`.
+**Instruções:** Recebe contexto do projeto + nome/descrição do módulo + Blueprint Técnico Global atual. Retorna JSON com: `title`, `objective`, `scope`, `database_schema`, `blueprint_contribution`, `api_endpoints`, `business_rules`, `validation_rules`, `permissions`, `state_model`, `components`, `implementation_items`, `workflows`, `acceptance_criteria`, `qa_scenarios`, `edge_cases`, `estimated_complexity`, `estimated_hours`, `needs_submodules` (boolean), `submodules[]`.
 
 **Blueprint progressivo:** `ProjectBlueprintService` incorpora `blueprint_contribution` de cada módulo/submódulo em `projects.blueprint_payload`, adicionando campos, relacionamentos, workflows, componentes e APIs sem perder o desenho global.
 
@@ -132,7 +132,7 @@ pending → blocked → pending
 **Jobs associados:**
 - `GenerateModulePrdJob` — fila `orchestrator`, timeout 600s
 - `GenerateModuleSubmodulesJob` — cria submódulos do PRD quando `needs_submodules = true`
-- `GenerateModuleTasksJob` — cria tasks do PRD quando `needs_submodules = false` (folha)
+- `GenerateModuleTasksJob` — cria tasks do PRD quando `needs_submodules = false` (folha), priorizando `implementation_items` e usando critérios de aceite apenas como fallback quando não há superfície implementável.
 
 ---
 

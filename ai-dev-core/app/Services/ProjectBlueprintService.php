@@ -41,6 +41,10 @@ class ProjectBlueprintService
                 'integrations' => [],
             ],
             'api_surface' => [],
+            'module_coverage' => [],
+            'data_lifecycle' => [],
+            'state_models' => [],
+            'risk_register' => [],
             'non_functional_decisions' => $this->normalizeStringList($prd['non_functional_requirements'] ?? []),
             'open_questions' => [],
             'module_notes' => [],
@@ -66,6 +70,10 @@ class ProjectBlueprintService
         $normalized['use_cases'] = $this->normalizeNamedList($normalized['use_cases'] ?? []);
         $normalized['workflows'] = $this->normalizeNamedList($normalized['workflows'] ?? []);
         $normalized['api_surface'] = $this->normalizeNamedList($normalized['api_surface'] ?? []);
+        $normalized['module_coverage'] = $this->normalizeNamedList($normalized['module_coverage'] ?? []);
+        $normalized['data_lifecycle'] = $this->normalizeNamedList($normalized['data_lifecycle'] ?? []);
+        $normalized['state_models'] = $this->normalizeNamedList($normalized['state_models'] ?? []);
+        $normalized['risk_register'] = $this->normalizeNamedList($normalized['risk_register'] ?? []);
         $normalized['non_functional_decisions'] = $this->normalizeStringList($normalized['non_functional_decisions'] ?? []);
         $normalized['open_questions'] = $this->normalizeStringList($normalized['open_questions'] ?? []);
         $normalized['module_notes'] = $this->normalizeNamedList($normalized['module_notes'] ?? []);

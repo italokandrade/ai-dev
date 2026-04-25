@@ -32,6 +32,8 @@ Entre o PRD Master e os módulos existe um Blueprint Técnico Global. Ele reúne
 - **Arquitetura C4 simplificada:** containers, componentes e integrações.
 - **API surface:** contratos em alto nível, sem rotas finais prematuras.
 - **Decisões não funcionais:** segurança, auditoria, LGPD, filas, performance e observabilidade.
+- **Cobertura por módulo:** entidades, workflows e notas que cada módulo deve aprofundar.
+- **Lifecycle/estados/riscos:** ciclo de vida de dados ou conteúdo, estados conceituais e riscos com mitigação.
 
 Regras para prompts:
 
@@ -40,6 +42,8 @@ Regras para prompts:
 3. `ModulePrdAgent` recebe o Blueprint atual e deve devolver `blueprint_contribution`.
 4. Campos de entidades surgem progressivamente nos PRDs de módulo/submódulo, quando há contexto suficiente.
 5. O Blueprint é trilho, não prisão: módulos podem propor entidades novas, mas devem justificar a inclusão.
+6. Módulos folha devem gerar `implementation_items`; esses itens viram tasks. `acceptance_criteria` e `qa_scenarios` validam as entregas, mas não substituem a lista de implementação.
+7. Módulos raiz com `needs_submodules=true` são fronteiras de planejamento: não devem detalhar migrations, endpoints finais, componentes ou tasks dos filhos.
 
 ---
 

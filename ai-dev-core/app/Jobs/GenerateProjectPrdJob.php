@@ -121,6 +121,8 @@ Não inclua os módulos padrão Chatbox e Segurança em "modules"; eles serão a
 Divida tudo apenas em módulos de alto nível, sem submódulos, sem campos de banco e sem endpoints finais.
 Depois do PRD, outro agente irá gerar o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
 Cada módulo deve declarar de quais funcionalidades cadastradas ele nasceu em "source_features"; se não houver funcionalidade fonte, não crie o módulo.
+Para enriquecer o planejamento, descreva jornadas, resultados de negócio, conteúdo/dados necessários, sinais de aceite e fronteiras de escopo de cada módulo.
+Não aumente a quantidade de módulos para ganhar profundidade: aprofunde os módulos certos.
 PROMPT;
     }
 

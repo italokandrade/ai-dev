@@ -32,88 +32,112 @@ class ModuleTaskPlannerService
             ], $limit);
         }
 
-        foreach ($prd['components'] ?? [] as $component) {
-            if (! is_array($component)) {
-                continue;
-            }
+        $hasImplementationItems = ! empty($prd['implementation_items']) && is_array($prd['implementation_items']);
 
-            $componentType = $this->stringValue($component['type'] ?? 'Componente');
-            $componentName = $this->stringValue($component['name'] ?? '');
-
-            $this->pushTask($tasks, [
-                'type' => 'component',
-                'title' => "Implementar {$componentType}: {$componentName}",
-                'description' => $component['description'] ?? '',
-                'priority' => Priority::High,
-                'source' => TaskSource::Prd,
-            ], $limit);
-        }
-
-        foreach ($prd['workflows'] ?? [] as $workflow) {
-            if (! is_array($workflow)) {
-                continue;
-            }
-
-            $steps = collect($workflow['steps'] ?? [])
-                ->map(fn ($step) => is_array($step) ? ($step['name'] ?? json_encode($step, JSON_UNESCAPED_UNICODE)) : $step)
-                ->implode(' -> ');
-
-            $workflowName = $this->stringValue($workflow['name'] ?? 'Fluxo');
-            $this->pushTask($tasks, [
-                'type' => 'workflow',
-                'title' => "Fluxo: {$workflowName}",
-                'description' => 'Steps: '.$steps,
-                'priority' => Priority::High,
-                'source' => TaskSource::Prd,
-            ], $limit);
-        }
-
-        foreach ($prd['api_endpoints'] ?? [] as $api) {
-            if (! is_array($api)) {
-                continue;
-            }
-
-            $method = $this->stringValue($api['method'] ?? 'GET');
-            $uri = $this->stringValue($api['uri'] ?? '/');
-
-            $this->pushTask($tasks, [
-                'type' => 'api',
-                'title' => "API {$method} {$uri}",
-                'description' => $api['description'] ?? '',
-                'priority' => Priority::Medium,
-                'source' => TaskSource::Prd,
-            ], $limit);
-        }
-
-        if (! $this->requiresArchitectureCheckpoint($prd)) {
-            foreach ($prd['database_schema']['tables'] ?? [] as $table) {
-                if (! is_array($table)) {
+        if ($hasImplementationItems) {
+            foreach ($prd['implementation_items'] as $item) {
+                if (! is_array($item)) {
                     continue;
                 }
 
-                $tableName = $this->stringValue($table['name'] ?? '');
+                $title = $this->stringValue($item['title'] ?? '');
+                $type = $this->stringValue($item['type'] ?? 'implementation');
+
                 $this->pushTask($tasks, [
-                    'type' => 'database_table',
-                    'title' => "Migration: {$tableName}",
-                    'description' => $table['description'] ?? '',
+                    'type' => $type !== '' ? $type : 'implementation',
+                    'title' => $title,
+                    'description' => $this->implementationItemDescription($item),
+                    'priority' => $this->priorityValue($item['priority'] ?? 'high'),
+                    'source' => TaskSource::Prd,
+                    'implementation_item' => $item,
+                ], $limit);
+            }
+        } else {
+            foreach ($prd['components'] ?? [] as $component) {
+                if (! is_array($component)) {
+                    continue;
+                }
+
+                $componentType = $this->stringValue($component['type'] ?? 'Componente');
+                $componentName = $this->stringValue($component['name'] ?? '');
+
+                $this->pushTask($tasks, [
+                    'type' => 'component',
+                    'title' => "Implementar {$componentType}: {$componentName}",
+                    'description' => $component['description'] ?? '',
                     'priority' => Priority::High,
                     'source' => TaskSource::Prd,
                 ], $limit);
             }
+
+            foreach ($prd['workflows'] ?? [] as $workflow) {
+                if (! is_array($workflow)) {
+                    continue;
+                }
+
+                $steps = collect($workflow['steps'] ?? [])
+                    ->map(fn ($step) => is_array($step) ? ($step['name'] ?? json_encode($step, JSON_UNESCAPED_UNICODE)) : $step)
+                    ->implode(' -> ');
+
+                $workflowName = $this->stringValue($workflow['name'] ?? 'Fluxo');
+                $this->pushTask($tasks, [
+                    'type' => 'workflow',
+                    'title' => "Fluxo: {$workflowName}",
+                    'description' => 'Steps: '.$steps,
+                    'priority' => Priority::High,
+                    'source' => TaskSource::Prd,
+                ], $limit);
+            }
+
+            foreach ($prd['api_endpoints'] ?? [] as $api) {
+                if (! is_array($api)) {
+                    continue;
+                }
+
+                $method = $this->stringValue($api['method'] ?? 'GET');
+                $uri = $this->stringValue($api['uri'] ?? '/');
+
+                $this->pushTask($tasks, [
+                    'type' => 'api',
+                    'title' => "API {$method} {$uri}",
+                    'description' => $api['description'] ?? '',
+                    'priority' => Priority::Medium,
+                    'source' => TaskSource::Prd,
+                ], $limit);
+            }
+
+            if (! $this->requiresArchitectureCheckpoint($prd)) {
+                foreach ($prd['database_schema']['tables'] ?? [] as $table) {
+                    if (! is_array($table)) {
+                        continue;
+                    }
+
+                    $tableName = $this->stringValue($table['name'] ?? '');
+                    $this->pushTask($tasks, [
+                        'type' => 'database_table',
+                        'title' => "Migration: {$tableName}",
+                        'description' => $table['description'] ?? '',
+                        'priority' => Priority::High,
+                        'source' => TaskSource::Prd,
+                    ], $limit);
+                }
+            }
         }
 
-        foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
-            $criteriaText = is_array($criteria)
-                ? json_encode($criteria, JSON_UNESCAPED_UNICODE)
-                : (string) $criteria;
+        if (! $hasImplementationItems && ! $this->hasImplementationSurface($prd)) {
+            foreach ($prd['acceptance_criteria'] ?? [] as $criteria) {
+                $criteriaText = is_array($criteria)
+                    ? json_encode($criteria, JSON_UNESCAPED_UNICODE)
+                    : (string) $criteria;
 
-            $this->pushTask($tasks, [
-                'type' => 'test',
-                'title' => 'Teste: '.$criteriaText,
-                'description' => "Garantir que o criterio de aceitacao seja atendido: {$criteriaText}",
-                'priority' => Priority::Medium,
-                'source' => TaskSource::Prd,
-            ], $limit);
+                $this->pushTask($tasks, [
+                    'type' => 'test',
+                    'title' => 'Teste: '.$criteriaText,
+                    'description' => "Garantir que o criterio de aceitacao seja atendido: {$criteriaText}",
+                    'priority' => Priority::Medium,
+                    'source' => TaskSource::Prd,
+                ], $limit);
+            }
         }
 
         if ($tasks === [] && ! empty($prd['submodules'])) {
@@ -172,7 +196,15 @@ class ModuleTaskPlannerService
                 'module_name' => $module->name,
                 'module_prd_title' => $modulePrd['title'] ?? null,
             ],
+            'implementation_item' => $taskData['implementation_item'] ?? null,
             'database_schema' => $modulePrd['database_schema'] ?? ['tables' => []],
+            'business_rules' => $modulePrd['business_rules'] ?? [],
+            'validation_rules' => $modulePrd['validation_rules'] ?? [],
+            'permissions' => $modulePrd['permissions'] ?? [],
+            'state_model' => $modulePrd['state_model'] ?? [],
+            'qa_scenarios' => $modulePrd['qa_scenarios'] ?? [],
+            'edge_cases' => $modulePrd['edge_cases'] ?? [],
+            'non_functional_requirements' => $modulePrd['non_functional_requirements'] ?? [],
             'architecture_checkpoint' => [
                 'required' => $this->requiresArchitectureCheckpoint($modulePrd),
                 'is_checkpoint_task' => $isArchitectureCheckpoint,
@@ -237,6 +269,7 @@ class ModuleTaskPlannerService
             'description' => $this->stringValue($task['description'] ?? ''),
             'priority' => $task['priority'] instanceof Priority ? $task['priority'] : Priority::Normal,
             'source' => $task['source'] instanceof TaskSource ? $task['source'] : TaskSource::Prd,
+            'implementation_item' => is_array($task['implementation_item'] ?? null) ? $task['implementation_item'] : null,
         ];
     }
 
@@ -299,6 +332,47 @@ class ModuleTaskPlannerService
     private function normalizeName(string $name): string
     {
         return mb_strtolower(trim(preg_replace('/\s+/', ' ', $name) ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $prd
+     */
+    private function hasImplementationSurface(array $prd): bool
+    {
+        return ! empty($prd['components'])
+            || ! empty($prd['workflows'])
+            || ! empty($prd['api_endpoints'])
+            || ! empty($prd['database_schema']['tables'])
+            || ! empty($prd['submodules']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function implementationItemDescription(array $item): string
+    {
+        $description = $this->stringValue($item['description'] ?? '');
+        $deliverables = collect($item['deliverables'] ?? [])
+            ->map(fn (mixed $deliverable): string => $this->stringValue($deliverable))
+            ->filter()
+            ->implode('; ');
+
+        if ($deliverables === '') {
+            return $description;
+        }
+
+        return trim($description."\n\nEntregáveis: {$deliverables}");
+    }
+
+    private function priorityValue(mixed $value): Priority
+    {
+        $value = $this->normalizeName($this->stringValue($value));
+
+        return match ($value) {
+            'high', 'alta' => Priority::High,
+            'medium', 'media', 'média' => Priority::Medium,
+            default => Priority::Normal,
+        };
     }
 
     private function projectDomainModel(ProjectModule $module): ?array

@@ -39,12 +39,10 @@ class ProjectPlanningScopeService
     private const array SIMPLE_EXPANSION_TERMS = [
         'crm',
         'cotacao',
-        'proposta',
         'orcamento',
         'orquestracao',
         'agente',
         'redes sociais',
-        'social',
         'webhook',
         'importacao',
         'gestao de projetos',
@@ -121,6 +119,7 @@ Regras obrigatorias:
 - Nao crie dominios novos para "completar" o produto; se algo nao foi pedido, deixe fora.
 - Esta acao deve produzir apenas seu artefato proprio. Nao assuma o papel das proximas etapas.
 - Para este perfil, use no maximo {$profile['root_modules']} modulos raiz de negocio, {$profile['submodules_per_module']} submodulos por modulo e {$profile['tasks_per_module']} tasks por modulo folha, salvo se o usuario pedir explicitamente mais.
+- Profundidade esperada: detalhe objetivos, jornadas, dados/conteudo, regras, criterios e riscos suficientes para guiar a proxima etapa, sem transformar esse artefato em codigo ou scaffold.
 TEXT;
     }
 
@@ -163,7 +162,13 @@ TEXT;
                 'name' => $this->stringValue($module['name'] ?? ''),
                 'description' => $this->stringValue($module['description'] ?? ''),
                 'priority' => $this->priorityValue($module['priority'] ?? 'medium'),
-                'dependencies' => is_array($module['dependencies'] ?? null) ? $module['dependencies'] : [],
+                'dependencies' => $this->stringListValue($module['dependencies'] ?? []),
+                'source_features' => $this->stringListValue($module['source_features'] ?? []),
+                'business_outcomes' => $this->stringListValue($module['business_outcomes'] ?? []),
+                'primary_user_journeys' => $this->stringListValue($module['primary_user_journeys'] ?? []),
+                'content_or_data_requirements' => $this->stringListValue($module['content_or_data_requirements'] ?? []),
+                'acceptance_signals' => $this->stringListValue($module['acceptance_signals'] ?? []),
+                'scope_boundaries' => $this->stringListValue($module['scope_boundaries'] ?? []),
             ])
             ->filter(fn (array $module): bool => $module['name'] !== '')
             ->reject(fn (array $module): bool => in_array($profile['key'], ['simple_landing', 'public_site'], true)
@@ -185,6 +190,12 @@ TEXT;
                 'description' => $module['description'],
                 'priority' => $module['priority'],
                 'dependencies' => $module['dependencies'] ?? [],
+                'source_features' => $module['source_features'] ?? [],
+                'business_outcomes' => $module['business_outcomes'] ?? [],
+                'primary_user_journeys' => $module['primary_user_journeys'] ?? [],
+                'content_or_data_requirements' => $module['content_or_data_requirements'] ?? [],
+                'acceptance_signals' => $module['acceptance_signals'] ?? [],
+                'scope_boundaries' => $module['scope_boundaries'] ?? [],
             ])
             ->values()
             ->all();
@@ -253,16 +264,21 @@ TEXT;
     private function landingModules(Project $project, Collection $generated): Collection
     {
         $text = $this->scopeText($project);
-        $modules = collect([
-            [
-                'name' => 'Landing Page',
-                'description' => 'Experiencia publica principal com apresentacao, proposta de valor, secoes de conteudo, chamadas para acao e responsividade.',
-                'priority' => 'high',
-                'dependencies' => [],
-            ],
-        ]);
+        $modules = $generated->isNotEmpty()
+            ? $generated
+            : collect([
+                [
+                    'name' => 'Landing Page',
+                    'description' => 'Experiencia publica principal com apresentacao, proposta de valor, secoes de conteudo, chamadas para acao e responsividade.',
+                    'priority' => 'high',
+                    'dependencies' => [],
+                ],
+            ]);
 
-        if ($this->containsAny($text, ['contato', 'lead', 'orcamento', 'formulario', 'captura'])) {
+        if (
+            $this->containsAny($text, ['contato', 'lead', 'orcamento', 'formulario', 'captura'])
+            && ! $this->collectionContainsAny($modules, ['contato', 'lead', 'formulario', 'captura'])
+        ) {
             $modules->push([
                 'name' => 'Captacao de Contatos',
                 'description' => 'Recebimento e registro das mensagens ou solicitacoes enviadas pelos visitantes, sem assumir CRM completo.',
@@ -271,7 +287,10 @@ TEXT;
             ]);
         }
 
-        if ($this->containsAny($text, ['seo', 'metricas', 'analytics', 'performance'])) {
+        if (
+            $this->containsAny($text, ['seo', 'metricas', 'analytics', 'performance'])
+            && ! $this->collectionContainsAny($modules, ['seo', 'metricas', 'analytics', 'performance'])
+        ) {
             $modules->push([
                 'name' => 'SEO e Performance',
                 'description' => 'Metadados, desempenho e acompanhamento basico da pagina publica conforme solicitado.',
@@ -280,11 +299,7 @@ TEXT;
             ]);
         }
 
-        if ($modules->count() === 1 && $generated->isNotEmpty()) {
-            return $generated->take(3)->values();
-        }
-
-        return $modules->values();
+        return $this->prioritizePublicSiteModules($modules)->take(3)->values();
     }
 
     /**
@@ -333,6 +348,19 @@ TEXT;
         return false;
     }
 
+    /**
+     * @param  Collection<int, array<string, mixed>>  $items
+     */
+    private function collectionContainsAny(Collection $items, array $terms): bool
+    {
+        return $items->contains(function (array $item) use ($terms): bool {
+            return $this->containsAny(
+                $this->normalize(($item['name'] ?? '').' '.($item['description'] ?? '')),
+                $terms,
+            );
+        });
+    }
+
     private function priorityValue(mixed $value): string
     {
         $value = $this->normalize($this->stringValue($value));
@@ -356,5 +384,22 @@ TEXT;
         }
 
         return trim((string) $value);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function stringListValue(mixed $value): array
+    {
+        if (! is_array($value)) {
+            $value = $value === null || $value === '' ? [] : [$value];
+        }
+
+        return collect($value)
+            ->map(fn (mixed $item): string => $this->stringValue($item))
+            ->filter()
+            ->unique(fn (string $item): string => $this->normalize($item))
+            ->values()
+            ->all();
     }
 }

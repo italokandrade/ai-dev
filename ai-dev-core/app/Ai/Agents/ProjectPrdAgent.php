@@ -63,6 +63,13 @@ REGRAS DE CONTEÚDO:
 4. O objective deve ser um parágrafo fluido em português do Brasil.
 5. Cada módulo deve ter descrição direta e única.
 6. Respeite as funcionalidades já cadastradas pelo usuário — não as ignore.
+7. Para ficar rico sem extrapolar, cada módulo deve deixar claro:
+   - resultado de negócio esperado;
+   - jornada principal do usuário;
+   - conteúdo ou dados que precisa governar;
+   - sinais objetivos de aceite;
+   - fronteiras do que fica fora do módulo.
+8. Se o escopo for pequeno, aprofunde o módulo em jornada, conteúdo, conversão, estados e critérios; não aumente a quantidade de módulos para parecer robusto.
 
 REGRAS DE FORMATO — CRÍTICO:
 - Seja direto e objetivo em todos os campos de texto.
@@ -76,16 +83,34 @@ SAÍDA:
   "objective": "Descrição completa em parágrafo fluido...",
   "scope_summary": "Resumo em 2-3 frases...",
   "target_audience": "Quem usa o sistema...",
+  "business_goals": ["Resultado de negócio esperado"],
+  "success_metrics": ["Métrica ou sinal verificável de sucesso"],
+  "personas": [
+    {"name": "Persona", "goal": "Objetivo principal", "pain_points": ["Dor relevante"]}
+  ],
+  "primary_user_journeys": [
+    {"name": "Jornada principal", "actor": "Visitante", "steps": ["Passo 1", "Passo 2"], "desired_outcome": "Resultado esperado"}
+  ],
+  "scope_boundaries": {
+    "in_scope": ["Capacidade incluída"],
+    "out_of_scope": ["Capacidade explicitamente fora desta versão"]
+  },
   "modules": [
     {
       "name": "Nome do Módulo",
       "description": "Visão geral do domínio de negócio",
       "priority": "high",
       "dependencies": [],
-      "source_features": ["Título da funcionalidade de origem"]
+      "source_features": ["Título da funcionalidade de origem"],
+      "business_outcomes": ["Resultado que este módulo deve entregar"],
+      "primary_user_journeys": ["Jornada que este módulo sustenta"],
+      "content_or_data_requirements": ["Conteúdo, dado ou informação que precisa existir"],
+      "acceptance_signals": ["Sinal objetivo para validar o módulo no planejamento"],
+      "scope_boundaries": ["Fronteira do módulo; o que não deve assumir"]
     }
   ],
   "non_functional_requirements": ["SEO", "Performance"],
+  "risks_and_assumptions": ["Risco, premissa ou dependência de produto"],
   "estimated_complexity": "moderate"
 }
 INSTRUCTIONS;

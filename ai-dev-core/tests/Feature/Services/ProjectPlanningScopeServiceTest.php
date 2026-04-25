@@ -51,3 +51,62 @@ test('planning scope trims generated features for simple landing pages', functio
 
     expect(collect($features)->pluck('title')->all())->toBe(['Recebimento de Contato']);
 });
+
+test('planning scope preserves rich module metadata from project prd', function () {
+    $project = Project::create([
+        'name' => 'portfolio-site',
+        'description' => 'Site institucional com portfolio, artigos e formulario de contato.',
+        'status' => 'active',
+    ]);
+
+    $prd = app(ProjectPlanningScopeService::class)->sanitizeProjectPrd($project->fresh(['features']), [
+        'title' => 'Portfolio - PRD',
+        'objective' => 'Criar site publico.',
+        'modules' => [
+            [
+                'name' => 'Portfolio Publico',
+                'description' => 'Apresenta projetos publicados.',
+                'priority' => 'high',
+                'dependencies' => ['Conteudo Publico'],
+                'source_features' => ['Listagem de projetos'],
+                'business_outcomes' => ['Visitante entende a experiencia do profissional'],
+                'primary_user_journeys' => ['Visitante explora projetos e solicita contato'],
+                'content_or_data_requirements' => ['Projetos publicados com imagens e tecnologias'],
+                'acceptance_signals' => ['Projetos aparecem com URL publica'],
+                'scope_boundaries' => ['Nao assume CRM interno'],
+            ],
+        ],
+    ]);
+
+    expect($prd['modules'][0]['source_features'])->toBe(['Listagem de projetos'])
+        ->and($prd['modules'][0]['business_outcomes'])->toBe(['Visitante entende a experiencia do profissional'])
+        ->and($prd['modules'][0]['scope_boundaries'])->toBe(['Nao assume CRM interno']);
+});
+
+test('planning scope preserves rich generated landing modules before applying fallback modules', function () {
+    $project = Project::create([
+        'name' => 'landing-rich-test',
+        'description' => 'Landing page simples com formulario de contato.',
+        'status' => 'active',
+    ]);
+
+    $prd = app(ProjectPlanningScopeService::class)->sanitizeProjectPrd($project->fresh(['features']), [
+        'title' => 'Landing Rica - PRD',
+        'objective' => 'Criar landing page.',
+        'modules' => [
+            [
+                'name' => 'Experiencia Publica e Conversao',
+                'description' => 'Hero, prova social, proposta de valor e CTAs.',
+                'priority' => 'high',
+                'source_features' => ['Hero publico'],
+                'business_outcomes' => ['Aumentar solicitacoes qualificadas'],
+                'primary_user_journeys' => ['Visitante entende a oferta e envia contato'],
+            ],
+        ],
+    ]);
+
+    $richModule = collect($prd['modules'])->firstWhere('name', 'Experiencia Publica e Conversao');
+
+    expect($richModule['business_outcomes'])->toBe(['Aumentar solicitacoes qualificadas'])
+        ->and(collect($prd['modules'])->pluck('name')->all())->toContain('Captacao de Contatos');
+});

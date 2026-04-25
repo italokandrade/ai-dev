@@ -298,6 +298,8 @@ Especifique: tabelas de banco, APIs, componentes, regras de negócio, validaçõ
 Atualize também o `blueprint_contribution` com entidades, campos, relacionamentos, casos de uso, workflows e componentes que este {$typeLabel} adiciona ou detalha.
 Não crie novo módulo raiz. Não adicione capacidades fora do escopo deste {$typeLabel}.
 Se este {$typeLabel} precisar de submódulos, limite-se a definir a fronteira e os submódulos; detalhes implementáveis ficam para os PRDs dos submódulos.
+Se este {$typeLabel} for folha, gere `implementation_items` ricos e objetivos. Esses itens serão convertidos diretamente em tasks; não use `acceptance_criteria` como lista de tarefas.
+Inclua `qa_scenarios`, edge cases, permissões, validações, estados e observabilidade para que a implementação possa ser auditada.
 PROMPT;
     }
 
@@ -372,11 +374,26 @@ PROMPT;
                 ->values()
                 ->all();
 
-            foreach (['database_schema', 'api_endpoints', 'components', 'acceptance_criteria'] as $implementationKey) {
+            foreach ([
+                'database_schema',
+                'architecture_checkpoint',
+                'api_endpoints',
+                'components',
+                'implementation_items',
+                'acceptance_criteria',
+                'qa_scenarios',
+                'validation_rules',
+                'permissions',
+                'state_model',
+                'edge_cases',
+            ] as $implementationKey) {
                 unset($prd[$implementationKey]);
             }
 
             $prd['planning_role'] = 'module_boundary';
+        } else {
+            $prd['needs_submodules'] = false;
+            $prd['submodules'] = [];
         }
 
         return $prd;
