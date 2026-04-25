@@ -154,6 +154,96 @@ test('project approves blueprint only when it is ready', function () {
     }
 });
 
+test('project marks prd generation as active and clears stale approvals', function () {
+    $project = Project::create([
+        'name' => 'test-prd-generation-state',
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'Old PRD',
+            'modules' => [
+                ['name' => 'Old Module'],
+            ],
+        ],
+        'prd_approved_at' => now(),
+        'blueprint_payload' => [
+            'domain_model' => [
+                'entities' => [
+                    ['name' => 'old_entities'],
+                ],
+                'relationships' => [],
+            ],
+        ],
+        'blueprint_approved_at' => now(),
+    ]);
+
+    $project->markPrdGenerationStarted();
+    $project->refresh();
+
+    expect($project->isPrdGenerating())->toBeTrue()
+        ->and($project->prd_payload)->toBe(['_status' => 'generating'])
+        ->and($project->prd_approved_at)->toBeNull()
+        ->and($project->blueprint_payload)->toBeNull()
+        ->and($project->blueprint_approved_at)->toBeNull();
+});
+
+test('project only approves ready prd payloads', function () {
+    $project = Project::create([
+        'name' => 'test-prd-ready-approval',
+        'status' => 'active',
+    ]);
+
+    expect(fn () => $project->approvePrd())->toThrow(RuntimeException::class);
+
+    $project->update(['prd_payload' => ['_status' => 'generating']]);
+    expect(fn () => $project->fresh()->approvePrd())->toThrow(RuntimeException::class);
+
+    $project->update([
+        'prd_payload' => [
+            'title' => 'Ready PRD',
+            'modules' => [
+                ['name' => 'Landing Page'],
+            ],
+        ],
+    ]);
+
+    $project->fresh()->approvePrd();
+
+    expect($project->fresh()->prd_approved_at)->not->toBeNull();
+});
+
+test('project marks blueprint generation as active without changing approved prd', function () {
+    $project = Project::create([
+        'name' => 'test-blueprint-generation-state',
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'Ready PRD',
+            'modules' => [
+                ['name' => 'Landing Page'],
+            ],
+        ],
+        'blueprint_payload' => [
+            'domain_model' => [
+                'entities' => [
+                    ['name' => 'old_entities'],
+                ],
+                'relationships' => [],
+            ],
+        ],
+        'blueprint_approved_at' => now(),
+    ]);
+
+    $project->approvePrd();
+    $approvedAt = $project->fresh()->prd_approved_at;
+
+    $project->markBlueprintGenerationStarted();
+    $project->refresh();
+
+    expect($project->isBlueprintGenerating())->toBeTrue()
+        ->and($project->blueprint_payload)->toBe(['_status' => 'generating'])
+        ->and($project->blueprint_approved_at)->toBeNull()
+        ->and($project->prd_approved_at->toISOString())->toBe($approvedAt->toISOString());
+});
+
 test('project requires complete target scaffold before blueprint approval', function () {
     $path = storage_path('framework/testing/incomplete-target-scaffold-'.Str::uuid());
     File::ensureDirectoryExists($path);

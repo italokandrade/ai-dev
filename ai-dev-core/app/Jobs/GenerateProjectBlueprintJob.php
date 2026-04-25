@@ -7,19 +7,27 @@ use App\Models\Project;
 use App\Services\AiRuntimeConfigService;
 use App\Services\ProjectBlueprintService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class GenerateProjectBlueprintJob implements ShouldQueue
+class GenerateProjectBlueprintJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
 
     public int $timeout = 600;
+
+    public int $uniqueFor = 3600;
+
+    public function uniqueId(): string
+    {
+        return $this->project->id;
+    }
 
     public function __construct(
         public Project $project,
@@ -30,10 +38,12 @@ class GenerateProjectBlueprintJob implements ShouldQueue
     public function handle(ProjectBlueprintService $blueprintService): void
     {
         $this->project->refresh();
+        $this->project->markBlueprintGenerationStarted();
+        $this->project->refresh();
 
         Log::info("GenerateProjectBlueprintJob: Gerando Blueprint Técnico para '{$this->project->name}'");
 
-        if (empty($this->project->prd_payload) || ! is_array($this->project->prd_payload)) {
+        if (! $this->project->isPrdReady()) {
             $this->project->update([
                 'blueprint_payload' => $this->fallbackBlueprint('PRD Master ausente ou inválido.'),
             ]);

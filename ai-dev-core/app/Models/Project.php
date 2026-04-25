@@ -225,6 +225,30 @@ class Project extends Model implements Conversational
         return $this->prd_approved_at !== null;
     }
 
+    public function isPrdReady(): bool
+    {
+        $prd = $this->prd_payload;
+
+        return is_array($prd)
+            && empty($prd['_status'] ?? null)
+            && ! empty($prd['modules'] ?? []);
+    }
+
+    public function isPrdGenerating(): bool
+    {
+        return ($this->prd_payload['_status'] ?? null) === 'generating';
+    }
+
+    public function markPrdGenerationStarted(): void
+    {
+        $this->update([
+            'prd_payload' => ['_status' => 'generating'],
+            'prd_approved_at' => null,
+            'blueprint_payload' => null,
+            'blueprint_approved_at' => null,
+        ]);
+    }
+
     public function isBlueprintReady(): bool
     {
         $blueprint = $this->blueprint_payload;
@@ -244,8 +268,25 @@ class Project extends Model implements Conversational
         return $this->blueprint_approved_at !== null;
     }
 
+    public function isBlueprintGenerating(): bool
+    {
+        return ($this->blueprint_payload['_status'] ?? null) === 'generating';
+    }
+
+    public function markBlueprintGenerationStarted(): void
+    {
+        $this->update([
+            'blueprint_payload' => ['_status' => 'generating'],
+            'blueprint_approved_at' => null,
+        ]);
+    }
+
     public function approvePrd(): void
     {
+        if (! $this->isPrdReady()) {
+            throw new \RuntimeException('O PRD Master precisa estar pronto antes da aprovação.');
+        }
+
         $this->update(['prd_approved_at' => now()]);
     }
 

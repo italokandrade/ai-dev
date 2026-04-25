@@ -45,7 +45,7 @@ class ViewProject extends ViewRecord
                 ->modalDescription('A IA irá analisar a descrição e gerar o PRD com os módulos de alto nível. Pode levar alguns minutos.')
                 ->modalSubmitActionLabel('Gerar')
                 ->action(function () {
-                    $this->record->update(['prd_payload' => ['_status' => 'generating']]);
+                    $this->record->markPrdGenerationStarted();
                     GenerateProjectPrdJob::dispatch($this->record->fresh());
                     Notification::make()
                         ->title('PRD sendo gerado...')
@@ -87,10 +87,7 @@ class ViewProject extends ViewRecord
                 ->action(function () {
                     try {
                         $this->record->approvePrd();
-                        $this->record->update([
-                            'blueprint_payload' => ['_status' => 'generating'],
-                            'blueprint_approved_at' => null,
-                        ]);
+                        $this->record->markBlueprintGenerationStarted();
                         GenerateProjectBlueprintJob::dispatch($this->record->fresh());
                         Notification::make()
                             ->title('PRD aprovado — Blueprint em geração')
@@ -124,10 +121,7 @@ class ViewProject extends ViewRecord
                 ->modalDescription('A IA irá gerar MER/ERD conceitual, casos de uso, workflows, arquitetura e contratos de API em alto nível.')
                 ->modalSubmitActionLabel('Gerar')
                 ->action(function () {
-                    $this->record->update([
-                        'blueprint_payload' => ['_status' => 'generating'],
-                        'blueprint_approved_at' => null,
-                    ]);
+                    $this->record->markBlueprintGenerationStarted();
                     GenerateProjectBlueprintJob::dispatch($this->record->fresh());
                     Notification::make()
                         ->title('Blueprint sendo gerado...')

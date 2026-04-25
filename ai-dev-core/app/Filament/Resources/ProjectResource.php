@@ -320,6 +320,15 @@ class ProjectResource extends Resource
                                     ->content(function (Get $get) {
                                         $prd = $get('prd_payload');
                                         $approvedAt = $get('prd_approved_at');
+                                        $prdStatus = is_array($prd) ? ($prd['_status'] ?? null) : null;
+
+                                        if ($prdStatus === 'generating') {
+                                            return 'PRD em geração.';
+                                        }
+
+                                        if ($prdStatus === 'ai_generation_failed') {
+                                            return 'Falha na geração do PRD. Gere novamente.';
+                                        }
 
                                         if (empty($prd) || (is_array($prd) && empty($prd['modules'] ?? []))) {
                                             return 'Nenhum PRD gerado. Clique em "Gerar PRD do Projeto" para criar.';
@@ -403,8 +412,15 @@ class ProjectResource extends Resource
                                         ->color('primary')
                                         ->visible(function (Get $get) {
                                             $prd = $get('prd_payload');
+                                            $prdStatus = is_array($prd) ? ($prd['_status'] ?? null) : null;
 
-                                            return empty($prd) || (is_array($prd) && empty($prd['modules'] ?? []));
+                                            if ($prdStatus === 'generating') {
+                                                return false;
+                                            }
+
+                                            return empty($prd)
+                                                || ($prdStatus === 'ai_generation_failed')
+                                                || (is_array($prd) && empty($prd['modules'] ?? []));
                                         })
                                         ->requiresConfirmation()
                                         ->modalHeading('Gerar PRD do Projeto')
@@ -422,7 +438,8 @@ class ProjectResource extends Resource
                                                 return;
                                             }
 
-                                            GenerateProjectPrdJob::dispatch($project);
+                                            $project->markPrdGenerationStarted();
+                                            GenerateProjectPrdJob::dispatch($project->fresh());
 
                                             Notification::make()
                                                 ->title('Geração do PRD iniciada')
@@ -459,10 +476,7 @@ class ProjectResource extends Resource
 
                                             try {
                                                 $project->approvePrd();
-                                                $project->update([
-                                                    'blueprint_payload' => ['_status' => 'generating'],
-                                                    'blueprint_approved_at' => null,
-                                                ]);
+                                                $project->markBlueprintGenerationStarted();
                                                 GenerateProjectBlueprintJob::dispatch($project->fresh());
 
                                                 Notification::make()
@@ -510,10 +524,7 @@ class ProjectResource extends Resource
                                                 return;
                                             }
 
-                                            $project->update([
-                                                'blueprint_payload' => ['_status' => 'generating'],
-                                                'blueprint_approved_at' => null,
-                                            ]);
+                                            $project->markBlueprintGenerationStarted();
                                             GenerateProjectBlueprintJob::dispatch($project->fresh());
 
                                             Notification::make()
@@ -596,14 +607,9 @@ class ProjectResource extends Resource
                                                 return;
                                             }
 
-                                            $project->update([
-                                                'prd_payload' => null,
-                                                'prd_approved_at' => null,
-                                                'blueprint_payload' => null,
-                                                'blueprint_approved_at' => null,
-                                            ]);
+                                            $project->markPrdGenerationStarted();
 
-                                            GenerateProjectPrdJob::dispatch($project);
+                                            GenerateProjectPrdJob::dispatch($project->fresh());
 
                                             Notification::make()
                                                 ->title('Regeneração do PRD iniciada')
@@ -964,11 +970,18 @@ class ProjectResource extends Resource
                                 Infolists\Components\TextEntry::make('prd_status')
                                     ->label('Status')
                                     ->getStateUsing(fn (Project $record) => match (true) {
+                                        $record->isPrdGenerating() => 'PRD em geração',
                                         empty($record->prd_payload) => 'Nenhum PRD gerado',
+                                        ($record->prd_payload['_status'] ?? null) === 'ai_generation_failed' => 'Falha na geração do PRD',
                                         $record->isPrdApproved() => 'PRD aprovado em '.$record->prd_approved_at->format('d/m/Y H:i'),
                                         default => 'Aguardando aprovação',
                                     })
-                                    ->color(fn (Project $record) => $record->isPrdApproved() ? 'success' : 'gray')
+                                    ->color(fn (Project $record) => match (true) {
+                                        $record->isPrdApproved() => 'success',
+                                        $record->isPrdGenerating() => 'warning',
+                                        ($record->prd_payload['_status'] ?? null) === 'ai_generation_failed' => 'danger',
+                                        default => 'gray',
+                                    })
                                     ->columnSpanFull(),
 
                                 Infolists\Components\TextEntry::make('blueprint_status')
