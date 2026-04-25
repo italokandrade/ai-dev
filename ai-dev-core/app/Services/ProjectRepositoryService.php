@@ -266,6 +266,8 @@ class ProjectRepositoryService
             ];
         }
 
+        $this->clearStaleIndexLock($workDir);
+
         $add = $this->git($workDir, ['git', 'add', '-A'], 30);
         if (! $add->successful()) {
             return $this->failedResult('git_add_failed', $add->errorOutput(), $workDir, $ensure['remote_url'] ?? null);

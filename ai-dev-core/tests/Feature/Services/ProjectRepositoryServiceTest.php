@@ -143,3 +143,39 @@ test('project repository service keeps local documentation commit when push fail
         File::deleteDirectory($baseDir);
     }
 });
+
+test('project repository service clears stale git index locks before committing pending changes', function () {
+    $baseDir = storage_path('framework/testing/project-repository-stale-lock-'.Str::uuid());
+    $workDir = "{$baseDir}/work";
+    $remoteDir = "{$baseDir}/remote.git";
+
+    File::ensureDirectoryExists($workDir);
+    File::ensureDirectoryExists($remoteDir);
+
+    Process::path($remoteDir)->run(['git', 'init', '--bare']);
+
+    $project = Project::create([
+        'name' => 'repository-stale-lock-project',
+        'description' => 'Projeto usado para validar limpeza de lock Git.',
+        'github_repo' => $remoteDir,
+        'local_path' => $workDir,
+        'status' => 'active',
+    ]);
+
+    try {
+        $repository = app(ProjectRepositoryService::class);
+        $repository->syncDocumentation($project, push: false);
+
+        File::put("{$workDir}/README-test.md", 'conteudo');
+        File::put("{$workDir}/.git/index.lock", 'stale');
+        touch("{$workDir}/.git/index.lock", time() - 180);
+
+        $result = $repository->commitPendingChanges($project, 'test: commit after stale lock', push: false);
+
+        expect($result['success'])->toBeTrue()
+            ->and($result['committed'])->toBeTrue()
+            ->and(File::exists("{$workDir}/.git/index.lock"))->toBeFalse();
+    } finally {
+        File::deleteDirectory($baseDir);
+    }
+});

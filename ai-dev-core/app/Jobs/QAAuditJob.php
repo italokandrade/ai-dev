@@ -15,7 +15,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Process;
 
 class QAAuditJob implements ShouldQueue
 {
@@ -132,64 +131,31 @@ PROMPT;
     {
         $project = $this->subtask->task->project;
         $repository = app(ProjectRepositoryService::class);
-        $repositoryResult = $repository->ensureRepository($project);
-        $workDir = $repositoryResult['work_dir'] ?? ($project->local_path ?? null);
-
-        if (! ($repositoryResult['ready'] ?? false) || ! is_string($workDir)) {
-            return null;
-        }
+        $message = "ai-dev: {$this->subtask->title} [subtask:{$this->subtask->id}]";
 
         try {
-            $statusResult = Process::path($workDir)->timeout(10)->run(['git', 'status', '--porcelain']);
-            if (trim($statusResult->output()) === '') {
-                $hashResult = Process::path($workDir)->timeout(10)->run(['git', 'rev-parse', 'HEAD']);
-                $hash = trim($hashResult->output());
+            $result = $repository->commitPendingChanges(
+                $project->fresh(),
+                $message,
+                push: trim((string) $project->github_repo) !== '',
+            );
 
-                if (trim((string) $project->github_repo) !== '') {
-                    $pushResult = $repository->push($project->fresh());
+            $hash = $result['commit_hash'] ?? null;
 
-                    if (! ($pushResult['success'] ?? false)) {
-                        Log::warning("QAAuditJob: git push failed for subtask {$this->subtask->id}", [
-                            'reason' => $pushResult['reason'] ?? null,
-                            'error' => $pushResult['error'] ?? null,
-                        ]);
-                    }
-                }
+            if (! ($result['success'] ?? false)) {
+                Log::warning("QAAuditJob: git commit/push failed for subtask {$this->subtask->id}", [
+                    'reason' => $result['reason'] ?? null,
+                    'error' => $result['error'] ?? ($result['push']['error'] ?? null),
+                ]);
 
-                return $hash ?: null;
+                return is_string($hash) && $hash !== '' ? $hash : null;
             }
 
-            // Stage all changes
-            Process::path($workDir)->timeout(30)->run(['git', 'add', '-A']);
-
-            // Commit with descriptive message
-            $message = "ai-dev: {$this->subtask->title} [subtask:{$this->subtask->id}]";
-            $commitResult = Process::path($workDir)->timeout(30)
-                ->run(['git', 'commit', '-m', $message]);
-
-            if (! $commitResult->successful()) {
-                Log::warning("QAAuditJob: git commit failed for subtask {$this->subtask->id}: {$commitResult->errorOutput()}");
-
-                return null;
+            if (($result['committed'] ?? false) && is_string($hash) && $hash !== '') {
+                Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
             }
 
-            // Capture the commit hash
-            $hashResult = Process::path($workDir)->timeout(10)->run(['git', 'rev-parse', 'HEAD']);
-            $hash = trim($hashResult->output());
-
-            Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
-
-            if (trim((string) $project->github_repo) !== '') {
-                $pushResult = $repository->push($project->fresh());
-                if (! ($pushResult['success'] ?? false)) {
-                    Log::warning("QAAuditJob: git push failed for subtask {$this->subtask->id}", [
-                        'reason' => $pushResult['reason'] ?? null,
-                        'error' => $pushResult['error'] ?? null,
-                    ]);
-                }
-            }
-
-            return $hash ?: null;
+            return is_string($hash) && $hash !== '' ? $hash : null;
         } catch (\Throwable $e) {
             Log::error("QAAuditJob: git error for subtask {$this->subtask->id}: {$e->getMessage()}");
 

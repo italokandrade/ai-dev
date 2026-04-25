@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -23,32 +24,31 @@ class GitOperationTool implements Tool
     {
         $action = $request['action'];
 
-        $git = Process::path($this->workingDirectory)->timeout(60);
         $path = $request['path'] ?? null;
         $branch = $request['branch'] ?? null;
         $message = $request['message'] ?? 'feat: AI-Dev agent commit';
 
         $result = match ($action) {
-            'status' => $git->run('git status --short'),
-            'diff' => $git->run('git diff'),
-            'log' => $git->run('git log --oneline -20'),
+            'status' => $this->git(['git', 'status', '--short']),
+            'diff' => $this->git(['git', 'diff']),
+            'log' => $this->git(['git', 'log', '--oneline', '-20']),
 
             'branch_create' => is_string($branch) && $branch !== ''
-                ? $git->run(['git', 'checkout', '-b', $branch])
+                ? $this->git(['git', 'checkout', '-b', $branch])
                 : null,
             'branch_checkout' => is_string($branch) && $branch !== ''
-                ? $git->run(['git', 'checkout', $branch])
+                ? $this->git(['git', 'checkout', $branch])
                 : null,
-            'branch_list' => $git->run('git branch -a'),
+            'branch_list' => $this->git(['git', 'branch', '-a']),
 
             'add' => is_string($path) && $path !== ''
-                ? $git->run(['git', 'add', $path])
-                : $git->run(['git', 'add', '-A']),
-            'commit' => $git->run(['git', 'commit', '-m', $message]),
-            'push' => $git->run(['git', 'push', 'origin', 'HEAD']),
+                ? $this->git(['git', 'add', $path], clearStaleLock: true)
+                : $this->git(['git', 'add', '-A'], clearStaleLock: true),
+            'commit' => $this->git(['git', 'commit', '-m', $message], clearStaleLock: true),
+            'push' => $this->git(['git', 'push', 'origin', 'HEAD']),
 
             'reset_hard' => null,
-            'stash' => $git->run(['git', 'stash', 'push', '-u']),
+            'stash' => $this->git(['git', 'stash', 'push', '-u']),
 
             default => null,
         };
@@ -79,5 +79,43 @@ class GitOperationTool implements Tool
             'message' => $schema->string()
                 ->description('Commit message for the commit action.'),
         ];
+    }
+
+    /**
+     * @param  array<int, string>  $command
+     */
+    private function git(array $command, bool $clearStaleLock = false)
+    {
+        if ($clearStaleLock) {
+            $this->clearStaleIndexLock();
+        }
+
+        if (($command[0] ?? null) === 'git') {
+            array_splice($command, 1, 0, ['-c', "safe.directory={$this->workingDirectory}"]);
+        }
+
+        return Process::path($this->workingDirectory)->timeout(60)->run($command);
+    }
+
+    private function clearStaleIndexLock(): void
+    {
+        $lockFile = "{$this->workingDirectory}/.git/index.lock";
+
+        if (! file_exists($lockFile)) {
+            return;
+        }
+
+        $age = time() - (int) filemtime($lockFile);
+
+        if ($age < 120) {
+            return;
+        }
+
+        Log::warning('GitOperationTool: removendo index.lock obsoleto', [
+            'work_dir' => $this->workingDirectory,
+            'age_seconds' => $age,
+        ]);
+
+        @unlink($lockFile);
     }
 }
