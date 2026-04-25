@@ -137,6 +137,16 @@ class ModuleTaskPlannerService
             }
         }
 
+        if ($tasks === [] && empty($prd['submodules'])) {
+            $this->pushTask($tasks, [
+                'type' => 'module_implementation',
+                'title' => "Implementar módulo: {$module->name}",
+                'description' => $this->stringValue($prd['objective'] ?? $prd['scope'] ?? $module->description ?? ''),
+                'priority' => Priority::High,
+                'source' => TaskSource::Prd,
+            ], $limit);
+        }
+
         return $tasks;
     }
 

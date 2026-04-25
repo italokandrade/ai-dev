@@ -144,3 +144,27 @@ test('generate module tasks waits until project planning prds are complete', fun
 
     expect($ready->tasks()->count())->toBe(0);
 });
+
+test('generate module tasks creates fallback task for valid leaf prd without implementation lists', function () {
+    $project = Project::create([
+        'name' => 'leaf-fallback-task-project',
+        'status' => 'active',
+    ]);
+
+    $module = ProjectModule::create([
+        'project_id' => $project->id,
+        'name' => 'Portfolio Publico',
+        'description' => 'Exibe projetos publicados.',
+        'status' => 'planned',
+        'prd_payload' => [
+            'title' => 'Portfolio Publico - PRD',
+            'objective' => 'Permitir que visitantes consultem projetos publicados.',
+            'needs_submodules' => false,
+        ],
+    ]);
+
+    (new GenerateModuleTasksJob($module))->handle();
+
+    expect($module->tasks()->count())->toBe(1)
+        ->and($module->tasks()->first()->title)->toBe('Implementar módulo: Portfolio Publico');
+});
