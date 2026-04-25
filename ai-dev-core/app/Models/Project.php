@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ModuleStatus;
 use App\Enums\Priority;
 use App\Enums\ProjectStatus;
+use App\Services\StandardProjectModuleService;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -202,7 +203,16 @@ class Project extends Model implements Conversational
      */
     public function createModulesFromPrd(): void
     {
-        $prd = $this->prd_payload;
+        $standardModules = app(StandardProjectModuleService::class);
+        $standardModules->syncProject($this);
+
+        $prd = is_array($this->prd_payload)
+            ? $standardModules->mergeIntoProjectPrd($this->prd_payload)
+            : [];
+
+        if ($prd !== $this->prd_payload) {
+            $this->forceFill(['prd_payload' => $prd])->save();
+        }
 
         if (empty($prd['modules'])) {
             return;
@@ -218,8 +228,9 @@ class Project extends Model implements Conversational
             $moduleIdMap[$normalizedName] = $module->id;
         }
 
-        $modules = collect($prd['modules'])
-            ->filter(fn (mixed $moduleData): bool => is_array($moduleData))
+        $availableSlots = max(0, self::MAX_ROOT_MODULES - $existingRootModules->count());
+
+        $modules = $standardModules->businessModulesFromPrd($prd)
             ->map(function (array $moduleData): array {
                 $name = $this->stringValue($moduleData['name'] ?? '');
 
@@ -233,11 +244,14 @@ class Project extends Model implements Conversational
             })
             ->filter(fn (array $moduleData): bool => $moduleData['name'] !== '' && $moduleData['normalized_name'] !== '')
             ->unique('normalized_name')
-            ->take(self::MAX_ROOT_MODULES)
             ->values();
 
         foreach ($modules as $moduleData) {
             if ($existingRootModules->has($moduleData['normalized_name'])) {
+                continue;
+            }
+
+            if ($availableSlots <= 0) {
                 continue;
             }
 
@@ -257,21 +271,28 @@ class Project extends Model implements Conversational
             ]);
 
             $moduleIdMap[$moduleData['normalized_name']] = $module->id;
+            $availableSlots--;
         }
+
+        $standardDependencyIds = $standardModules->standardRootModuleIds($this);
 
         // Resolver dependências entre módulos
         foreach ($modules as $moduleData) {
-            if (! empty($moduleData['dependencies'])) {
-                $depIds = collect($moduleData['dependencies'])
-                    ->map(fn ($depName) => $moduleIdMap[$this->normalizeModuleName($this->stringValue($depName))] ?? null)
-                    ->filter()
-                    ->values()
-                    ->all();
+            if (! isset($moduleIdMap[$moduleData['normalized_name']])) {
+                continue;
+            }
 
-                if (! empty($depIds) && isset($moduleIdMap[$moduleData['normalized_name']])) {
-                    ProjectModule::where('id', $moduleIdMap[$moduleData['normalized_name']])
-                        ->update(['dependencies' => $depIds]);
-                }
+            $depIds = collect($moduleData['dependencies'])
+                ->map(fn ($depName) => $moduleIdMap[$this->normalizeModuleName($this->stringValue($depName))] ?? null)
+                ->merge($standardDependencyIds)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if (! empty($depIds)) {
+                ProjectModule::where('id', $moduleIdMap[$moduleData['normalized_name']])
+                    ->update(['dependencies' => $depIds]);
             }
         }
     }

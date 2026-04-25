@@ -265,7 +265,7 @@ Audite o `tool_calls_log` periodicamente para ver o que os agentes realmente con
 | `branch_list` | `git branch -a` |
 | `add` | `git add <path>` (ou `-A` se vazio) |
 | `commit` | `git commit -m <message>` |
-| `push` | `git push origin HEAD` |
+| `push` | `git push -u origin HEAD` |
 | `reset_hard` | `git reset --hard HEAD` |
 | `stash` | `git stash` |
 
@@ -273,6 +273,8 @@ Audite o `tool_calls_log` periodicamente para ver o que os agentes realmente con
 - Todos os argumentos do usuário passam por `escapeshellarg()` antes de entrar na linha de comando.
 - Timeout de 60s por operação.
 - Saída truncada em 20 KB (stdout) e 5 KB (stderr) — evita estourar a janela do LLM.
+- O `ProjectRepositoryService` prepara o repositório do Projeto Alvo antes do uso operacional: inicializa `.git` quando necessário, configura `origin` a partir de `projects.github_repo`, define identidade Git local do agente e exporta PRDs/artefatos para `.ai-dev/` na raiz do repo do alvo.
+- O commit centralizado do `QAAuditJob` faz push automático quando `github_repo` está preenchido no cadastro do projeto.
 
 ### Uso típico do pipeline
 ```
@@ -284,6 +286,8 @@ GitOperationTool(action=add)   ... -A por default
 GitOperationTool(action=commit, message='feat: criar UserResource Filament')
 GitOperationTool(action=push)
 ```
+
+Na execução normal dos agentes, o `SpecialistAgent` deixa o working tree para auditoria e o `QAAuditJob` centraliza `git add`, `git commit` e `git push` depois da aprovação. Os artefatos sincronizados pelo ai-dev-core ficam em `.ai-dev/` no repo do próprio Projeto Alvo.
 
 ---
 

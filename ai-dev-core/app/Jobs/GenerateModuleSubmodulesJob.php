@@ -78,6 +78,10 @@ class GenerateModuleSubmodulesJob implements ShouldQueue
             $seenNames[$normalizedName] = true;
         }
 
+        if ($created > 0) {
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+        }
+
         Log::info("GenerateModuleSubmodulesJob: {$created} submódulos criados para '{$this->module->name}'");
     }
 

@@ -8,6 +8,7 @@ use App\Enums\TaskStatus;
 use App\Models\Subtask;
 use App\Models\SystemSetting;
 use App\Services\AiRuntimeConfigService;
+use App\Services\ProjectRepositoryService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -117,6 +118,8 @@ PROMPT;
             'commit_hash' => $commitHash,
         ]);
 
+        SyncProjectRepositoryJob::dispatch($this->subtask->task->project->fresh());
+
         $this->checkTaskCompletion();
         $this->dispatchNextSubtasks();
     }
@@ -127,8 +130,12 @@ PROMPT;
      */
     private function commitAndCaptureHash(): ?string
     {
-        $workDir = $this->subtask->task->project->local_path ?? null;
-        if (! $workDir || ! is_dir("{$workDir}/.git")) {
+        $project = $this->subtask->task->project;
+        $repository = app(ProjectRepositoryService::class);
+        $repositoryResult = $repository->ensureRepository($project);
+        $workDir = $repositoryResult['work_dir'] ?? ($project->local_path ?? null);
+
+        if (! ($repositoryResult['ready'] ?? false) || ! is_string($workDir)) {
             return null;
         }
 
@@ -137,6 +144,17 @@ PROMPT;
             if (trim($statusResult->output()) === '') {
                 $hashResult = Process::path($workDir)->timeout(10)->run(['git', 'rev-parse', 'HEAD']);
                 $hash = trim($hashResult->output());
+
+                if (trim((string) $project->github_repo) !== '') {
+                    $pushResult = $repository->push($project->fresh());
+
+                    if (! ($pushResult['success'] ?? false)) {
+                        Log::warning("QAAuditJob: git push failed for subtask {$this->subtask->id}", [
+                            'reason' => $pushResult['reason'] ?? null,
+                            'error' => $pushResult['error'] ?? null,
+                        ]);
+                    }
+                }
 
                 return $hash ?: null;
             }
@@ -160,6 +178,16 @@ PROMPT;
             $hash = trim($hashResult->output());
 
             Log::info("QAAuditJob: Subtask {$this->subtask->id} committed as {$hash}");
+
+            if (trim((string) $project->github_repo) !== '') {
+                $pushResult = $repository->push($project->fresh());
+                if (! ($pushResult['success'] ?? false)) {
+                    Log::warning("QAAuditJob: git push failed for subtask {$this->subtask->id}", [
+                        'reason' => $pushResult['reason'] ?? null,
+                        'error' => $pushResult['error'] ?? null,
+                    ]);
+                }
+            }
 
             return $hash ?: null;
         } catch (\Throwable $e) {

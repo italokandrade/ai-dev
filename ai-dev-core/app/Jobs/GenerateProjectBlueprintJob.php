@@ -37,6 +37,7 @@ class GenerateProjectBlueprintJob implements ShouldQueue
             $this->project->update([
                 'blueprint_payload' => $this->fallbackBlueprint('PRD Master ausente ou inválido.'),
             ]);
+            SyncProjectRepositoryJob::dispatch($this->project->fresh());
 
             return;
         }
@@ -72,6 +73,8 @@ class GenerateProjectBlueprintJob implements ShouldQueue
             'blueprint_payload' => $blueprint,
             'blueprint_approved_at' => null,
         ]);
+
+        SyncProjectRepositoryJob::dispatch($this->project->fresh());
     }
 
     private function buildPrompt(): string
@@ -176,5 +179,6 @@ PROMPT;
             'blueprint_payload' => $this->fallbackBlueprint($exception->getMessage()),
             'blueprint_approved_at' => null,
         ]);
+        SyncProjectRepositoryJob::dispatch($this->project->fresh());
     }
 }

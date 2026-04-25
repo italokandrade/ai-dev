@@ -97,6 +97,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 - `SpecialistAgent`, `QAAuditorAgent` e `DocsAgent` recebem o `project.local_path` ao serem instanciados. Todas as ferramentas de filesystem/shell/git (`FileReadTool`, `FileWriteTool`, `ShellExecuteTool`, `GitOperationTool`) já são escopadas ao path do Projeto Alvo via constructor.
 - O `BoostTool` é instanciado com o mesmo `local_path` e roteia para `php artisan boost:execute-tool` dentro do Projeto Alvo, garantindo que o agente leia o schema e a docs **do alvo**, não do ai-dev-core.
 - `DocsAgent` (`BoostTool.search-docs`) pesquisa a documentação instalada no **Boost do Projeto Alvo**, refletindo as versões exatas de Laravel/Filament/Livewire que aquele projeto tem instaladas.
+- Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` configura o `origin` do Projeto Alvo, exporta `PROJECT.md`, PRD Master, Blueprint, módulos, tasks e subtasks para `.ai-dev/` na raiz do repo desse projeto, commita essa sincronização e faz push. Commits de código aprovados pelo `QAAuditJob` também são enviados ao mesmo remoto.
 
 ---
 
@@ -130,6 +131,8 @@ O sistema adota **granularidade progressiva**:
 6. **Task** → o Orchestrator quebra em **subtasks** (sub-PRDs por especialista)
 
 > **Regra:** tasks são criadas apenas nos nós folha. O Projeto Alvo pode ainda não ter diretório físico durante PRD e Blueprint; diretório, scaffold TALL + Filament v5 + Anime.js e Boost do alvo são necessários apenas na fase de implementação.
+
+> **Core padrão obrigatório:** todo projeto novo recebe automaticamente `Chatbox` e o bloco `Segurança` com `Usuários`, `Perfis de Usuários` e `Logs de Atividades`. Esses módulos são anexados em `projects.prd_payload.standard_modules`, criados em `project_modules` como concluídos e copiados pelo `instalar_projeto.sh`; não entram em `projects.prd_payload.modules`, que fica reservado aos módulos de negócio.
 
 **Tabelas implementadas (Fase 1 — operacionais):**
 
@@ -231,6 +234,8 @@ Todas as ferramentas vivem em `ai-dev-core/app/Ai/Tools/` e implementam o contra
 - PostgreSQL 16 + Redis 7 + Laravel Horizon v5
 - BoostTool project-path-aware via `boost:execute-tool` no path do alvo, com `database-query` estruturado por schema real, redação de campos sensíveis e cap de saída
 - Cascata de PRDs protegida contra explosão: até 40 módulos raiz por projeto, até 8 submódulos por módulo, até 120 módulos totais por projeto e até 30 tasks por módulo
+- Core padrão por projeto: `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos e o `instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o Projeto Alvo
+- Scaffold dos alvos já provisiona Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, `.mcp.json` individual e migrations do SDK; os agentes consultam o Boost do alvo via `projects.local_path`
 - Blueprint Técnico Progressivo entre PRD Master e módulos: MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface; PRDs de módulo enriquecem esse desenho com campos e relacionamentos
 
 ### Fase 2: Qualidade, Segurança e UI — prioridades atualizadas

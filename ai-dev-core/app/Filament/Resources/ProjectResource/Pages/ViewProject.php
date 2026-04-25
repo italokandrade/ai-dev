@@ -10,6 +10,7 @@ use App\Filament\Resources\ProjectResource;
 use App\Jobs\CascadeModulePrdJob;
 use App\Jobs\GenerateProjectBlueprintJob;
 use App\Jobs\GenerateProjectPrdJob;
+use App\Jobs\SyncProjectRepositoryJob;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -164,6 +165,7 @@ class ViewProject extends ViewRecord
                     try {
                         $this->record->approveBlueprint();
                         $this->record->createModulesFromPrd();
+                        SyncProjectRepositoryJob::dispatch($this->record->fresh());
                         Notification::make()
                             ->title('Blueprint aprovado — Módulos criados!')
                             ->success()
@@ -193,6 +195,7 @@ class ViewProject extends ViewRecord
                         }
 
                         $this->record->createModulesFromPrd();
+                        SyncProjectRepositoryJob::dispatch($this->record->fresh());
 
                         $modules = $this->record->modules()->whereNull('parent_id')->get();
 

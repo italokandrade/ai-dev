@@ -63,6 +63,8 @@ class GenerateModulePrdJob implements ShouldQueue
             $blueprintService->mergeModulePrd($this->module->fresh(['project', 'parent']), $prdPayload);
         }
 
+        SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+
         Log::info("GenerateModulePrdJob: Concluído para '{$this->module->name}'");
     }
 
@@ -170,6 +172,7 @@ PROMPT;
         $this->module->update([
             'prd_payload' => $this->fallbackPrd($exception->getMessage()),
         ]);
+        SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
     }
 
     private function fallbackPrd(string $error): array

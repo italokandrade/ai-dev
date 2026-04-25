@@ -52,6 +52,7 @@ REGRAS DE GRANULARIDADE (MUITO IMPORTANTE):
 6. Não repita módulos com nomes equivalentes; normalize sinônimos em um único domínio.
 7. NÃO defina tabelas, campos, endpoints finais, classes ou fluxos detalhados neste PRD.
 8. Após este PRD, outro agente gerará o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
+9. Chatbox e Segurança são módulos padrão herdados do ai-dev-core. NÃO os inclua em "modules"; o sistema os anexa automaticamente em "standard_modules" e os cria como módulos concluídos.
 
 REGRAS DE CONTEÚDO:
 1. O PRD descreve O QUE o sistema faz, NÃO COMO fazer.

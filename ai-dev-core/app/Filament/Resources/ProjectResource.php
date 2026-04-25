@@ -9,6 +9,7 @@ use App\Filament\Resources\ProjectResource\Pages;
 use App\Jobs\GenerateProjectBlueprintJob;
 use App\Jobs\GenerateProjectFeaturesJob;
 use App\Jobs\GenerateProjectPrdJob;
+use App\Jobs\SyncProjectRepositoryJob;
 use App\Models\Project;
 use App\Models\ProjectModule;
 use App\Models\ProjectQuotation;
@@ -554,6 +555,7 @@ class ProjectResource extends Resource
                                             try {
                                                 $project->approveBlueprint();
                                                 $project->createModulesFromPrd();
+                                                SyncProjectRepositoryJob::dispatch($project->fresh());
 
                                                 Notification::make()
                                                     ->title('Blueprint aprovado — Módulos criados!')

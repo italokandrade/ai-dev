@@ -277,13 +277,14 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_paylo
 | `updated_at` | Timestamp | Última modificação |
 
 **Fluxo ativo (Granularidade Progressiva):**
-1. `ProjectPrdAgent` gera `projects.prd_payload` com módulos de alto nível
-2. `Project::approvePrd()` libera `GenerateProjectBlueprintJob`
-3. `ProjectBlueprintAgent` gera `projects.blueprint_payload`
-4. `Project::approveBlueprint()` + `createModulesFromPrd()` cria módulos raiz
-5. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo, usando o Blueprint como trilho
-6. `ProjectBlueprintService` incorpora `blueprint_contribution` do módulo ao Blueprint Global
-7. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
+1. `ProjectPrdAgent` gera `projects.prd_payload` com módulos de alto nível de negócio
+2. `StandardProjectModuleService` anexa `standard_modules` (`Chatbox` e `Segurança`) e cria esses módulos como concluídos em `project_modules`
+3. `Project::approvePrd()` libera `GenerateProjectBlueprintJob`
+4. `ProjectBlueprintAgent` gera `projects.blueprint_payload`
+5. `Project::approveBlueprint()` + `createModulesFromPrd()` cria módulos raiz de negócio e vincula dependências ao core padrão
+6. `ModulePrdAgent` gera `project_modules.prd_payload` técnico por módulo, usando o Blueprint como trilho
+7. `ProjectBlueprintService` incorpora `blueprint_contribution` do módulo ao Blueprint Global
+8. O PRD do módulo decide `needs_submodules` → submódulos ou tasks
 
 **Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
 1. Acionado pelo botão "Auto Aprovar Blueprint — Cascata Completa" em `ViewProject`
@@ -443,9 +444,15 @@ Cada registro é um exemplo de código perfeito que os agentes DEVEM seguir ao g
 
 ---
 
-### 2.2. Tabelas do Core Master (Comuns a TODOS os Projetos)
+### 2.2. Core Padrao dos Projetos Alvo
 
-De acordo com o `STANDARD_MODULES.md`, **TODOS os projetos (inclusive o próprio `ai-dev-core`)** possuem um conjunto de módulos e tabelas pré-fabricadas que gerenciam Segurança, Auditoria e Configurações Globais. Estas tabelas existem em todos os bancos de dados do ecossistema.
+De acordo com o `STANDARD_MODULES.md`, todo Projeto Alvo nasce com `Chatbox` e `Segurança`. O `StandardProjectModuleService` registra esses módulos no banco do ai-dev-core como concluídos, e o `/var/www/html/projetos/ai-dev/instalar_projeto.sh` copia os arquivos base do `ai-dev-core` para o projeto criado e roda as migrations no banco do alvo.
+
+O mesmo scaffold provisiona o runtime individual do alvo para os agentes: Laravel AI SDK, Laravel MCP, Laravel Boost, `config/ai.php`, `config/mcp.php`, migrations do SDK e `.mcp.json` apontando para `php artisan boost:mcp`. O `BoostTool` sempre executa `boost:execute-tool` dentro de `projects.local_path`, portanto cada projeto fornece seu proprio MCP e contexto, assim como fornece seu proprio `github_repo`.
+
+Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` prepara o Git do Projeto Alvo: inicializa `.git` se necessário, configura `origin` com o repositório cadastrado, define identidade local do agente e mantém `.ai-dev/` sincronizado na raiz do repositório daquele alvo (`PROJECT.md`, PRD Master, Blueprint Técnico, módulos, tasks e subtasks). Essa sincronização faz commit e push no repositório do alvo; commits de implementação aprovados pelo `QAAuditJob` também são enviados ao mesmo `origin`.
+
+No PRD, esses blocos ficam em `projects.prd_payload.standard_modules`; `projects.prd_payload.modules` continua reservado para módulos de negócio gerados pela IA.
 
 **`activity_log`** — Log de Ações Globais (Spatie Activitylog).
 Tabela estritamente de leitura no painel que rastreia ações CRUD e eventos relevantes do sistema. A cobertura vem de duas camadas: Models críticos usam `LogsActivity`; `ActivityAuditService` atua como fallback automático para novos Models em `App\Models`, Models Spatie de roles/permissões e eventos de atribuição/remoção de roles/permissões.
@@ -808,6 +815,7 @@ app/
 │   ├── GenerateModuleSubmodulesJob.php  ← Cria submódulos a partir do PRD técnico do módulo (aprovação manual)
 │   ├── GenerateModuleTasksJob.php       ← Cria tasks a partir do PRD técnico de um módulo folha (aprovação manual)
 │   ├── GenerateProjectFeaturesJob.php   ← Gera project_features via GenerateFeaturesAgent (type: backend|frontend)
+│   ├── SyncProjectRepositoryJob.php     ← Exporta artefatos/PRDs para .ai-dev no repo do alvo e faz commit/push
 │   ├── OrchestratorJob.php              ← Despacha OrchestratorAgent → grava subtasks → enfileira workers
 │   ├── ProcessSubtaskJob.php            ← Executa um SpecialistAgent para uma Subtask específica
 │   ├── QAAuditJob.php                   ← Executa QAAuditorAgent sobre o diff de uma subtask
@@ -840,6 +848,7 @@ app/
 ├── Services/
 │   ├── SystemContextService.php     ← Monta contexto dinâmico (padrões TALL + RAG + histórico) para a mensagem user do prompt()
 │   ├── ProjectBlueprintService.php  ← Normaliza e incorpora contribuições de módulo ao Blueprint Técnico Global
+│   ├── ProjectRepositoryService.php ← Configura origin via projects.github_repo, exporta docs/PRDs e executa commit/push no alvo
 │   ├── FileLockManager.php          ← Mutex de arquivos para subtasks paralelas (Fase 2 — planejado)
 │   ├── PRDValidator.php             ← Valida PRD contra o JSON Schema (Fase 2 — planejado)
 │   └── TaskOrchestrator.php         ← Coordena o pipeline Agent→QA→Git (Fase 2 — planejado)
@@ -1427,7 +1436,7 @@ O catálogo completo de ferramentas, com schemas de entrada/saída e exemplos pr
 | 2 | **DocSearchTool** | `App\Ai\Tools\DocSearchTool` | Busca focada em docs TALL Stack via Boost `search-docs` (wrapper usado pelo `DocsAgent`) |
 | 3 | **FileReadTool** | `App\Ai\Tools\FileReadTool` | Leitura de arquivos do Projeto Alvo com limites de linhas/bytes |
 | 4 | **FileWriteTool** | `App\Ai\Tools\FileWriteTool` | Escrita/patch de arquivos do Projeto Alvo com validação de path |
-| 5 | **GitOperationTool** | `App\Ai\Tools\GitOperationTool` | `status`, `diff`, `add`, `commit`, `branch` no repo do Projeto Alvo |
+| 5 | **GitOperationTool** | `App\Ai\Tools\GitOperationTool` | `status`, `diff`, `add`, `commit`, `push`, `branch` no repo do Projeto Alvo |
 | 6 | **ShellExecuteTool** | `App\Ai\Tools\ShellExecuteTool` | Execução allowlisted de `php artisan`, `composer`, `npm`, `npx` e binários QA no cwd do Projeto Alvo |
 
 **Por que apenas 6?** O contrato `Tool` do Laravel AI SDK encoraja ferramentas enxutas com `schema()` preciso — cada Tool é uma classe PHP com ações bem definidas. Ferramentas especializadas (testes, segurança, performance, deploy, redes sociais) são cobertas pela combinação `ShellExecuteTool` + `BoostTool` no Projeto Alvo: `php artisan test`, `php artisan enlightn`, `composer audit`, etc. rodam via shell; schema e logs vêm do Boost. Funcionalidades futuras (publicação em redes sociais, análise dinâmica) serão adicionadas como Agents dedicados, não como Tools genéricas.
@@ -1462,7 +1471,7 @@ Fluxo Git de uma Task:
 | **QA rejeita a entrega** | Subagente recebe feedback do QA e tenta corrigir. Até 3 retries |
 | **Retentativas esgotadas** | Task vai para `escalated`. Notifica humano via Filament com todo o contexto |
 | **Servidor cai durante task** | O Supervisor reinicia os workers. A task permanece `in_progress` no DB. O Job é re-despachado automaticamente pelo Laravel Queue (retry built-in) |
-| **Git push falha** | `GitOperationTool` tenta `git pull --rebase` + `git push` novamente. Se conflito: marca como `escalated` |
+| **Git push falha** | `ProjectRepositoryService` tenta `git pull --rebase` + `git push` novamente. Se houver conflito ou erro de credencial, registra warning para intervenção humana |
 | **API do LLM fora do ar** | O SDK faz failover automático via `AgentFailedOver` event. Como todo o tráfego passa por OpenRouter, se o modelo primário (ex: Opus 4.7) falhar, o `fallback_agent_id` em `agents_config` aponta para um fallback dentro da família Anthropic (ex: Sonnet 4.6) — todos via OpenRouter |
 | **Duas subtasks editam o mesmo arquivo** | FileLockManager impede (status `blocked`). Nunca acontece race condition |
 | **Sentinela em loop (mesmo erro)** | Hash de dedup impede criação de tasks duplicadas. Após 3 falhas: `requires_human` |

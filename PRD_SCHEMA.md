@@ -2,6 +2,8 @@
 
 Este documento define o formato **exato** que todo PRD, Blueprint Técnico e Sub-PRD deve seguir no ecossistema AI-Dev. O Sistema Inteiro a ser desenvolvido, cada módulo e cada submódulo devem ter um PRD salvo no banco de dados (`projects.prd_payload` e `project_modules.prd_payload`), o desenho técnico progressivo fica em `projects.blueprint_payload` e `project_modules.blueprint_payload`, e cada task também deve ter um PRD salvo no banco de dados (`tasks.prd_payload`). Dessa forma, as IAs ou os humanos que irão trabalhar nas atividades sabem exatamente o que devem fazer. Quando o Orchestrator quebra um PRD em Sub-PRDs para as subtasks, o campo `subtasks.sub_prd_payload` DEVE seguir o schema de Sub-PRD.
 
+Quando o cadastro do projeto possui `projects.github_repo`, o `ProjectRepositoryService` também exporta esses artefatos para `.ai-dev/` na raiz do repositório do Projeto Alvo e faz commit/push. O banco do ai-dev-core continua sendo a fonte primária; o repositório do alvo recebe uma cópia versionada para rastreabilidade.
+
 O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas ANTES de aceitar a task. Se o JSON for inválido, a task é rejeitada com uma mensagem clara do que falta.
 
 > **Todos os caminhos, tabelas e colunas citados em um PRD referem-se ao Projeto Alvo** — nunca ao ai-dev-core. Exemplos: `context.related_files` aponta para arquivos dentro de `projects.local_path`; `context.related_tables` são tabelas no banco daquele projeto (consultadas pelo `BoostTool` via `database-schema` do Projeto Alvo, não pelo schema do ai-dev-core); `acceptance_criteria` descrevem comportamento a validar no código e banco do alvo. O PRD em si é **armazenado** no banco do ai-dev-core (em `tasks.prd_payload`) — mas **descreve trabalho a ser feito no alvo**. Para a separação canônica entre ai-dev-core e Projeto Alvo, consulte `README.md → Arquitetura em Duas Camadas`.
@@ -10,7 +12,9 @@ O `PRDValidator.php` (em `app/Services/`) valida todo PRD contra estes schemas A
 
 ## 0. JSON Schema do PRD do Projeto (Project PRD)
 
-Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `ProjectPrdAgent`. **Contém apenas módulos de alto nível** — submódulos são proibidos neste nível.
+Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `ProjectPrdAgent`. **Contém apenas módulos de alto nível de negócio** — submódulos são proibidos neste nível.
+
+`Chatbox` e `Segurança` não devem aparecer em `modules`. Eles são anexados automaticamente pelo `StandardProjectModuleService` em `standard_modules`, pois já existem como core padrão de todo Projeto Alvo.
 
 ```json
 {
@@ -29,7 +33,7 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
     },
     "modules": {
       "type": "array",
-      "description": "Lista de módulos de ALTO NÍVEL. NÃO incluir submódulos aqui.",
+      "description": "Lista de módulos de ALTO NÍVEL de negócio. NÃO incluir submódulos, Chatbox ou Segurança aqui.",
       "items": {
         "type": "object",
         "required": ["name", "description", "priority"],
@@ -56,6 +60,27 @@ Este é o formato que preenche o campo `projects.prd_payload`. Gerado pelo `Proj
         }
       },
       "minItems": 1
+    },
+    "standard_modules": {
+      "type": "array",
+      "description": "Módulos padrão herdados do ai-dev-core e anexados automaticamente pelo sistema.",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "status", "source"],
+        "properties": {
+          "name": { "type": "string", "enum": ["Chatbox", "Segurança"] },
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["preinstalled"] },
+          "source": { "type": "string", "enum": ["ai_dev_core_standard"] },
+          "implemented_by_template": { "type": "boolean" },
+          "needs_submodules": { "type": "boolean" },
+          "submodules": { "type": "array" }
+        }
+      }
+    },
+    "standard_modules_policy": {
+      "type": "string",
+      "description": "Regra textual explicando que Chatbox e Segurança são instalados automaticamente."
     }
   }
 }

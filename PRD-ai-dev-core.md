@@ -97,9 +97,9 @@ pending → blocked → pending
 
 #### B.0. ProjectPrdAgent ✅ (Novo — Granularidade Progressiva)
 
-**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o PRD Master do projeto contendo **apenas módulos de alto nível** (zero submódulos).
+**O que existe:** Implementa `Agent`, usa `Promptable`. Provider/model resolvidos dinamicamente via `AiRuntimeConfigService::apply(LEVEL_PREMIUM)`. Gera o PRD Master do projeto contendo **apenas módulos de alto nível de negócio** (zero submódulos).
 
-**Instruções:** Explicitamente proíbe a geração de submódulos no nível do projeto. Retorna JSON com `title`, `objective`, `modules[]` (name, description, priority, dependencies).
+**Instruções:** Explicitamente proíbe a geração de submódulos no nível do projeto e também proíbe incluir `Chatbox` e `Segurança` em `modules`. Retorna JSON com `title`, `objective`, `modules[]` (name, description, priority, dependencies). O `StandardProjectModuleService` anexa `standard_modules` com Chatbox/Segurança depois da resposta.
 
 **Job associado:** `GenerateProjectPrdJob` — fila `orchestrator`, timeout 600s.
 
@@ -359,7 +359,7 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 
 | Job | Fila | Propósito | Timeout |
 |---|---|---|---|
-| `GenerateProjectPrdJob` | `orchestrator` | Gera PRD Master do projeto via `ProjectPrdAgent` (apenas módulos) | 600s |
+| `GenerateProjectPrdJob` | `orchestrator` | Gera PRD Master do projeto via `ProjectPrdAgent` (módulos de negócio) e anexa `standard_modules` | 600s |
 | `GenerateProjectBlueprintJob` | `orchestrator` | Gera Blueprint Técnico Global via `ProjectBlueprintAgent` | 600s |
 | `GenerateModulePrdJob` | `orchestrator` | Gera PRD Técnico de um módulo via `ModulePrdAgent` e incorpora contribuição ao Blueprint | 600s |
 | `GenerateModuleSubmodulesJob` | `orchestrator` | Cria submódulos a partir do `prd_payload.submodules` do módulo | 600s |
@@ -368,7 +368,7 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 **Fluxo de ativação (UI Filament):**
 1. Usuário clica "Gerar PRD do Projeto" → `GenerateProjectPrdJob`
 2. Usuário aprova PRD → `approvePrd()` + `GenerateProjectBlueprintJob`
-3. Usuário aprova Blueprint → `approveBlueprint()` + `createModulesFromPrd()` (módulos raiz)
+3. Usuário aprova Blueprint → `approveBlueprint()` + `createModulesFromPrd()` (módulos raiz de negócio; Chatbox/Segurança já existem como concluídos)
 4. Usuário entra em um módulo → clica "Gerar PRD do Módulo" → `GenerateModulePrdJob`
 5. Se PRD retorna `needs_submodules = true` → clica "Criar Submódulos" → `GenerateModuleSubmodulesJob`
 6. Se PRD retorna `needs_submodules = false` → clica "Criar Tasks" → `GenerateModuleTasksJob`
@@ -380,7 +380,7 @@ Não existe. Deve ser criado na Fase 2. Fila `performance`. Executa `Performance
 | `GenerateProjectSpecificationJob` | `orchestrator` | Gera spec técnica via `SpecificationAgent` (legado) |
 | `GenerateProjectQuotationJob` | `orchestrator` | Gera orçamento via `QuotationAgent` |
 | `GenerateTasksFromSpecJob` | `orchestrator` | Cria tasks a partir de spec aprovada (legado) |
-| `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo |
+| `ScaffoldProjectJob` | `orchestrator` | Scaffolding inicial do Projeto Alvo via `instalar_projeto.sh`, incluindo cópia do core padrão Chatbox/Segurança e provisionamento individual de AI SDK/MCP/Boost |
 
 **Status:** Existem e funcionam. `SpecificationAgent` e `GenerateTasksFromSpecJob` são legados — o fluxo ativo usa `ProjectPrdAgent` + `ModulePrdAgent`.
 
@@ -692,6 +692,8 @@ Ver G.1. Lógica existe no Model — extrair para Service em Fase 2.
 As seguintes melhorias e correções foram implementadas para alinhar o sistema com o PRD v2.0:
 
 - **✅ Granularidade Progressiva:** `ProjectPrdAgent` gera apenas módulos; `ModulePrdAgent` gera PRD técnico por módulo decidindo `needs_submodules`; submódulos e tasks criados apenas nos níveis apropriados.
+- **✅ Core Padrão por Projeto:** `StandardProjectModuleService` registra Chatbox/Segurança como módulos concluídos, injeta `standard_modules` no PRD e o `instalar_projeto.sh` copia os arquivos base para todo novo Projeto Alvo.
+- **✅ Repositório por Projeto:** `ProjectRepositoryService` usa `projects.github_repo` para configurar `origin`, exportar PRDs/artefatos para `.ai-dev/` no repositório do Projeto Alvo, commitar e fazer push. O `QAAuditJob` também faz push dos commits aprovados.
 - **✅ Novos Jobs:** `GenerateProjectPrdJob`, `GenerateModulePrdJob`, `GenerateModuleSubmodulesJob`, `GenerateModuleTasksJob` — todos na fila `orchestrator` com timeout 600s.
 - **✅ Navegação Hierarchical:** `NavigationTree` component com breadcrumbs clicáveis em ViewProject, ViewProjectModule, ViewTask. Links cruzados entre recursos.
 - **✅ Layout Vertical:** Todas as páginas ViewProject, ViewProjectModule, ViewTask usam sections empilhadas em 100% de largura.

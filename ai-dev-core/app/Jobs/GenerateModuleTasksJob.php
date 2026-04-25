@@ -120,6 +120,10 @@ class GenerateModuleTasksJob implements ShouldQueue
             $created++;
         }
 
+        if ($created > 0) {
+            SyncProjectRepositoryJob::dispatch($this->module->project->fresh());
+        }
+
         Log::info("GenerateModuleTasksJob: {$created} tasks criadas para '{$this->module->name}'");
     }
 }

@@ -92,7 +92,11 @@ test('project creates root modules idempotently with cap and deduplication', fun
     $project->createModulesFromPrd();
 
     expect($project->modules()->whereNull('parent_id')->count())->toBe(Project::MAX_ROOT_MODULES)
-        ->and($project->modules()->where('name', 'Autenticação')->count())->toBe(1);
+        ->and($project->modules()->where('name', 'Chatbox')->count())->toBe(1)
+        ->and($project->modules()->where('name', 'Segurança')->count())->toBe(1)
+        ->and($project->modules()->where('name', 'Autenticação')->count())->toBe(1)
+        ->and($project->fresh()->prd_payload['standard_modules'])->toHaveCount(2)
+        ->and($project->modules()->where('name', 'Autenticação')->first()->dependencies)->toHaveCount(2);
 });
 
 test('project approves blueprint only when it is ready', function () {

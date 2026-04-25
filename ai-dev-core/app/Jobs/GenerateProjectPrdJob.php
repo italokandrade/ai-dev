@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Ai\Agents\ProjectPrdAgent;
 use App\Models\Project;
 use App\Services\AiRuntimeConfigService;
+use App\Services\StandardProjectModuleService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -57,8 +58,10 @@ class GenerateProjectPrdJob implements ShouldQueue
         }
 
         $this->project->update([
-            'prd_payload' => $prdPayload,
+            'prd_payload' => app(StandardProjectModuleService::class)->mergeIntoProjectPrd($prdPayload),
         ]);
+
+        SyncProjectRepositoryJob::dispatch($this->project->fresh());
 
         Log::info("GenerateProjectPrdJob: Concluído para '{$this->project->name}'");
     }
@@ -83,6 +86,8 @@ class GenerateProjectPrdJob implements ShouldQueue
             ->map(fn ($f) => "- {$f->title}")
             ->implode("\n") ?: 'Nenhuma funcionalidade frontend cadastrada.';
 
+        $standardModules = app(StandardProjectModuleService::class)->promptSummary();
+
         return <<<PROMPT
 PROJETO: {$projectName}
 
@@ -95,10 +100,13 @@ FUNCIONALIDADES BACKEND:
 FUNCIONALIDADES FRONTEND:
 {$frontendFeatures}
 
+{$standardModules}
+
 ---
 INSTRUÇÃO: Com base nas informações acima, gere o PRD Master deste projeto.
 O PRD deve respeitar EXATAMENTE as funcionalidades já cadastradas.
 Não invente módulos ou funcionalidades que não foram solicitadas.
+Não inclua os módulos padrão Chatbox e Segurança em "modules"; eles serão anexados automaticamente em "standard_modules".
 Divida tudo apenas em módulos de alto nível, sem submódulos, sem campos de banco e sem endpoints finais.
 Depois do PRD, outro agente irá gerar o Blueprint Técnico Global com MER/ERD conceitual, casos de uso, workflows, arquitetura e APIs de alto nível.
 PROMPT;

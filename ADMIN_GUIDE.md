@@ -46,9 +46,11 @@ O ponto de partida para qualquer automação. Cada linha em `projects` represent
 
 O sistema adota **granularidade progressiva** — o PRD do projeto gera apenas os módulos de alto nível. Antes dos módulos, o sistema gera um **Blueprint Técnico Global** com MER/ERD conceitual, casos de uso, workflows, arquitetura C4 simplificada, integrações e API surface.
 
+Todo projeto novo recebe automaticamente o core padrão `Chatbox` e `Segurança` (`Usuários`, `Perfis de Usuários`, `Logs de Atividades`). Esses módulos aparecem em `standard_modules`, já ficam concluídos no banco do ai-dev-core e não devem ser adicionados ao PRD de módulos de negócio.
+
 **Passo a passo:**
 
-1. **Criar Projeto** — preencha `name`, `github_repo`, `local_path`, `db_password`
+1. **Criar Projeto** — preencha `name`, `github_repo`, `local_path`, `db_password`. Ao salvar, o sistema registra os módulos padrão Chatbox/Segurança e inicia o scaffold pelo `instalar_projeto.sh`. Se `github_repo` estiver preenchido, o sistema configura o `origin` do Projeto Alvo, exporta os PRDs/artefatos para `.ai-dev/` na raiz do repositório desse projeto e faz commit/push dessa sincronização.
 2. **Descrever o Projeto** — na aba "Descrição do Projeto", escreva livremente o que o sistema deve fazer. Use "Refinar com IA" se quiser melhorar o texto.
 3. **Gerar PRD do Projeto** — na página de visualização do projeto, clique no botão **"Gerar PRD do Projeto"** (header da página). O `ProjectPrdAgent` analisa a descrição + funcionalidades e gera o PRD Master com os módulos de alto nível. O PRD também pode ser gerado via a aba "PRD do Projeto" no formulário de edição. **Isso pode levar alguns minutos.**
 4. **Aprovar PRD** — quando o PRD aparecer, revise os módulos listados e clique em **"Aprovar PRD — Gerar Blueprint"**. O sistema aprova o PRD e dispara a geração do Blueprint em background.
@@ -57,6 +59,8 @@ O sistema adota **granularidade progressiva** — o PRD do projeto gera apenas o
 7. **Navegar para Módulos** — use a aba "Módulos do Projeto" no detalhe do projeto ou vá em **Módulos** no menu lateral.
 
 > Durante PRD e Blueprint, o Projeto Alvo pode existir apenas como registro no banco do ai-dev-core. O diretório físico, scaffold TALL + Filament v5 + Anime.js e Boost do alvo passam a ser obrigatórios somente quando a implementação começar.
+
+> No scaffold, o instalador copia do `ai-dev-core` os arquivos de Chatbox, usuários, perfis, permissões e logs, roda as migrations desses blocos no banco do Projeto Alvo e atribui o usuário inicial ao perfil `super_admin`. Ele também instala Laravel AI SDK, Laravel MCP e Laravel Boost, publica `config/ai.php`/`config/mcp.php`, cria a `.mcp.json` individual do alvo e deixa o Boost daquele projeto pronto para os agentes do ai-dev-core.
 
 - **Provedor e Modelo:** Todo o sistema agêntico do ai-dev-core é **configurável dinamicamente** via `Configuração > Sistema` (tabela `system_settings`). O `AiRuntimeConfigService` resolve provider, model e API key em runtime para cada um dos 4 tiers: Premium, High, Fast e System. Providers suportados: OpenRouter, Anthropic, OpenAI, **Kimi (Moonshot AI)** e Ollama.
 - **Contexto Persistente:** O ai-dev-core armazena o ID de sessão (coluna `anthropic_session_id`) e as conversas (tabelas `agent_conversations`, `agent_conversation_messages`) **no banco do ai-dev-core** — nenhum dado desse tipo contamina o banco do alvo.
@@ -86,6 +90,7 @@ Após aprovar o Blueprint e criar os módulos raiz, cada módulo precisa passar 
 - Um módulo pode depender de outros módulos do mesmo projeto.
 - **Regra de Seleção:** O sistema só permite selecionar como dependência módulos que já estejam com o status **Concluído** (`Completed`).
 - Isso garante que a base de código onde o novo módulo será construído está estável e testada.
+- Os módulos de negócio criados a partir do PRD recebem automaticamente dependência dos módulos raiz padrão (`Chatbox` e `Segurança`), que já nascem concluídos.
 
 ### 2.4 Navegação entre Módulos
 - **Breadcrumb no topo:** toda página de módulo mostra a trilha completa: `📁 Projeto / Módulo Pai / ... / Módulo Atual`

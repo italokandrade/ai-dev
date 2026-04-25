@@ -6,6 +6,7 @@ use App\Filament\Resources\ProjectResource;
 use App\Jobs\GenerateProjectSpecificationJob;
 use App\Jobs\ScaffoldProjectJob;
 use App\Models\ProjectSpecification;
+use App\Services\StandardProjectModuleService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -20,7 +21,7 @@ class CreateProject extends CreateRecord
 
         unset($data['db_password']);
 
-        $data['local_path'] = '/var/www/html/projetos/' . $data['name'];
+        $data['local_path'] = '/var/www/html/projetos/'.$data['name'];
 
         return $data;
     }
@@ -28,6 +29,8 @@ class CreateProject extends CreateRecord
     protected function afterCreate(): void
     {
         $project = $this->record;
+
+        app(StandardProjectModuleService::class)->syncProject($project);
 
         // 1. Criar especificação com a descrição do usuário
         $specification = ProjectSpecification::create([
