@@ -331,9 +331,15 @@ class Project extends Model implements Conversational
         }
 
         $rootModuleLimit = app(ProjectPlanningScopeService::class)->rootModuleLimit($this->fresh(['features']) ?? $this);
+        $standardRootNames = collect($standardModules->definitions())
+            ->map(fn (array $definition): string => $this->normalizeModuleName($this->stringValue($definition['name'] ?? '')))
+            ->filter()
+            ->all();
+        $existingBusinessRootModules = $existingRootModules
+            ->reject(fn (ProjectModule $module): bool => in_array($this->normalizeModuleName($module->name), $standardRootNames, true));
         $availableSlots = $rootModuleLimit === null
             ? PHP_INT_MAX
-            : max(0, $rootModuleLimit - $existingRootModules->count());
+            : max(0, $rootModuleLimit - $existingBusinessRootModules->count());
 
         $modules = $standardModules->businessModulesFromPrd($prd)
             ->map(function (array $moduleData): array {
