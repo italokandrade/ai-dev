@@ -560,5 +560,54 @@ php artisan cache:clear
 
 ---
 
+### 8.3. SSH do www-data para GitHub
+
+O Horizon roda como `www-data`. Para que o `SyncProjectRepositoryJob` consiga fazer `git push` para o GitHub nos repositórios dos projetos alvo, o usuário `www-data` precisa de acesso SSH configurado.
+
+**Configuração realizada no servidor:**
+
+```bash
+# Chave privada e known_hosts em /var/www/.ssh/
+ls /var/www/.ssh/
+# id_ed25519        (chave privada — mesma do root)
+# id_ed25519.pub
+# known_hosts       (contém github.com)
+```
+
+**Se precisar reconfigurar (ex: novo servidor):**
+
+```bash
+# 1. Criar diretório SSH do www-data
+mkdir -p /var/www/.ssh
+
+# 2. Adicionar host key do GitHub
+ssh-keyscan github.com >> /var/www/.ssh/known_hosts
+
+# 3. Copiar chave SSH do root (ou gerar uma nova e adicionar ao GitHub)
+cp /root/.ssh/id_ed25519 /var/www/.ssh/id_ed25519
+cp /root/.ssh/id_ed25519.pub /var/www/.ssh/id_ed25519.pub
+
+# 4. Ajustar permissões
+chown -R www-data:www-data /var/www/.ssh
+chmod 700 /var/www/.ssh
+chmod 600 /var/www/.ssh/id_ed25519
+
+# 5. Testar
+sudo -u www-data ssh -T git@github.com
+```
+
+**Teste esperado:**
+```
+Hi italokandrade! You've successfully authenticated, but GitHub does not provide shell access.
+```
+
+**Sintomas de falha no log** (`storage/logs/laravel.log`):
+- `local_path_missing` — diretório do projeto não existe (o sistema cria automaticamente desde a correção de 2026-04-24)
+- `Host key verification failed` — known_hosts do www-data não tem github.com
+- `Permission denied (publickey)` — chave privada ausente ou sem permissão em /var/www/.ssh/
+- `reason: null, error: null` no warning do SyncProjectRepositoryJob — push falhou; o erro real está em `result['push']['error']`
+
+---
+
 **Nota Final:** Todo o sistema agêntico usa `openrouter` com família Anthropic (Opus 4.7 / Sonnet 4.6 / Haiku 4.5). Único `.env` necessário: `OPENROUTER_API_KEY`. Os proxies Python legados (8001/8002) foram **descontinuados** — não há proxy local intermediário.
 
