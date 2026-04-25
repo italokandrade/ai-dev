@@ -71,19 +71,12 @@ class GenerateProjectPrdJob implements ShouldQueue
         $projectName = $this->project->name;
         $description = $this->project->description ?? 'Nenhuma descrição fornecida.';
 
-        // Trunca descrição para evitar prompt gigante e timeout na IA
-        if (strlen($description) > 1500) {
-            $description = substr($description, 0, 1500)."\n\n[...descrição truncada para otimização...]";
-        }
-
-        // Usa apenas título das funcionalidades para reduzir tamanho do prompt
-        // As descrições completas já estão no banco, não precisam ser repetidas no prompt
         $backendFeatures = $this->project->backendFeatures
-            ->map(fn ($f) => "- {$f->title}")
+            ->map(fn ($f) => "- {$f->title}: {$f->description}")
             ->implode("\n") ?: 'Nenhuma funcionalidade backend cadastrada.';
 
         $frontendFeatures = $this->project->frontendFeatures
-            ->map(fn ($f) => "- {$f->title}")
+            ->map(fn ($f) => "- {$f->title}: {$f->description}")
             ->implode("\n") ?: 'Nenhuma funcionalidade frontend cadastrada.';
 
         $standardModules = app(StandardProjectModuleService::class)->promptSummary();
