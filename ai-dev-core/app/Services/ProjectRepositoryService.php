@@ -305,6 +305,8 @@ class ProjectRepositoryService
 
         $workDir = $ensure['work_dir'];
 
+        $this->clearStaleIndexLock($workDir);
+
         foreach ($paths as $path) {
             $add = $this->git($workDir, ['git', 'add', '-f', '--', $path], 30);
             if (! $add->successful()) {
@@ -1103,6 +1105,28 @@ class ProjectRepositoryService
         }
 
         $this->git($workDir, ['git', 'reset', '--mixed', 'origin/main'], 60);
+    }
+
+    private function clearStaleIndexLock(string $workDir): void
+    {
+        $lockFile = "{$workDir}/.git/index.lock";
+
+        if (! file_exists($lockFile)) {
+            return;
+        }
+
+        $age = time() - (int) filemtime($lockFile);
+
+        if ($age < 120) {
+            return;
+        }
+
+        Log::warning('ProjectRepositoryService: removendo index.lock obsoleto', [
+            'work_dir' => $workDir,
+            'age_seconds' => $age,
+        ]);
+
+        @unlink($lockFile);
     }
 
     /**
