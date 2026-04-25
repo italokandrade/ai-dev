@@ -95,3 +95,43 @@ test('project repository service writes prd documentation, commits, and pushes',
         File::deleteDirectory($baseDir);
     }
 });
+
+test('project repository service keeps local documentation commit when push fails', function () {
+    $baseDir = storage_path('framework/testing/project-repository-push-fails-'.Str::uuid());
+    $workDir = "{$baseDir}/work";
+    $missingRemote = "{$baseDir}/missing-remote.git";
+
+    File::ensureDirectoryExists($workDir);
+
+    $project = Project::create([
+        'name' => 'repository-local-sync-project',
+        'description' => 'Projeto usado para validar fallback local.',
+        'github_repo' => $missingRemote,
+        'local_path' => $workDir,
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'PRD Master Local',
+            'objective' => 'Salvar documentação mesmo quando push falhar.',
+            'modules' => [
+                ['name' => 'Landing Page', 'description' => 'Página pública'],
+            ],
+        ],
+    ]);
+
+    try {
+        $result = app(ProjectRepositoryService::class)->syncDocumentation($project, push: true);
+
+        $localHead = Process::path($workDir)
+            ->run(['git', '-c', "safe.directory={$workDir}", 'rev-parse', '--verify', 'HEAD']);
+
+        expect($result['success'])->toBeTrue()
+            ->and($result['committed'])->toBeTrue()
+            ->and($result['pushed'])->toBeFalse()
+            ->and($result['push_failed'])->toBeTrue()
+            ->and(File::exists("{$workDir}/.ai-dev/prd-master.json"))->toBeTrue()
+            ->and(File::get("{$workDir}/.ai-dev/prd-master.md"))->toContain('Salvar documentação mesmo quando push falhar')
+            ->and($localHead->successful())->toBeTrue();
+    } finally {
+        File::deleteDirectory($baseDir);
+    }
+});

@@ -30,6 +30,16 @@ class SyncProjectRepositoryJob implements ShouldQueue
     {
         $result = $repository->syncDocumentation($this->project->fresh(), $this->push);
 
+        if ($result['push_failed'] ?? false) {
+            Log::warning('SyncProjectRepositoryJob: documentacao sincronizada localmente, mas push falhou', [
+                'project' => $this->project->name,
+                'reason' => $result['reason'] ?? null,
+                'error' => $result['push']['error'] ?? $result['error'] ?? null,
+            ]);
+
+            return;
+        }
+
         if (! ($result['success'] ?? false) && ! ($result['skipped'] ?? false)) {
             Log::warning('SyncProjectRepositoryJob: falha ao sincronizar repositorio do projeto', [
                 'project' => $this->project->name,

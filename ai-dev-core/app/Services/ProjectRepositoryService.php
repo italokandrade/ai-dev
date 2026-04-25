@@ -109,11 +109,31 @@ class ProjectRepositoryService
             if (! $currentRemote->successful()) {
                 $addRemote = $this->git($workDir, ['git', 'remote', 'add', 'origin', $remoteUrl], 10);
                 if (! $addRemote->successful()) {
+                    if (! $requireRemote) {
+                        return $this->readyWithRemoteFailure(
+                            'git_remote_add_failed',
+                            $addRemote->errorOutput(),
+                            $workDir,
+                            $remoteUrl,
+                            $initialized,
+                        );
+                    }
+
                     return $this->failedResult('git_remote_add_failed', $addRemote->errorOutput(), $workDir, $remoteUrl);
                 }
             } elseif (trim($currentRemote->output()) !== $remoteUrl) {
                 $setRemote = $this->git($workDir, ['git', 'remote', 'set-url', 'origin', $remoteUrl], 10);
                 if (! $setRemote->successful()) {
+                    if (! $requireRemote) {
+                        return $this->readyWithRemoteFailure(
+                            'git_remote_set_failed',
+                            $setRemote->errorOutput(),
+                            $workDir,
+                            $remoteUrl,
+                            $initialized,
+                        );
+                    }
+
                     return $this->failedResult('git_remote_set_failed', $setRemote->errorOutput(), $workDir, $remoteUrl);
                 }
             }
@@ -137,7 +157,7 @@ class ProjectRepositoryService
     public function syncDocumentation(Project $project, bool $push = true): array
     {
         $project = $this->reloadProject($project);
-        $ensure = $this->ensureRepository($project, requireRemote: true);
+        $ensure = $this->ensureRepository($project, requireRemote: false);
 
         if (! ($ensure['ready'] ?? false)) {
             $this->logSkippedSync($project, $ensure);
@@ -151,10 +171,28 @@ class ProjectRepositoryService
             $project,
             [self::ARTIFACTS_DIR],
             'chore(ai-dev): sync project artifacts',
-            $push,
+            push: false,
         );
 
-        return $commit + [
+        if (! ($commit['success'] ?? false)) {
+            return $commit + [
+                'files' => $files,
+                'repository' => $ensure,
+            ];
+        }
+
+        $pushResult = $push
+            ? $this->push($project)
+            : ['success' => true, 'skipped' => true, 'reason' => 'push_disabled', 'pushed' => false];
+        $pushFailed = $push && ! ($pushResult['success'] ?? false);
+
+        return [
+            ...$commit,
+            'success' => true,
+            'pushed' => (bool) ($pushResult['pushed'] ?? false),
+            'push_failed' => $pushFailed,
+            'reason' => $pushFailed ? 'push_failed' : ($commit['reason'] ?? $pushResult['reason'] ?? null),
+            'push' => $pushResult,
             'files' => $files,
             'repository' => $ensure,
         ];
@@ -324,6 +362,7 @@ class ProjectRepositoryService
         return [
             'success' => false,
             'pushed' => false,
+            'reason' => 'git_push_failed',
             'output' => mb_substr($push->output(), 0, 5000),
             'error' => mb_substr($push->errorOutput(), 0, 5000),
             'repository' => $ensure,
@@ -809,6 +848,23 @@ class ProjectRepositoryService
             'work_dir' => $workDir,
             'remote_url' => $remoteUrl,
             'error' => mb_substr($error, 0, 5000),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function readyWithRemoteFailure(string $reason, string $error, string $workDir, string $remoteUrl, bool $initialized): array
+    {
+        return [
+            'success' => true,
+            'ready' => true,
+            'initialized' => $initialized,
+            'remote_configured' => false,
+            'remote_error_reason' => $reason,
+            'remote_error' => mb_substr($error, 0, 5000),
+            'work_dir' => $workDir,
+            'remote_url' => $remoteUrl,
         ];
     }
 
