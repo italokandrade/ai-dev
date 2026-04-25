@@ -23,7 +23,7 @@ class SyncProjectRepositoryJob implements ShouldQueue
         public Project $project,
         public bool $push = true,
     ) {
-        $this->onQueue('orchestrator');
+        $this->onQueue('default');
     }
 
     public function handle(ProjectRepositoryService $repository): void
