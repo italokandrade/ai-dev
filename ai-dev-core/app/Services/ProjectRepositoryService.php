@@ -183,7 +183,19 @@ class ProjectRepositoryService
             return $ensure + ['committed' => false, 'pushed' => false];
         }
 
+        return $this->withRepositorySyncLock($ensure['work_dir'], function () use ($project, $push, $ensure): array {
+            return $this->syncDocumentationUnlocked($project, $push, $ensure);
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $ensure
+     * @return array<string, mixed>
+     */
+    private function syncDocumentationUnlocked(Project $project, bool $push, array $ensure): array
+    {
         try {
+            $this->cleanupStaleArtifactStagingDirectories($ensure['work_dir']);
             $files = $this->writeDocumentation($project);
         } catch (\Throwable $e) {
             Log::warning('ProjectRepositoryService: falha ao escrever artefatos do projeto', [
@@ -420,7 +432,7 @@ class ProjectRepositoryService
         }
 
         $artifactsDir = "{$workDir}/".self::ARTIFACTS_DIR;
-        $stagingDir = "{$workDir}/.".self::ARTIFACTS_DIR.'-tmp-'.Str::uuid();
+        $stagingDir = "{$workDir}/".self::ARTIFACTS_DIR.'-tmp-'.Str::uuid();
         $preservedArchitectureArtifacts = $this->preservedArchitectureArtifacts($artifactsDir);
         File::ensureDirectoryExists($stagingDir);
         File::ensureDirectoryExists("{$stagingDir}/".ProjectArchitectureArtifactService::ARCHITECTURE_DIR);
@@ -523,6 +535,54 @@ class ProjectRepositoryService
 
         if (! @rename($stagingDir, $artifactsDir)) {
             File::moveDirectory($stagingDir, $artifactsDir, true);
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T|array<string, mixed>
+     */
+    private function withRepositorySyncLock(string $workDir, callable $callback): mixed
+    {
+        $lockDir = is_dir("{$workDir}/.git") ? "{$workDir}/.git" : $workDir;
+        File::ensureDirectoryExists($lockDir);
+        $lockPath = "{$lockDir}/ai-dev-sync.lock";
+        $handle = @fopen($lockPath, 'c');
+
+        if (! is_resource($handle)) {
+            return $this->failedResult(
+                'repository_sync_lock_open_failed',
+                "Nao foi possivel abrir lock de sincronizacao: {$lockPath}",
+                $workDir,
+                null,
+            );
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                return $this->failedResult(
+                    'repository_sync_lock_failed',
+                    "Nao foi possivel obter lock de sincronizacao: {$lockPath}",
+                    $workDir,
+                    null,
+                );
+            }
+
+            return $callback();
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    private function cleanupStaleArtifactStagingDirectories(string $workDir): void
+    {
+        foreach (['.ai-dev-tmp-*', '..ai-dev-tmp-*'] as $pattern) {
+            foreach (glob("{$workDir}/{$pattern}", GLOB_ONLYDIR) ?: [] as $directory) {
+                File::deleteDirectory($directory);
+            }
         }
     }
 

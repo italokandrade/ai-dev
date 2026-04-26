@@ -144,6 +144,47 @@ test('project repository service keeps local documentation commit when push fail
     }
 });
 
+test('project repository service cleans stale ai dev staging directories during sync', function () {
+    $baseDir = storage_path('framework/testing/project-repository-stale-staging-'.Str::uuid());
+    $workDir = "{$baseDir}/work";
+    $remoteDir = "{$baseDir}/remote.git";
+
+    File::ensureDirectoryExists($workDir);
+    File::ensureDirectoryExists($remoteDir);
+    File::ensureDirectoryExists("{$workDir}/.ai-dev-tmp-stale");
+    File::ensureDirectoryExists("{$workDir}/..ai-dev-tmp-legacy-stale");
+
+    Process::path($remoteDir)->run(['git', 'init', '--bare']);
+
+    $project = Project::create([
+        'name' => 'repository-stale-staging-project',
+        'description' => 'Projeto usado para validar limpeza de staging.',
+        'github_repo' => $remoteDir,
+        'local_path' => $workDir,
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'PRD Master Staging',
+            'objective' => 'Sincronizar sem sobras temporarias.',
+            'modules' => [
+                ['name' => 'Landing Page', 'description' => 'Página pública'],
+            ],
+        ],
+    ]);
+
+    try {
+        $result = app(ProjectRepositoryService::class)->syncDocumentation($project, push: false);
+
+        expect($result['success'])->toBeTrue()
+            ->and(File::exists("{$workDir}/.ai-dev-tmp-stale"))->toBeFalse()
+            ->and(File::exists("{$workDir}/..ai-dev-tmp-legacy-stale"))->toBeFalse()
+            ->and(glob("{$workDir}/.ai-dev-tmp-*"))->toBe([])
+            ->and(glob("{$workDir}/..ai-dev-tmp-*"))->toBe([])
+            ->and(File::exists("{$workDir}/.ai-dev/prd-master.json"))->toBeTrue();
+    } finally {
+        File::deleteDirectory($baseDir);
+    }
+});
+
 test('project repository service clears stale git index locks before committing pending changes', function () {
     $baseDir = storage_path('framework/testing/project-repository-stale-lock-'.Str::uuid());
     $workDir = "{$baseDir}/work";
