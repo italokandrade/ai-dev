@@ -287,13 +287,14 @@ O fluxo ativo usa `projects.prd_payload` (PRD Master), `projects.blueprint_paylo
 8. `ProjectRepositoryService` exporta `.ai-dev/architecture/domain-model.mmd`, `.md` e `.json` a partir do Blueprint progressivo
 9. O PRD do módulo decide `needs_submodules` → submódulos ou tasks; folhas com schema criam primeiro uma task de checkpoint de arquitetura de dados
 10. Em módulos folha, `implementation_items` é a fonte preferencial das tasks. `acceptance_criteria` e `qa_scenarios` ficam como validação do PRD da task, evitando transformar todo critério em uma tarefa `Teste:` separada.
+11. Se o PRD de módulo vier com estrutura pobre, mas recuperável, a cascata normaliza aliases (`tables` → `database_schema.tables`, `apis` → `api_endpoints`), preenche título/objetivo ausentes, sintetiza `implementation_items` a partir de tabelas/APIs/componentes e cria QA mínimo quando necessário.
 
 **Fluxo em cascata (Auto Aprovação — `CascadeModulePrdJob`):**
 1. Acionado pelo botão "Auto Aprovar Blueprint — Cascata Completa" em `ViewProject`
 2. Aprova o Blueprint, cria módulos raiz de planejamento e despacha `CascadeModulePrdJob` para cada um, sem instalar o Projeto Alvo
 3. Cada job gera o PRD técnico via `ModulePrdAgent`, incorpora a contribuição ao Blueprint, auto-aprova e:
    - Se `needs_submodules: true` → cria submódulos e despacha o job para cada filho
-   - Se `needs_submodules: false` → cria tasks (`status: pending`) a partir de `implementation_items` quando presentes; sem esses itens, usa componentes/workflows/APIs como fallback e só expande critérios de aceite em tasks quando não há outra superfície implementável
+   - Se `needs_submodules: false` → normaliza o PRD de folha e cria tasks (`status: pending`) a partir de `implementation_items` quando presentes; sem esses itens, usa componentes/workflows/APIs como fallback e só expande critérios de aceite em tasks quando não há outra superfície implementável
 4. O ciclo repete recursivamente até todas as folhas terem tasks
 5. Resiliência: pula geração se PRD válido já existe; não duplica submódulos/tasks; `failed()` preserva PRD válido já salvo
 

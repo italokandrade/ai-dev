@@ -536,6 +536,10 @@ class ProjectRepositoryService
         if (! @rename($stagingDir, $artifactsDir)) {
             File::moveDirectory($stagingDir, $artifactsDir, true);
         }
+
+        if (File::exists($stagingDir)) {
+            File::deleteDirectory($stagingDir);
+        }
     }
 
     /**

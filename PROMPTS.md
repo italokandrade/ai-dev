@@ -44,6 +44,7 @@ Regras para prompts:
 5. O Blueprint é trilho, não prisão: módulos podem propor entidades novas, mas devem justificar a inclusão.
 6. Módulos folha devem gerar `implementation_items`; esses itens viram tasks. `acceptance_criteria` e `qa_scenarios` validam as entregas, mas não substituem a lista de implementação.
 7. Módulos raiz com `needs_submodules=true` são fronteiras de planejamento: não devem detalhar migrations, endpoints finais, componentes ou tasks dos filhos.
+8. O sistema não aceita saída pobre como definitiva quando houver dados recuperáveis: aliases comuns são normalizados, módulos folha sem `implementation_items` recebem itens mínimos derivados de schema/API/componentes, e módulos sem `qa_scenarios` recebem QA mínimo para orientar implementação e auditoria.
 
 ---
 

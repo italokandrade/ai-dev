@@ -219,6 +219,8 @@ Este é o formato que preenche `projects.blueprint_payload`. Gerado pelo `Projec
 }
 ```
 
+Normalização automática: quando um PRD de módulo vier em formato recuperável, o sistema converte aliases comuns antes de gerar Blueprint/tasks. Exemplos: `tables` no topo vira `database_schema.tables`, `apis` vira `api_endpoints`, título/objetivo ausentes são preenchidos com o contexto do módulo, `implementation_items` pode ser sintetizado a partir de tabelas/APIs/componentes, e `qa_scenarios` mínimos são adicionados quando o módulo folha não trouxer QA próprio.
+
 ---
 
 ## 1. JSON Schema do PRD do Módulo (Module PRD)

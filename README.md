@@ -99,6 +99,7 @@ Esta é a stack do próprio **ai-dev-core** e também a stack **default** que `i
 - `DocsAgent` (`BoostTool.search-docs`) pesquisa a documentação instalada no **Boost do Projeto Alvo**, refletindo as versões exatas de Laravel/Filament/Livewire que aquele projeto tem instaladas.
 - Quando `projects.github_repo` está preenchido, o `ProjectRepositoryService` configura o `origin` do Projeto Alvo, exporta `PROJECT.md`, PRD Master, Blueprint, arquitetura de dados (`.ai-dev/architecture`), módulos, tasks e subtasks para `.ai-dev/` na raiz do repo desse projeto, commita essa sincronização e faz push. Commits de código aprovados pelo `QAAuditJob` também são enviados ao mesmo remoto.
 - O planejamento progressivo agora exige profundidade sem expansão indevida: PRD Master preserva jornadas, resultados e `source_features`; Blueprint adiciona cobertura por módulo, lifecycle, estados e riscos; PRDs de módulos folha geram `implementation_items`, que viram tasks de implementação, enquanto critérios de aceite e cenários de QA ficam como validação.
+- Se a IA devolver um PRD tecnicamente válido em formato pobre ou com aliases comuns (`tables` no topo, `apis` etc.), a cascata normaliza para `database_schema.tables`/`api_endpoints`, sintetiza itens mínimos de implementação e QA, e impede que o módulo vire uma task genérica sem MER/artefatos úteis.
 
 ---
 

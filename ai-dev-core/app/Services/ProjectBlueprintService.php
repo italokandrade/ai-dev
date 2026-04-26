@@ -71,9 +71,15 @@ class ProjectBlueprintService
         $normalized['workflows'] = $this->normalizeNamedList($normalized['workflows'] ?? []);
         $normalized['api_surface'] = $this->normalizeNamedList($normalized['api_surface'] ?? []);
         $normalized['module_coverage'] = $this->normalizeNamedList($normalized['module_coverage'] ?? []);
+        if ($normalized['module_coverage'] === []) {
+            $normalized['module_coverage'] = $this->moduleCoverageFromPrd($project);
+        }
         $normalized['data_lifecycle'] = $this->normalizeNamedList($normalized['data_lifecycle'] ?? []);
         $normalized['state_models'] = $this->normalizeNamedList($normalized['state_models'] ?? []);
         $normalized['risk_register'] = $this->normalizeNamedList($normalized['risk_register'] ?? []);
+        if ($normalized['risk_register'] === []) {
+            $normalized['risk_register'] = $this->defaultRiskRegister($project);
+        }
         $normalized['non_functional_decisions'] = $this->normalizeStringList($normalized['non_functional_decisions'] ?? []);
         $normalized['open_questions'] = $this->normalizeStringList($normalized['open_questions'] ?? []);
         $normalized['module_notes'] = $this->normalizeNamedList($normalized['module_notes'] ?? []);
@@ -114,6 +120,10 @@ class ProjectBlueprintService
         $current['use_cases'] = $this->mergeNamedItems($current['use_cases'] ?? [], $contribution['use_cases'] ?? []);
         $current['workflows'] = $this->mergeNamedItems($current['workflows'] ?? [], $contribution['workflows'] ?? []);
         $current['api_surface'] = $this->mergeNamedItems($current['api_surface'] ?? [], $contribution['api_surface'] ?? []);
+        $current['module_coverage'] = $this->mergeNamedItems($current['module_coverage'] ?? [], $contribution['module_coverage'] ?? []);
+        $current['data_lifecycle'] = $this->mergeNamedItems($current['data_lifecycle'] ?? [], $contribution['data_lifecycle'] ?? []);
+        $current['state_models'] = $this->mergeNamedItems($current['state_models'] ?? [], $contribution['state_models'] ?? []);
+        $current['risk_register'] = $this->mergeNamedItems($current['risk_register'] ?? [], $contribution['risk_register'] ?? []);
         $current['architecture']['components'] = $this->mergeNamedItems(
             $current['architecture']['components'] ?? [],
             $contribution['architecture']['components'] ?? [],
@@ -153,7 +163,7 @@ class ProjectBlueprintService
             $module,
         );
 
-        foreach ($modulePrd['database_schema']['tables'] ?? [] as $table) {
+        foreach ($this->moduleTables($modulePrd) as $table) {
             if (! is_array($table)) {
                 continue;
             }
@@ -203,7 +213,31 @@ class ProjectBlueprintService
                 $raw['api_surface'] ?? $raw['api_contracts'] ?? $modulePrd['api_endpoints'] ?? [],
                 $module,
             ),
+            'module_coverage' => $this->normalizeNamedList($raw['module_coverage'] ?? [[
+                'name' => $module->name,
+                'description' => $this->stringValue($modulePrd['objective'] ?? $modulePrd['scope'] ?? $module->description ?? ''),
+            ]], $module),
+            'data_lifecycle' => $this->normalizeNamedList($raw['data_lifecycle'] ?? $modulePrd['data_lifecycle'] ?? [], $module),
+            'state_models' => $this->normalizeNamedList($raw['state_models'] ?? $modulePrd['state_model'] ?? [], $module),
+            'risk_register' => $this->normalizeNamedList($raw['risk_register'] ?? $modulePrd['risk_register'] ?? [], $module),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $modulePrd
+     * @return array<int, mixed>
+     */
+    private function moduleTables(array $modulePrd): array
+    {
+        if (! empty($modulePrd['database_schema']['tables']) && is_array($modulePrd['database_schema']['tables'])) {
+            return $modulePrd['database_schema']['tables'];
+        }
+
+        if (! empty($modulePrd['tables']) && is_array($modulePrd['tables'])) {
+            return $modulePrd['tables'];
+        }
+
+        return [];
     }
 
     /**
@@ -472,6 +506,62 @@ class ProjectBlueprintService
             ->unique(fn (string $item): string => $this->normalizeName($item))
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function moduleCoverageFromPrd(Project $project): array
+    {
+        $prd = is_array($project->prd_payload) ? $project->prd_payload : [];
+
+        return $this->normalizeNamedList(collect($prd['modules'] ?? [])
+            ->filter(fn (mixed $module): bool => is_array($module))
+            ->map(fn (array $module): array => [
+                'name' => $this->stringValue($module['name'] ?? ''),
+                'description' => $this->stringValue($module['description'] ?? $module['objective'] ?? ''),
+                'source_features' => $module['source_features'] ?? [],
+                'coverage_status' => 'planned',
+            ])
+            ->all());
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function defaultRiskRegister(Project $project): array
+    {
+        $risks = [
+            [
+                'name' => 'Escopo de dados incompleto',
+                'description' => 'Entidades, relacionamentos ou estados de domínio podem estar subespecificados antes dos PRDs de módulo.',
+                'impact' => 'Migrations, Models e ERD podem divergir da regra de negócio.',
+                'mitigation' => 'Executar checkpoint SQLite/ERD antes de liberar implementação de interfaces, APIs ou Filament Resources.',
+            ],
+            [
+                'name' => 'Conteúdo gerado pobre pela IA',
+                'description' => 'Algum módulo pode retornar PRD tecnicamente válido, mas sem itens implementáveis suficientes.',
+                'impact' => 'Tasks genéricas, baixa auditabilidade e risco de retrabalho.',
+                'mitigation' => 'Normalizar aliases de schema, exigir implementation_items e sintetizar itens mínimos a partir de tabelas, APIs e componentes.',
+            ],
+            [
+                'name' => 'Sincronização de artefatos incompleta',
+                'description' => 'Falhas de Git, permissões ou locks podem deixar `.ai-dev` fora de sincronia com o banco.',
+                'impact' => 'Agentes consultam documentação stale ou incompleta.',
+                'mitigation' => 'Usar sincronização serializada, limpeza de staging temporário e commit/push por repositório do projeto alvo.',
+            ],
+        ];
+
+        if (($project->github_repo ?? '') === '') {
+            $risks[] = [
+                'name' => 'Repositório GitHub ausente',
+                'description' => 'Sem repositório cadastrado, a documentação técnica fica apenas local.',
+                'impact' => 'Perda de rastreabilidade fora do servidor atual.',
+                'mitigation' => 'Cadastrar `github_repo` antes de aprovar planejamento e disparar sincronizações.',
+            ];
+        }
+
+        return $this->normalizeNamedList($risks);
     }
 
     /**

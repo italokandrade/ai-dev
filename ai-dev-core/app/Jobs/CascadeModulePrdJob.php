@@ -350,12 +350,21 @@ PROMPT;
      */
     private function normalizePrdForModuleRole(array $prd): array
     {
+        $prd = $this->normalizeSchemaAliases($prd);
         $isSubmodule = $this->module->parent_id !== null;
         $submoduleLimit = app(ProjectPlanningScopeService::class)->submoduleLimit($this->module->project);
+
+        $prd['title'] = $this->stringValue($prd['title'] ?? '') !== ''
+            ? $prd['title']
+            : "{$this->module->name} — PRD Técnico";
+        $prd['objective'] = $this->stringValue($prd['objective'] ?? $prd['scope'] ?? '') !== ''
+            ? ($prd['objective'] ?? $prd['scope'])
+            : ($this->module->description ?? "Implementar {$this->module->name}.");
 
         if ($isSubmodule || $submoduleLimit === 0) {
             $prd['needs_submodules'] = false;
             $prd['submodules'] = [];
+            $prd = $this->ensureLeafImplementationItems($prd);
 
             return $prd;
         }
@@ -394,9 +403,182 @@ PROMPT;
         } else {
             $prd['needs_submodules'] = false;
             $prd['submodules'] = [];
+            $prd = $this->ensureLeafImplementationItems($prd);
         }
 
         return $prd;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prd
+     * @return array<string, mixed>
+     */
+    private function normalizeSchemaAliases(array $prd): array
+    {
+        if (empty($prd['database_schema']['tables'] ?? null) && ! empty($prd['tables']) && is_array($prd['tables'])) {
+            $prd['database_schema'] = is_array($prd['database_schema'] ?? null) ? $prd['database_schema'] : [];
+            $prd['database_schema']['tables'] = $prd['tables'];
+            unset($prd['tables']);
+        }
+
+        if (empty($prd['api_endpoints'] ?? null) && ! empty($prd['apis']) && is_array($prd['apis'])) {
+            $prd['api_endpoints'] = $prd['apis'];
+            unset($prd['apis']);
+        }
+
+        return $prd;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prd
+     * @return array<string, mixed>
+     */
+    private function ensureLeafImplementationItems(array $prd): array
+    {
+        if (! empty($prd['implementation_items']) && is_array($prd['implementation_items'])) {
+            if (empty($prd['qa_scenarios']) || ! is_array($prd['qa_scenarios'])) {
+                $prd['qa_scenarios'] = $this->defaultQaScenarios($prd);
+            }
+
+            return $prd;
+        }
+
+        $items = [];
+
+        foreach ($prd['database_schema']['tables'] ?? [] as $table) {
+            if (! is_array($table)) {
+                continue;
+            }
+
+            $tableName = $this->stringValue($table['name'] ?? '');
+            if ($tableName === '') {
+                continue;
+            }
+
+            $items[] = [
+                'type' => 'database_table',
+                'title' => "Criação da tabela {$tableName}",
+                'description' => $this->stringValue($table['description'] ?? "Criar migration e constraints da tabela {$tableName}."),
+                'priority' => 'high',
+                'deliverables' => [
+                    "Migration {$tableName}",
+                    'Relacionamentos e índices descritos no PRD',
+                ],
+            ];
+
+            $items[] = [
+                'type' => 'model',
+                'title' => 'Model '.$this->studlyFromTable($tableName),
+                'description' => "Criar Model Eloquent para {$tableName}, incluindo casts, fillable, policies quando aplicável e relacionamentos.",
+                'priority' => 'high',
+                'deliverables' => [
+                    "Model {$this->studlyFromTable($tableName)}",
+                    'Relacionamentos Eloquent',
+                ],
+            ];
+        }
+
+        foreach ($prd['api_endpoints'] ?? [] as $api) {
+            if (! is_array($api)) {
+                continue;
+            }
+
+            $method = $this->stringValue($api['method'] ?? 'GET');
+            $uri = $this->stringValue($api['uri'] ?? $api['path'] ?? '');
+            if ($uri === '') {
+                continue;
+            }
+
+            $items[] = [
+                'type' => 'api',
+                'title' => "API {$method} {$uri}",
+                'description' => $this->stringValue($api['description'] ?? "Implementar endpoint {$method} {$uri}."),
+                'priority' => 'medium',
+            ];
+        }
+
+        foreach ($prd['components'] ?? [] as $component) {
+            if (! is_array($component)) {
+                continue;
+            }
+
+            $name = $this->stringValue($component['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+
+            $items[] = [
+                'type' => $this->stringValue($component['type'] ?? 'component'),
+                'title' => "Implementar {$name}",
+                'description' => $this->stringValue($component['description'] ?? ''),
+                'priority' => 'medium',
+            ];
+        }
+
+        if ($items !== []) {
+            $prd['implementation_items'] = collect($items)
+                ->unique(fn (array $item): string => $this->normalizeName($this->stringValue($item['title'] ?? '')))
+                ->values()
+                ->all();
+        }
+
+        if (empty($prd['qa_scenarios']) || ! is_array($prd['qa_scenarios'])) {
+            $prd['qa_scenarios'] = $this->defaultQaScenarios($prd);
+        }
+
+        return $prd;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prd
+     * @return array<int, array<string, string>>
+     */
+    private function defaultQaScenarios(array $prd): array
+    {
+        $scenarios = [];
+
+        if (! empty($prd['database_schema']['tables'])) {
+            $scenarios[] = [
+                'name' => 'Persistência e relacionamentos do módulo',
+                'given' => 'Migrations e Models do módulo foram gerados no SQLite temporário',
+                'when' => 'O checkpoint de arquitetura executa migrations, factories ou seeds mínimos',
+                'then' => 'As tabelas, constraints e relacionamentos Eloquent refletem o PRD e o MER sem tabelas isoladas indevidas',
+            ];
+        }
+
+        if (! empty($prd['api_endpoints'])) {
+            $scenarios[] = [
+                'name' => 'Contratos de API do módulo',
+                'given' => 'Os endpoints do módulo estão implementados',
+                'when' => 'As requisições válidas e inválidas são exercitadas por testes HTTP',
+                'then' => 'As respostas, validações e códigos de status seguem o PRD técnico',
+            ];
+        }
+
+        if (! empty($prd['components'])) {
+            $scenarios[] = [
+                'name' => 'Experiência visual e estados de interface',
+                'given' => 'Componentes Livewire/Filament do módulo estão renderizados',
+                'when' => 'Usuários percorrem estados principais, vazios, erro e sucesso',
+                'then' => 'A interface permanece acessível, responsiva e coerente com as regras do módulo',
+            ];
+        }
+
+        if ($scenarios === []) {
+            $scenarios[] = [
+                'name' => 'Fluxo principal do módulo',
+                'given' => 'O módulo está implementado conforme o PRD',
+                'when' => 'O usuário executa o fluxo principal previsto',
+                'then' => 'O resultado atende critérios de aceite, regras de negócio e observabilidade definidos',
+            ];
+        }
+
+        return $scenarios;
+    }
+
+    private function studlyFromTable(string $table): string
+    {
+        return str($table)->studly()->toString();
     }
 
     private function projectHasPendingPlanningPrds(): bool
