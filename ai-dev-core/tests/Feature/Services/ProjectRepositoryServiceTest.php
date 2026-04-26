@@ -220,3 +220,90 @@ test('project repository service clears stale git index locks before committing 
         File::deleteDirectory($baseDir);
     }
 });
+
+test('project repository service repairs unnamed branch before pushing documentation', function () {
+    $baseDir = storage_path('framework/testing/project-repository-unnamed-branch-'.Str::uuid());
+    $workDir = "{$baseDir}/work";
+    $remoteDir = "{$baseDir}/remote.git";
+
+    File::ensureDirectoryExists($workDir);
+    File::ensureDirectoryExists($remoteDir);
+
+    Process::path($remoteDir)->run(['git', 'init', '--bare']);
+    Process::path($workDir)->run(['git', 'init']);
+    Process::path($workDir)->run(['git', 'config', 'user.name', 'Test']);
+    Process::path($workDir)->run(['git', 'config', 'user.email', 'test@example.com']);
+    Process::path($workDir)->run(['git', 'remote', 'add', 'origin', $remoteDir]);
+    File::put("{$workDir}/README.md", 'base');
+    Process::path($workDir)->run(['git', 'add', 'README.md']);
+    Process::path($workDir)->run(['git', 'commit', '-m', 'base']);
+    Process::path($workDir)->run(['git', 'checkout', '--detach']);
+
+    $project = Project::create([
+        'name' => 'repository-unnamed-branch-project',
+        'description' => 'Projeto usado para validar reparo de branch sem nome.',
+        'github_repo' => $remoteDir,
+        'local_path' => $workDir,
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'PRD Branch',
+            'objective' => 'Sincronizar mesmo com HEAD destacado.',
+            'modules' => [
+                ['name' => 'Landing Page', 'description' => 'Página pública'],
+            ],
+        ],
+    ]);
+
+    try {
+        $result = app(ProjectRepositoryService::class)->syncDocumentation($project, push: true);
+
+        $branch = Process::path($workDir)->run(['git', 'branch', '--show-current']);
+        $remoteHead = Process::run(['git', '--git-dir', $remoteDir, 'rev-parse', '--verify', 'refs/heads/main']);
+
+        expect($result['success'])->toBeTrue()
+            ->and($result['pushed'])->toBeTrue()
+            ->and(trim($branch->output()))->toBe('main')
+            ->and($remoteHead->successful())->toBeTrue();
+    } finally {
+        File::deleteDirectory($baseDir);
+    }
+});
+
+test('project repository service can push current commit by explicit ref when branch push cannot resolve', function () {
+    $baseDir = storage_path('framework/testing/project-repository-explicit-ref-'.Str::uuid());
+    $workDir = "{$baseDir}/work";
+    $remoteDir = "{$baseDir}/remote.git";
+
+    File::ensureDirectoryExists($workDir);
+    File::ensureDirectoryExists($remoteDir);
+
+    Process::path($remoteDir)->run(['git', 'init', '--bare']);
+
+    $project = Project::create([
+        'name' => 'repository-explicit-ref-project',
+        'description' => 'Projeto usado para validar push por SHA.',
+        'github_repo' => $remoteDir,
+        'local_path' => $workDir,
+        'status' => 'active',
+        'prd_payload' => [
+            'title' => 'PRD Ref',
+            'objective' => 'Sincronizar documentação.',
+            'modules' => [
+                ['name' => 'Landing Page', 'description' => 'Página pública'],
+            ],
+        ],
+    ]);
+
+    try {
+        $result = app(ProjectRepositoryService::class)->syncDocumentation($project, push: true);
+
+        $hash = Process::path($workDir)->run(['git', 'rev-parse', '--verify', 'HEAD']);
+        $remoteHead = Process::run(['git', '--git-dir', $remoteDir, 'rev-parse', '--verify', 'refs/heads/main']);
+
+        expect($result['success'])->toBeTrue()
+            ->and($result['pushed'])->toBeTrue()
+            ->and(trim($remoteHead->output()))->toBe(trim($hash->output()));
+    } finally {
+        File::deleteDirectory($baseDir);
+    }
+});

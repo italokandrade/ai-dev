@@ -175,15 +175,34 @@ class ProjectRepositoryService
     public function syncDocumentation(Project $project, bool $push = true): array
     {
         $project = $this->reloadProject($project);
-        $ensure = $this->ensureRepository($project, requireRemote: false);
+        $workDir = $this->workDir($project);
 
-        if (! ($ensure['ready'] ?? false)) {
-            $this->logSkippedSync($project, $ensure);
+        if ($workDir === null) {
+            $remoteUrl = $this->normalizeRemoteUrl($project->github_repo);
+            $ensure = [
+                'success' => false,
+                'ready' => false,
+                'skipped' => true,
+                'reason' => 'local_path_missing',
+                'remote_url' => $remoteUrl,
+            ];
 
             return $ensure + ['committed' => false, 'pushed' => false];
         }
 
-        return $this->withRepositorySyncLock($ensure['work_dir'], function () use ($project, $push, $ensure): array {
+        if (! is_dir($workDir)) {
+            File::makeDirectory($workDir, 0755, true);
+        }
+
+        return $this->withRepositorySyncLock($workDir, function () use ($project, $push): array {
+            $ensure = $this->ensureRepository($project, requireRemote: false);
+
+            if (! ($ensure['ready'] ?? false)) {
+                $this->logSkippedSync($project, $ensure);
+
+                return $ensure + ['committed' => false, 'pushed' => false];
+            }
+
             return $this->syncDocumentationUnlocked($project, $push, $ensure);
         });
     }
@@ -379,7 +398,14 @@ class ProjectRepositoryService
             ];
         }
 
-        $push = $this->git($workDir, ['git', 'push', '-u', 'origin', 'HEAD'], 180);
+        $hash = $this->currentHash($workDir);
+        $branch = $this->ensureCurrentBranch($workDir);
+        $pushRef = $branch !== '' ? $branch : 'HEAD';
+        $push = $this->git($workDir, ['git', 'push', '-u', 'origin', $pushRef], 180);
+
+        if (! $push->successful() && $branch !== '' && $hash !== null && $this->isBranchRefResolutionFailure($push->errorOutput())) {
+            $push = $this->git($workDir, ['git', 'push', '-u', 'origin', "{$hash}:refs/heads/{$branch}"], 180);
+        }
 
         if ($push->successful()) {
             return [
@@ -391,13 +417,16 @@ class ProjectRepositoryService
             ];
         }
 
-        $branch = trim($this->git($workDir, ['git', 'branch', '--show-current'], 10)->output());
+        $branch = $this->ensureCurrentBranch($workDir);
 
         if ($branch !== '') {
             $pull = $this->git($workDir, ['git', 'pull', '--rebase', 'origin', $branch], 180);
 
             if ($pull->successful()) {
-                $retry = $this->git($workDir, ['git', 'push', '-u', 'origin', 'HEAD'], 180);
+                $retry = $this->git($workDir, ['git', 'push', '-u', 'origin', $branch], 180);
+                if (! $retry->successful() && ($hash = $this->currentHash($workDir)) !== null && $this->isBranchRefResolutionFailure($retry->errorOutput())) {
+                    $retry = $this->git($workDir, ['git', 'push', '-u', 'origin', "{$hash}:refs/heads/{$branch}"], 180);
+                }
 
                 return [
                     'success' => $retry->successful(),
@@ -418,6 +447,34 @@ class ProjectRepositoryService
             'error' => mb_substr($push->errorOutput(), 0, 5000),
             'repository' => $ensure,
         ];
+    }
+
+    private function ensureCurrentBranch(string $workDir): string
+    {
+        $branch = trim($this->git($workDir, ['git', 'branch', '--show-current'], 10)->output());
+
+        if ($branch !== '') {
+            return $branch;
+        }
+
+        $repair = $this->git($workDir, ['git', 'switch', '-C', 'main'], 30);
+        if (! $repair->successful()) {
+            $repair = $this->git($workDir, ['git', 'checkout', '-B', 'main'], 30);
+        }
+
+        if ($repair->successful()) {
+            return 'main';
+        }
+
+        return '';
+    }
+
+    private function isBranchRefResolutionFailure(string $error): bool
+    {
+        $error = mb_strtolower($error);
+
+        return str_contains($error, 'cannot be resolved to branch')
+            || str_contains($error, 'src refspec head does not match any');
     }
 
     /**
@@ -550,9 +607,8 @@ class ProjectRepositoryService
      */
     private function withRepositorySyncLock(string $workDir, callable $callback): mixed
     {
-        $lockDir = is_dir("{$workDir}/.git") ? "{$workDir}/.git" : $workDir;
-        File::ensureDirectoryExists($lockDir);
-        $lockPath = "{$lockDir}/ai-dev-sync.lock";
+        File::ensureDirectoryExists($workDir);
+        $lockPath = "{$workDir}/.ai-dev-sync.lock";
         $handle = @fopen($lockPath, 'c');
 
         if (! is_resource($handle)) {
@@ -578,6 +634,7 @@ class ProjectRepositoryService
         } finally {
             flock($handle, LOCK_UN);
             fclose($handle);
+            File::delete($lockPath);
         }
     }
 

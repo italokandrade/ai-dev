@@ -103,12 +103,12 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
         try {
             $aiConfig = AiRuntimeConfigService::apply(AiRuntimeConfigService::LEVEL_PREMIUM);
 
-            $response = (new ModulePrdAgent)
+            $response = $this->promptWithRetries(fn () => (new ModulePrdAgent)
                 ->prompt(
                     $prompt,
                     provider: $aiConfig['provider'],
                     model: $aiConfig['model'],
-                );
+                ));
 
             $prdPayload = $this->parsePrd((string) $response);
 
@@ -123,6 +123,50 @@ class CascadeModulePrdJob implements ShouldBeUnique, ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     * @param  callable(): mixed  $callback
+     */
+    private function promptWithRetries(callable $callback): string
+    {
+        $lastException = null;
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                return (string) $callback();
+            } catch (\Throwable $e) {
+                $lastException = $e;
+
+                if ($attempt >= 3 || ! $this->isTransientAiFailure($e)) {
+                    throw $e;
+                }
+
+                Log::warning('CascadeModulePrdJob: falha transitória da IA, tentando novamente', [
+                    'module' => $this->module->name,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage(),
+                ]);
+
+                sleep($attempt * 2);
+            }
+        }
+
+        throw $lastException ?? new \RuntimeException('Falha desconhecida ao chamar IA.');
+    }
+
+    private function isTransientAiFailure(\Throwable $e): bool
+    {
+        $message = mb_strtolower($e->getMessage());
+
+        return str_contains($message, 'connection reset')
+            || str_contains($message, 'timeout')
+            || str_contains($message, 'timed out')
+            || str_contains($message, 'rate limit')
+            || str_contains($message, 'too many requests')
+            || str_contains($message, 'temporarily unavailable')
+            || str_contains($message, 'service unavailable')
+            || str_contains($message, 'curl error');
     }
 
     private function autoApprove(array $prd): void
